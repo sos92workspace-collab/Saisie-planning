@@ -10,8 +10,8 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { ChatAssistant } from './components/ChatAssistant';
 import { UnavailabilityModal } from './components/UnavailabilityModal';
 
-const supabaseUrl = 'https://tnsjdhuulaebclvdtthh.supabase.co';
-const supabaseKey = 'sb_publishable_uGW0mWIQ94EO9zmZ56bnAA_guffQW5T';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const fromDb = (db: any): Choice => ({
