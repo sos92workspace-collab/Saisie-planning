@@ -207,14 +207,13 @@ const App: React.FC = () => {
                     if (isTargetActive && latestShiftDefinitions.length > 0) {
                         const matchingShifts = latestShiftDefinitions.filter((s: any) => choice.col >= s.start_col && choice.col <= s.end_col);
                         for (const shift of matchingShifts) {
-                            const takenCount = allCurrentChoices.filter(c => 
+                            // MODIFIED: Count ALL ASSIGNED from DB, ignore role
+                            const takenCount = latestAssigned.filter((c: any) => 
                                 c.row === choice.row && c.month === choice.month && c.year === choice.year &&
-                                c.col >= shift.start_col && c.col <= shift.end_col &&
-                                c.userRole === currentUser.role &&
-                                (c.status === 'ASSIGNED' || c.status === 'PENDING')
+                                c.col >= shift.start_col && c.col <= shift.end_col
                             ).length;
                             const max = isDoctor ? latestShiftGlobalSettings.target_doctor_max : latestShiftGlobalSettings.target_substitute_max;
-                            if (takenCount > max) isValid = false;
+                            if (takenCount >= max) isValid = false;
                         }
                     }
                 }
@@ -467,6 +466,9 @@ const App: React.FC = () => {
     const dayOfWeek = date.getDay(); 
     const type: 'w' | 's' | 'd' = (dayOfWeek === 0) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
     
+    // Safety check: In APP mode, if user or settings are not loaded yet, default to closed to prevent flashing open
+    if (viewMode === ViewMode.APP && (!currentUser || !shiftGlobalSettings)) return false;
+
     if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
         const isDoctor = currentUser.role === 'DOCTOR';
         const isTargetActive = isDoctor ? shiftGlobalSettings.target_doctor_active : shiftGlobalSettings.target_substitute_active;
@@ -474,11 +476,12 @@ const App: React.FC = () => {
         if (isTargetActive && shiftDefinitions.length > 0) {
             const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
             for (const shift of matchingShifts) {
+                // Count how many guards are taken for this specific day within this shift range
+                // MODIFIED: Count ALL ASSIGNED, ignore role, ignore PENDING
                 const takenCount = choices.filter(c => 
                     c.row === day && c.month === month && c.year === year &&
                     c.col >= shift.start_col && c.col <= shift.end_col &&
-                    c.userRole === currentUser.role &&
-                    (c.status === 'ASSIGNED' || c.status === 'PENDING')
+                    c.status === 'ASSIGNED'
                 ).length;
                 
                 const max = isDoctor ? shiftGlobalSettings.target_doctor_max : shiftGlobalSettings.target_substitute_max;
