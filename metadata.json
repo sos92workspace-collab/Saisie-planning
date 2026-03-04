@@ -1,0 +1,7 @@
+{
+  "name": "Planning version de travail avec notion garde ",
+  "description": "avant version responsive.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
