@@ -181,6 +181,7 @@ const App: React.FC = () => {
         const latestAssigned = assigned ? assigned.map(fromDb) : [];
 
         const myPendingChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.status === 'PENDING');
+        const allCurrentChoices = [...latestAssigned, ...myPendingChoices];
         const validChoices: Choice[] = [];
         const invalidChoices: Choice[] = [];
 
@@ -204,16 +205,16 @@ const App: React.FC = () => {
                         const isTargetActive = isDoctor ? latestShiftGlobalSettings.target_doctor_active : latestShiftGlobalSettings.target_substitute_active;
                         
                         if (isTargetActive && latestShiftDefinitions.length > 0) {
-                            const shift = latestShiftDefinitions.find((s: any) => choice.col >= s.start_col && choice.col <= s.end_col);
-                            if (shift) {
-                                const takenCount = choices.filter(c => 
+                            const matchingShifts = latestShiftDefinitions.filter((s: any) => choice.col >= s.start_col && choice.col <= s.end_col);
+                            for (const shift of matchingShifts) {
+                                const takenCount = allCurrentChoices.filter(c => 
                                     c.row === choice.row && c.month === choice.month && c.year === choice.year &&
                                     c.col >= shift.start_col && c.col <= shift.end_col &&
                                     c.userRole === currentUser.role &&
                                     (c.status === 'ASSIGNED' || c.status === 'PENDING')
                                 ).length;
                                 const max = isDoctor ? latestShiftGlobalSettings.target_doctor_max : latestShiftGlobalSettings.target_substitute_max;
-                                if (takenCount > max) isValid = false; // > max because the choice itself is included in choices
+                                if (takenCount > max) isValid = false;
                             }
                         }
                     }
@@ -470,8 +471,8 @@ const App: React.FC = () => {
             const isTargetActive = isDoctor ? shiftGlobalSettings.target_doctor_active : shiftGlobalSettings.target_substitute_active;
             
             if (isTargetActive && shiftDefinitions.length > 0) {
-                const shift = shiftDefinitions.find(s => colId >= s.start_col && colId <= s.end_col);
-                if (shift) {
+                const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
+                for (const shift of matchingShifts) {
                     const takenCount = choices.filter(c => 
                         c.row === day && c.month === month && c.year === year &&
                         c.col >= shift.start_col && c.col <= shift.end_col &&
