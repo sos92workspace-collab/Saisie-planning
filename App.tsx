@@ -199,25 +199,27 @@ const App: React.FC = () => {
                 const date = new Date(choice.year, choice.month, choice.row);
                 const dayOfWeek = date.getDay(); 
                 const type: 'w' | 's' | 'd' = (dayOfWeek === 0) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
-                if (choice.category === 'normal') {
-                    if (currentUser && currentUser.role !== 'ADMIN' && latestShiftGlobalSettings) {
-                        const isDoctor = currentUser.role === 'DOCTOR';
-                        const isTargetActive = isDoctor ? latestShiftGlobalSettings.target_doctor_active : latestShiftGlobalSettings.target_substitute_active;
-                        
-                        if (isTargetActive && latestShiftDefinitions.length > 0) {
-                            const matchingShifts = latestShiftDefinitions.filter((s: any) => choice.col >= s.start_col && choice.col <= s.end_col);
-                            for (const shift of matchingShifts) {
-                                const takenCount = allCurrentChoices.filter(c => 
-                                    c.row === choice.row && c.month === choice.month && c.year === choice.year &&
-                                    c.col >= shift.start_col && c.col <= shift.end_col &&
-                                    c.userRole === currentUser.role &&
-                                    (c.status === 'ASSIGNED' || c.status === 'PENDING')
-                                ).length;
-                                const max = isDoctor ? latestShiftGlobalSettings.target_doctor_max : latestShiftGlobalSettings.target_substitute_max;
-                                if (takenCount > max) isValid = false;
-                            }
+
+                if (currentUser && currentUser.role !== 'ADMIN' && latestShiftGlobalSettings) {
+                    const isDoctor = currentUser.role === 'DOCTOR';
+                    const isTargetActive = isDoctor ? latestShiftGlobalSettings.target_doctor_active : latestShiftGlobalSettings.target_substitute_active;
+                    
+                    if (isTargetActive && latestShiftDefinitions.length > 0) {
+                        const matchingShifts = latestShiftDefinitions.filter((s: any) => choice.col >= s.start_col && choice.col <= s.end_col);
+                        for (const shift of matchingShifts) {
+                            const takenCount = allCurrentChoices.filter(c => 
+                                c.row === choice.row && c.month === choice.month && c.year === choice.year &&
+                                c.col >= shift.start_col && c.col <= shift.end_col &&
+                                c.userRole === currentUser.role &&
+                                (c.status === 'ASSIGNED' || c.status === 'PENDING')
+                            ).length;
+                            const max = isDoctor ? latestShiftGlobalSettings.target_doctor_max : latestShiftGlobalSettings.target_substitute_max;
+                            if (takenCount > max) isValid = false;
                         }
                     }
+                }
+
+                if (choice.category === 'normal') {
                     if (type === 'w' && !colCfg.open_normal_w) isValid = false;
                     if (type === 's' && !colCfg.open_normal_s) isValid = false;
                     if (type === 'd' && !colCfg.open_normal_d) isValid = false;
@@ -465,27 +467,27 @@ const App: React.FC = () => {
     const dayOfWeek = date.getDay(); 
     const type: 'w' | 's' | 'd' = (dayOfWeek === 0) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
     
-    if (step === AppStep.NORMAL_SELECTION) {
-        if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
-            const isDoctor = currentUser.role === 'DOCTOR';
-            const isTargetActive = isDoctor ? shiftGlobalSettings.target_doctor_active : shiftGlobalSettings.target_substitute_active;
-            
-            if (isTargetActive && shiftDefinitions.length > 0) {
-                const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
-                for (const shift of matchingShifts) {
-                    const takenCount = choices.filter(c => 
-                        c.row === day && c.month === month && c.year === year &&
-                        c.col >= shift.start_col && c.col <= shift.end_col &&
-                        c.userRole === currentUser.role &&
-                        (c.status === 'ASSIGNED' || c.status === 'PENDING')
-                    ).length;
-                    
-                    const max = isDoctor ? shiftGlobalSettings.target_doctor_max : shiftGlobalSettings.target_substitute_max;
-                    if (takenCount >= max) return false;
-                }
+    if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
+        const isDoctor = currentUser.role === 'DOCTOR';
+        const isTargetActive = isDoctor ? shiftGlobalSettings.target_doctor_active : shiftGlobalSettings.target_substitute_active;
+        
+        if (isTargetActive && shiftDefinitions.length > 0) {
+            const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
+            for (const shift of matchingShifts) {
+                const takenCount = choices.filter(c => 
+                    c.row === day && c.month === month && c.year === year &&
+                    c.col >= shift.start_col && c.col <= shift.end_col &&
+                    c.userRole === currentUser.role &&
+                    (c.status === 'ASSIGNED' || c.status === 'PENDING')
+                ).length;
+                
+                const max = isDoctor ? shiftGlobalSettings.target_doctor_max : shiftGlobalSettings.target_substitute_max;
+                if (takenCount >= max) return false;
             }
         }
-        
+    }
+
+    if (step === AppStep.NORMAL_SELECTION) {
         if (type === 'w') return cfg.open_normal_w;
         if (type === 's') return cfg.open_normal_s;
         return cfg.open_normal_d;
