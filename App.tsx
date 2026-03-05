@@ -217,6 +217,25 @@ const App: React.FC = () => {
   const handleFinalValidation = async () => {
     setIsDataSyncing(true);
     try {
+        // 1. Check if the active round is still the same
+        const { data: activeRounds } = await supabase.from('rounds').select('*').eq('is_active', true);
+        const currentActiveRound = activeRounds && activeRounds.length > 0 ? activeRounds[0] : null;
+
+        if (!currentActiveRound || currentActiveRound.id !== currentRoundId) {
+            alert("ATTENTION : La configuration du tour a changé pendant votre saisie (un autre tour a été activé).\n\nVos choix actuels ne sont plus valides pour le tour en cours. Ils vont être supprimés et la page va s'actualiser pour charger la nouvelle configuration.");
+            
+            // Delete pending choices for this user as they are for the wrong round/config
+            await supabase.from('choices').delete().eq('user_trigram', trigram.toUpperCase()).eq('status', 'PENDING');
+            
+            // Reset to login to force full refresh of config
+            setViewMode(ViewMode.LOGIN);
+            setTrigram('');
+            setPassword('');
+            setChoices([]);
+            setIsDataSyncing(false);
+            return;
+        }
+
         const { data: rd } = await supabase.from('rounds').select('*').eq('id', currentRoundId).single();
         const { data: gc } = await supabase.from('global_closures').select('*');
         const { data: cfg } = await supabase.from('column_configs').select('*').eq('round_id', currentRoundId);
