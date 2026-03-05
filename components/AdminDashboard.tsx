@@ -40,6 +40,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteMode, setDeleteMode] = useState<'PENDING' | 'ALL'>('PENDING');
+  const [pendingTarget, setPendingTarget] = useState<'DOCTOR' | 'SUBSTITUTE' | 'BOTH'>('BOTH');
 
   const activeRound = useMemo(() => rounds.find(r => r.isActive) || rounds[0], [rounds]);
   const selectedRound = useMemo(() => rounds.find(r => r.id === selectedRoundId) || rounds[0], [rounds, selectedRoundId]);
@@ -102,8 +103,17 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   const executeDelete = async () => {
     setIsDeletingAll(true);
     try {
-      if (deleteMode === 'PENDING') await supabase.from('choices').delete().eq('status', 'PENDING');
-      else await supabase.from('choices').delete().neq('id', '0');
+      if (deleteMode === 'PENDING') {
+          let query = supabase.from('choices').delete().eq('status', 'PENDING');
+          if (pendingTarget === 'DOCTOR') query = query.eq('user_role', 'DOCTOR');
+          else if (pendingTarget === 'SUBSTITUTE') query = query.eq('user_role', 'SUBSTITUTE');
+          await query;
+      } else {
+          // RESET MODE: Clear choices, unavailabilities, global_closures
+          await supabase.from('choices').delete().neq('id', '0');
+          await supabase.from('unavailabilities').delete().neq('id', '0');
+          await supabase.from('global_closures').delete().neq('id', 0);
+      }
       await refreshData();
       alert("Base mise à jour.");
     } catch (e) {
@@ -144,9 +154,25 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 <div className="bg-red-50 p-6 border-b border-red-100 flex items-center gap-4">
                     <h3 className="text-lg font-black text-red-600 uppercase tracking-tight">Suppression</h3>
                 </div>
-                <div className="p-6 space-y-3">
-                    <button onClick={() => setDeleteMode('PENDING')} className={`w-full p-4 border-2 rounded-2xl ${deleteMode === 'PENDING' ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`}>En Attente</button>
-                    <button onClick={() => setDeleteMode('ALL')} className={`w-full p-4 border-2 rounded-2xl ${deleteMode === 'ALL' ? 'border-red-500 bg-red-50' : 'border-slate-100'}`}>Toutes les gardes</button>
+                <div className="p-6 space-y-4">
+                    <div className="space-y-2">
+                        <button onClick={() => setDeleteMode('PENDING')} className={`w-full p-4 border-2 rounded-2xl transition-all ${deleteMode === 'PENDING' ? 'border-blue-500 bg-blue-50' : 'border-slate-100'}`}>
+                            <span className="block text-sm font-black uppercase text-slate-900">En Attente</span>
+                        </button>
+                        
+                        {deleteMode === 'PENDING' && (
+                            <div className="flex gap-2 pl-4 animate-in slide-in-from-top-2">
+                                <button onClick={() => setPendingTarget('DOCTOR')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${pendingTarget === 'DOCTOR' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-400 border-slate-200'}`}>Titulaires</button>
+                                <button onClick={() => setPendingTarget('SUBSTITUTE')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${pendingTarget === 'SUBSTITUTE' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-slate-400 border-slate-200'}`}>Remplaçants</button>
+                                <button onClick={() => setPendingTarget('BOTH')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase border transition-all ${pendingTarget === 'BOTH' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200'}`}>Les Deux</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <button onClick={() => setDeleteMode('ALL')} className={`w-full p-4 border-2 rounded-2xl transition-all ${deleteMode === 'ALL' ? 'border-red-500 bg-red-50' : 'border-slate-100'}`}>
+                        <span className="block text-sm font-black uppercase text-red-600">Réinitialiser la base de données</span>
+                        <span className="block text-[10px] font-bold text-red-400 mt-1">Supprime TOUS les choix, indisponibilités et fermetures</span>
+                    </button>
                 </div>
                 <div className="p-6 bg-slate-50 border-t flex gap-3">
                     <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-3 bg-white border rounded-xl text-xs font-black uppercase">Annuler</button>

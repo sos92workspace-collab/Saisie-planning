@@ -20,3 +20,25 @@ create table if not exists shift_global_settings (
 );
 
 insert into shift_global_settings (id) values (1) on conflict (id) do nothing;
+
+-- SECURITY: Secure Login Function (Alternative to Supabase Auth)
+-- Run this in Supabase SQL Editor to create a secure way to check credentials
+-- without giving public read access to the 'users' table.
+create or replace function login(trigram_input text, password_input text)
+returns json as $$
+declare
+  found_user record;
+begin
+  select * from users where trigram = trigram_input and password = password_input into found_user;
+  if found_user is null then
+    return null;
+  else
+    return row_to_json(found_user);
+  end if;
+end;
+$$ language plpgsql security definer;
+
+-- To secure the users table:
+-- 1. Run the function creation above.
+-- 2. Revoke public access: REVOKE SELECT ON users FROM anon;
+-- 3. Update App.tsx to use: const { data } = await supabase.rpc('login', { trigram_input: '...', password_input: '...' });

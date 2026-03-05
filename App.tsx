@@ -7,11 +7,15 @@ import { StepProgressBar } from './components/StepProgressBar';
 import { RecapView } from './components/RecapView';
 import { RoundInfo } from './components/RoundInfo';
 import { AdminDashboard } from './components/AdminDashboard';
-import { ChatAssistant } from './components/ChatAssistant';
 import { UnavailabilityModal } from './components/UnavailabilityModal';
 
-const supabaseUrl = 'https://tnsjdhuulaebclvdtthh.supabase.co';
-const supabaseKey = 'sb_publishable_uGW0mWIQ94EO9zmZ56bnAA_guffQW5T';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const fromDb = (db: any): Choice => ({
@@ -41,6 +45,56 @@ const parseTimeRange = (range: string): { start: number, end: number } | null =>
   let end = match[2] ? parseInt(match[2], 10) : start + 1; 
   if (end < start) end += 24;
   return { start, end };
+};
+
+// Helper to calculate Easter date
+const getEasterDate = (year: number): Date => {
+  const f = Math.floor,
+    G = year % 19,
+    C = f(year / 100),
+    H = (C - f(C / 4) - f((8 * C + 13) / 25) + 19 * G + 15) % 30,
+    I = H - f(H / 28) * (1 - f(29 / (H + 1)) * f((21 - G) / 11)),
+    J = (year + f(year / 4) + I + 2 - C + f(C / 4)) % 7,
+    L = I - J,
+    month = 3 + f((L + 40) / 44),
+    day = L + 28 - 31 * f(month / 4);
+  return new Date(year, month - 1, day);
+};
+
+// Helper to check if a date is a public holiday in France
+const isPublicHoliday = (date: Date): boolean => {
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-11
+  const day = date.getDate();
+
+  // Fixed holidays
+  const fixedHolidays = [
+    { d: 1, m: 0 }, // Jour de l'an
+    { d: 1, m: 4 }, // Fête du travail
+    { d: 8, m: 4 }, // Victoire 1945
+    { d: 14, m: 6 }, // Fête nationale
+    { d: 15, m: 7 }, // Assomption
+    { d: 1, m: 10 }, // Toussaint
+    { d: 11, m: 10 }, // Armistice 1918
+    { d: 25, m: 11 }, // Noël
+  ];
+
+  if (fixedHolidays.some(h => h.d === day && h.m === month)) return true;
+
+  // Variable holidays based on Easter
+  const easter = getEasterDate(year);
+  const easterMonday = new Date(easter);
+  easterMonday.setDate(easter.getDate() + 1);
+  
+  const ascension = new Date(easter);
+  ascension.setDate(easter.getDate() + 39);
+  
+  const whitMonday = new Date(easter);
+  whitMonday.setDate(easter.getDate() + 50);
+
+  const variableHolidays = [easterMonday, ascension, whitMonday];
+  
+  return variableHolidays.some(h => h.getDate() === day && h.getMonth() === month);
 };
 
 // Vérifie si deux plages se chevauchent
@@ -521,6 +575,33 @@ const App: React.FC = () => {
     });
   }, [unavailabilities, columnConfigs]);
 
+  // --- EFFECT: Auto-select lowest available priority when step/category changes ---
+  useEffect(() => {
+      if (viewMode !== ViewMode.APP) return;
+      
+      // Calculate used priorities for current user and category
+      const userChoices = choices.filter(c => 
+          c.userTrigram === trigram.toUpperCase() && 
+          c.category === category &&
+          c.status === 'PENDING'
+      );
+      
+      const usedPriorities = new Set(userChoices.map(c => c.groupIndex));
+      
+      // Find lowest available priority starting from 1
+      let lowestAvailable = 1;
+      while (usedPriorities.has(lowestAvailable)) {
+          lowestAvailable++;
+      }
+      
+      // Only update when entering the step/category to set the initial "cursor".
+      // We DO NOT include 'choices' in the dependency array because we don't want to 
+      // auto-jump to the next priority immediately after the user makes a choice.
+      // This allows the user to add alternatives (1.1, 1.2) to the current priority naturally.
+      setActivePriority(lowestAvailable);
+      
+  }, [currentStep, category, viewMode]);
+
   const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number) => {
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
 
@@ -532,7 +613,47 @@ const App: React.FC = () => {
            alert("Impossible de modifier une garde validée. Veuillez contacter l'administrateur.");
            return;
        }
-       setChoices(prev => prev.filter(c => c.id !== existing.id));
+       
+       // REMOVAL LOGIC WITH RE-RANKING
+       setChoices(prev => {
+           const remaining = prev.filter(c => c.id !== existing.id);
+           
+           // Case 1: Removing an alternative (subRank > 1)
+           // Just shift up the subRanks of subsequent alternatives in the same group
+           if (existing.subRank > 1) {
+               return remaining.map(c => {
+                   if (c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex && c.subRank > existing.subRank) {
+                       return { ...c, subRank: c.subRank - 1 };
+                   }
+                   return c;
+               });
+           }
+           
+           // Case 2: Removing a main choice (subRank === 1)
+           // Check if there are alternatives in this group
+           const alternatives = remaining.filter(c => c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex);
+           
+           if (alternatives.length > 0) {
+               // Promote the first alternative (subRank 2) to be the new main choice (subRank 1)
+               // and shift others accordingly
+               return remaining.map(c => {
+                   if (c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex) {
+                       return { ...c, subRank: c.subRank - 1 };
+                   }
+                   return c;
+               });
+           } else {
+               // No alternatives left in this group. The group is now empty.
+               // We must shift down the groupIndex of all subsequent groups to fill the gap.
+               // e.g. Group 1 removed -> Group 2 becomes Group 1, Group 3 becomes Group 2...
+               return remaining.map(c => {
+                   if (c.userTrigram === cleanTri && c.category === category && c.groupIndex > existing.groupIndex) {
+                       return { ...c, groupIndex: c.groupIndex - 1 };
+                   }
+                   return c;
+               });
+           }
+       });
        return;
     }
 
@@ -826,9 +947,11 @@ const App: React.FC = () => {
                             const date = new Date(year, month, day);
                             const dayName = date.toLocaleDateString('fr-FR', { weekday: 'short' }).substring(0, 3).replace('.', '');
                             const isSunday = date.getDay() === 0;
+                            const isHoliday = isPublicHoliday(date);
+                            const isOffDay = isSunday || isHoliday;
                             return (
-                              <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isSunday ? 'bg-red-50/30' : ''}`}>
-                                <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isSunday ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
+                              <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
                                     <div className="flex items-center justify-center gap-1">
                                         <span className="text-[10px] md:text-[8px] font-normal opacity-70">{dayName}</span>
                                         <span className="text-[12px] md:text-[10px]">{day}</span>
@@ -930,19 +1053,6 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
-      <ChatAssistant 
-        trigram={trigram} 
-        currentRoundId={currentRoundId} 
-        columns={dynamicColumns} 
-        days={daysDataForAI} 
-        activePriority={activePriority} 
-        monthLabel={monthsToDisplay[0]?.label || ''} 
-        onAddChoices={handleAIChoices}
-        currentStep={currentStep}
-        columnConfigs={columnConfigs}
-        choices={choices}
-        currentCategory={category}
-      />
     </div>
   );
 };

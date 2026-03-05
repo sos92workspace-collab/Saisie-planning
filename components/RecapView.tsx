@@ -302,7 +302,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
                                 relative flex items-center gap-3 p-2.5 rounded-xl border transition-all duration-150 group/item
                                 ${isItemDragging ? 'opacity-20 border-dashed border-slate-400 bg-slate-50' : 'bg-white hover:border-slate-300'}
                                 ${isOverThisItem ? 'bg-blue-50 border-blue-300 shadow-md' : 'border-slate-100'}
-                                ${isAlternative ? 'ml-6' : ''}
+                                ${isAlternative ? 'ml-12 border-l-4 border-l-slate-300' : ''}
                             `}
                           >
                             {/* Drag Handle */}
