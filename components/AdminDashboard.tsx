@@ -109,10 +109,11 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           else if (pendingTarget === 'SUBSTITUTE') query = query.eq('user_role', 'SUBSTITUTE');
           await query;
       } else {
-          // RESET MODE: Clear choices, unavailabilities, global_closures
+          // RESET MODE: Clear choices, unavailabilities, global_closures, column_quotas
           await supabase.from('choices').delete().neq('id', '0');
           await supabase.from('unavailabilities').delete().neq('id', '0');
-          await supabase.from('global_closures').delete().neq('id', 0);
+          await supabase.from('global_closures').delete().neq('id', '0');
+          await supabase.from('column_quotas').delete().neq('column_id', 0);
       }
       await refreshData();
       alert("Base mise à jour.");
