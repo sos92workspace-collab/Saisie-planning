@@ -650,6 +650,62 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
     setSelectedColIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
+  const syncGlobalSettingsToAllRounds = async () => {
+    if (!window.confirm("Voulez-vous vraiment appliquer les paramètres globaux (Libellé, Type, Site, Horaires, Couleur) de ce tour à TOUS les autres tours ? Les ouvertures (W/S/D) ne seront pas modifiées.")) return;
+
+    setIsUpdating(true);
+    try {
+        // 1. Get current round's configs
+        const currentConfigs = columnConfigs.filter(c => c.round_id === selectedRoundId);
+
+        // 2. Fetch ALL configs from DB to preserve round-specific settings
+        const { data: allConfigs, error: fetchError } = await supabase.from('column_configs').select('*');
+        if (fetchError) throw fetchError;
+
+        // 3. Prepare upsert payload
+        const upsertPayload: any[] = [];
+
+        allRounds.forEach((round: Round) => {
+            if (round.id === selectedRoundId) return; // Skip current round
+
+            COLUMNS.forEach(col => {
+                const currentRoundColConfig = currentConfigs.find(c => c.column_id === col.id);
+                if (!currentRoundColConfig) return;
+
+                const existingOtherRoundConfig = allConfigs?.find(c => c.round_id === round.id && c.column_id === col.id) || {
+                    round_id: round.id,
+                    column_id: col.id,
+                    open_normal_w: true, open_normal_s: true, open_normal_d: true,
+                    open_bad_w: true, open_bad_s: true, open_bad_d: true,
+                    open_good_w: true, open_good_s: true, open_good_d: true,
+                };
+
+                upsertPayload.push({
+                    ...existingOtherRoundConfig,
+                    custom_label: currentRoundColConfig.custom_label,
+                    custom_header_label: currentRoundColConfig.custom_header_label,
+                    custom_type: currentRoundColConfig.custom_type,
+                    custom_site: currentRoundColConfig.custom_site,
+                    custom_time_range: currentRoundColConfig.custom_time_range,
+                    custom_color: currentRoundColConfig.custom_color,
+                });
+            });
+        });
+
+        if (upsertPayload.length > 0) {
+            const { error: upsertError } = await supabase.from('column_configs').upsert(upsertPayload, { onConflict: 'round_id,column_id' });
+            if (upsertError) throw upsertError;
+        }
+
+        alert("Paramètres globaux synchronisés sur tous les tours avec succès !");
+    } catch (e: any) {
+        console.error(e);
+        alert("Erreur lors de la synchronisation : " + e.message);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
       <div className="p-4 md:p-6 bg-white border-b flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-center justify-between shrink-0">
@@ -779,6 +835,21 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         )}
         {activeSubTab === 'columns' && (
             <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
+                 <div className="flex justify-end">
+                    <button 
+                        onClick={syncGlobalSettingsToAllRounds}
+                        disabled={isUpdating}
+                        className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M21 2v6h-6"></path>
+                            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                            <path d="M3 22v-6h6"></path>
+                            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                        </svg>
+                        Appliquer ces paramètres globaux à tous les tours
+                    </button>
+                 </div>
                  {/* Columns content (omitted repeated parts for brevity but including full structure) */}
                  <div className="bg-white p-4 md:p-6 rounded-3xl border shadow-sm sticky top-0 z-20">
                     {/* Bulk controls ... */}
@@ -1460,7 +1531,22 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp }: any) => {
 
             {/* Sub-Header */}
             <div className="p-4 md:p-6 bg-white border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
-                <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Gestion des Vœux</h2>
+                <div className="flex items-center gap-4">
+                    <h2 className="text-xl font-black uppercase text-slate-900 tracking-tight">Gestion des Vœux</h2>
+                    <a 
+                        href="https://traitement-planning-avec-lecture-bd-log-tours-com-947006681133.us-west1.run.app" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-200 transition-all flex items-center gap-2"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                        Traitement des choix
+                    </a>
+                </div>
                 
                 <div className="flex gap-2 w-full md:w-auto bg-slate-100 p-1 rounded-xl">
                     <button 
