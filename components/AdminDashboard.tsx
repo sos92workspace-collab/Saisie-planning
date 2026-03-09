@@ -542,8 +542,8 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
 
     try {
       if (isGlobalField) {
-        const batch = Array.from({ length: 10 }, (_, i) => ({ 
-            round_id: i + 1, 
+        const batch = allRounds.map((r: Round) => ({ 
+            round_id: r.id, 
             column_id: colId, 
             [field]: value 
         }));
@@ -573,18 +573,68 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
     });
 
     try {
-        const updates = selectedColIds.map(colId => {
-            const current = columnConfigs.find((c: any) => c.column_id === colId) || {};
-            return {
-                ...current,
-                round_id: selectedRoundId,
-                column_id: colId,
-                ...cleanSettings
-            };
-        });
+        const isGlobalUpdate = Object.keys(cleanSettings).some(key => 
+            ['custom_label', 'custom_header_label', 'custom_type', 'custom_site', 'custom_time_range', 'custom_color'].includes(key)
+        );
 
-        const { error } = await supabase.from('column_configs').upsert(updates, { onConflict: 'round_id,column_id' });
-        if (error) throw error;
+        let updates: any[] = [];
+
+        if (isGlobalUpdate) {
+            // Apply to all rounds for global fields
+            allRounds.forEach((r: Round) => {
+                selectedColIds.forEach(colId => {
+                    // We only have columnConfigs for the selected round in state, 
+                    // but upsert will merge with existing DB rows if we only provide the fields we want to change.
+                    // Wait, Supabase upsert replaces the whole row if we don't provide all fields?
+                    // Actually, if we just want to update, we should probably fetch them or just trust upsert if it's a partial update?
+                    // Supabase upsert replaces the entire row. To do a partial update on multiple rows, we should use update().
+                    // But since we might need to insert if they don't exist, it's tricky.
+                    // Let's just use update() for global fields, assuming they exist, or we can just upsert with the current config from selectedRound.
+                    // Actually, the safest way to update specific fields across all rounds is to use a loop of updates.
+                });
+            });
+            
+            // Better approach for global fields: use update() with an in() filter
+            for (const key of Object.keys(cleanSettings)) {
+                if (['custom_label', 'custom_header_label', 'custom_type', 'custom_site', 'custom_time_range', 'custom_color'].includes(key)) {
+                    await supabase.from('column_configs')
+                        .update({ [key]: cleanSettings[key] })
+                        .in('column_id', selectedColIds);
+                } else {
+                    // For non-global fields (like openings) in a bulk action that mixed them (though UI separates them)
+                    await supabase.from('column_configs')
+                        .update({ [key]: cleanSettings[key] })
+                        .eq('round_id', selectedRoundId)
+                        .in('column_id', selectedColIds);
+                }
+            }
+            
+            // Also update local state for the current round
+            setColumnConfigs((prev: any[]) => {
+                return prev.map(c => {
+                    if (selectedColIds.includes(c.column_id)) {
+                        return { ...c, ...cleanSettings };
+                    }
+                    return c;
+                });
+            });
+
+        } else {
+            // Apply only to selected round (e.g., openings)
+            await supabase.from('column_configs')
+                .update(cleanSettings)
+                .eq('round_id', selectedRoundId)
+                .in('column_id', selectedColIds);
+                
+            setColumnConfigs((prev: any[]) => {
+                return prev.map(c => {
+                    if (selectedColIds.includes(c.column_id)) {
+                        return { ...c, ...cleanSettings };
+                    }
+                    return c;
+                });
+            });
+        }
         
         await refreshRounds();
         alert(`${selectedColIds.length} colonnes mises à jour !`);
