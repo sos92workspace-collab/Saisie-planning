@@ -64,15 +64,33 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
     const itemToRemove = choices.find(c => c.row === row && c.col === col);
     if (!itemToRemove) return;
 
-    const newChoices = choices
-      .filter(c => !(c.row === row && c.col === col))
-      .map(c => {
+    const remaining = choices.filter(c => !(c.row === row && c.col === col));
+    
+    // Check if there are alternatives left in this group
+    const alternatives = remaining.filter(c => 
+        c.status === 'PENDING' && 
+        c.category === itemToRemove.category && 
+        c.groupIndex === itemToRemove.groupIndex
+    );
+
+    let newChoices;
+    if (alternatives.length > 0) {
         // Shift subRanks up for remaining items in same group
-        if (c.category === itemToRemove.category && c.groupIndex === itemToRemove.groupIndex && c.subRank > itemToRemove.subRank) {
-          return { ...c, subRank: c.subRank - 1 };
-        }
-        return c;
-      });
+        newChoices = remaining.map(c => {
+          if (c.status === 'PENDING' && c.category === itemToRemove.category && c.groupIndex === itemToRemove.groupIndex && c.subRank > itemToRemove.subRank) {
+            return { ...c, subRank: c.subRank - 1 };
+          }
+          return c;
+        });
+    } else {
+        // Group is empty, shift down subsequent groups
+        newChoices = remaining.map(c => {
+            if (c.status === 'PENDING' && c.category === itemToRemove.category && c.groupIndex > itemToRemove.groupIndex) {
+                return { ...c, groupIndex: c.groupIndex - 1 };
+            }
+            return c;
+        });
+    }
     
     onReorder(newChoices);
   };
@@ -114,9 +132,9 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
     const isSameGroup = draggedItem.groupIndex === targetItem.groupIndex;
     
     // Prepare items list for calculation
-    // We want to construct the FINAL list for the target group
+    // We want to construct the FINAL list for the target group (only PENDING)
     const targetGroupItems = choices
-        .filter(c => c.category === targetItem.category && c.groupIndex === targetItem.groupIndex && c.id !== draggedItem.id)
+        .filter(c => c.status === 'PENDING' && c.category === targetItem.category && c.groupIndex === targetItem.groupIndex && c.id !== draggedItem.id)
         .sort((a, b) => a.subRank - b.subRank);
 
     // Determine insertion index
@@ -134,15 +152,17 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
     let newSourceGroupItems: Choice[] = [];
     if (!isSameGroup) {
         newSourceGroupItems = choices
-            .filter(c => c.category === draggedItem.category && c.groupIndex === draggedItem.groupIndex && c.id !== draggedItem.id)
+            .filter(c => c.status === 'PENDING' && c.category === draggedItem.category && c.groupIndex === draggedItem.groupIndex && c.id !== draggedItem.id)
             .sort((a, b) => a.subRank - b.subRank)
             .map((item, idx) => ({ ...item, subRank: idx + 1 }));
     }
 
     // Combine all
     const others = choices.filter(c => 
-        !(c.category === targetItem.category && c.groupIndex === targetItem.groupIndex) && 
-        !(c.category === draggedItem.category && c.groupIndex === draggedItem.groupIndex)
+        c.status !== 'PENDING' || (
+            !(c.category === targetItem.category && c.groupIndex === targetItem.groupIndex) && 
+            !(c.category === draggedItem.category && c.groupIndex === draggedItem.groupIndex)
+        )
     );
 
     // Careful not to duplicate if groups are same (already handled in targetGroupItems)
@@ -181,20 +201,20 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
     // Case 1: Dropping an ITEM into a Group (append to end)
     if (draggedItem && draggedItem.category === category && draggedItem.groupIndex !== targetGroupId) {
         // Find existing items in target group to find max subRank
-        const targetGroupItems = choices.filter(c => c.category === category && c.groupIndex === targetGroupId);
+        const targetGroupItems = choices.filter(c => c.status === 'PENDING' && c.category === category && c.groupIndex === targetGroupId);
         const maxSubRank = targetGroupItems.length > 0 ? Math.max(...targetGroupItems.map(c => c.subRank)) : 0;
         
         const newItem = { ...draggedItem, groupIndex: targetGroupId, subRank: maxSubRank + 1 };
         
         // Re-rank source group
         const sourceGroupItems = choices
-            .filter(c => c.category === category && c.groupIndex === draggedItem.groupIndex && c.id !== draggedItem.id)
+            .filter(c => c.status === 'PENDING' && c.category === category && c.groupIndex === draggedItem.groupIndex && c.id !== draggedItem.id)
             .sort((a, b) => a.subRank - b.subRank)
             .map((c, i) => ({ ...c, subRank: i + 1 }));
         
         const others = choices.filter(c => 
             c.id !== draggedItem.id && 
-            !(c.category === category && c.groupIndex === draggedItem.groupIndex)
+            (c.status !== 'PENDING' || !(c.category === category && c.groupIndex === draggedItem.groupIndex))
         );
 
         onReorder([...others, ...sourceGroupItems, newItem]);
@@ -211,12 +231,12 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
 
     // Find all items not in these two groups
     const otherChoices = choices.filter(c => 
-        !(c.category === category && (c.groupIndex === draggedGroup.id || c.groupIndex === targetGroupId))
+        c.status !== 'PENDING' || !(c.category === category && (c.groupIndex === draggedGroup.id || c.groupIndex === targetGroupId))
     );
 
     // Get items for source and target group
-    const sourceItems = choices.filter(c => c.category === category && c.groupIndex === draggedGroup.id);
-    const targetItems = choices.filter(c => c.category === category && c.groupIndex === targetGroupId);
+    const sourceItems = choices.filter(c => c.status === 'PENDING' && c.category === category && c.groupIndex === draggedGroup.id);
+    const targetItems = choices.filter(c => c.status === 'PENDING' && c.category === category && c.groupIndex === targetGroupId);
 
     // Swap their groupIndexes
     const newSourceItems = sourceItems.map(c => ({ ...c, groupIndex: targetGroupId }));

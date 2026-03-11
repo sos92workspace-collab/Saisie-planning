@@ -537,7 +537,7 @@ const App: React.FC = () => {
            // Just shift up the subRanks of subsequent alternatives in the same group
            if (existing.subRank > 1) {
                return remaining.map(c => {
-                   if (c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex && c.subRank > existing.subRank) {
+                   if (c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex && c.subRank > existing.subRank) {
                        return { ...c, subRank: c.subRank - 1 };
                    }
                    return c;
@@ -546,13 +546,13 @@ const App: React.FC = () => {
            
            // Case 2: Removing a main choice (subRank === 1)
            // Check if there are alternatives in this group
-           const alternatives = remaining.filter(c => c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex);
+           const alternatives = remaining.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex);
            
            if (alternatives.length > 0) {
                // Promote the first alternative (subRank 2) to be the new main choice (subRank 1)
                // and shift others accordingly
                return remaining.map(c => {
-                   if (c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex) {
+                   if (c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === existing.groupIndex) {
                        return { ...c, subRank: c.subRank - 1 };
                    }
                    return c;
@@ -562,7 +562,7 @@ const App: React.FC = () => {
                // We must shift down the groupIndex of all subsequent groups to fill the gap.
                // e.g. Group 1 removed -> Group 2 becomes Group 1, Group 3 becomes Group 2...
                return remaining.map(c => {
-                   if (c.userTrigram === cleanTri && c.category === category && c.groupIndex > existing.groupIndex) {
+                   if (c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex > existing.groupIndex) {
                        return { ...c, groupIndex: c.groupIndex - 1 };
                    }
                    return c;
@@ -572,14 +572,24 @@ const App: React.FC = () => {
        return;
     }
 
-    // Removed strict blocking for closures and unavailabilities as per user request
+    // Removed strict blocking for unavailabilities as per user request
     // Only block if cell is ALREADY assigned to someone else
     const assignedToOther = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED' && c.userTrigram !== cleanTri);
     if (assignedToOther) {
         return; 
     }
 
-    const existingInGroup = choices.filter(c => c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
+    // Block if cell is closed (either by global closure or round config)
+    const isColClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
+    const isCellClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
+    const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+    const open = isColOpen(colId, currentStep, row, month, year) && !isClosed;
+    
+    if (!open) {
+        return; // Cell is closed for this round/step or globally
+    }
+
+    const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
     let nextSubRank = 1;
     if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
     if (nextSubRank > 11) { alert("Limite atteinte : Max 10 alternatives."); return; }
@@ -640,6 +650,7 @@ const App: React.FC = () => {
           const targetPriority = s.priority || activePriority;
 
           const existingInGroup = [...currentChoicesState, ...newChoices].filter(c => 
+              c.status === 'PENDING' &&
               c.userTrigram === user.trigram && 
               c.category === category && 
               c.groupIndex === targetPriority
@@ -963,7 +974,7 @@ const App: React.FC = () => {
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   } else { 
                                       bgColor = '#e2e8f0'; 
-                                      cellStyles += " opacity-30 cursor-pointer";
+                                      cellStyles += " opacity-30 cursor-not-allowed";
                                   }
 
                                   if(assigned && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
