@@ -888,9 +888,10 @@ const App: React.FC = () => {
                             const isSunday = date.getDay() === 0;
                             const isHoliday = isPublicHoliday(date);
                             const isOffDay = isSunday || isHoliday;
+                            const isWeekend = date.getDay() === 6 || isOffDay;
                             return (
-                              <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
-                                <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
+                              <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isWeekend ? 'bg-red-50/30' : ''}`}>
+                                <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isWeekend ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
                                     <div className="flex items-center justify-center gap-1">
                                         <span className="text-[10px] md:text-[8px] font-normal opacity-70">{dayName}</span>
                                         <span className="text-[12px] md:text-[10px]">{day}</span>
@@ -918,6 +919,10 @@ const App: React.FC = () => {
                                   let cellStyles = "border-r border-b border-slate-50 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
                                   let bgColor = '#FFFFFF';
                                   
+                                  const timeRange = parseTimeRange(col.timeRange);
+                                  const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
+                                  const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
+                                  
                                   if (isConsultationMode) {
                                       if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
@@ -930,12 +935,6 @@ const App: React.FC = () => {
                                           cellStyles += " opacity-50";
                                       } else {
                                           bgColor = col.customColor || '#FFFFFF';
-                                          const timeRange = parseTimeRange(col.timeRange);
-                                          const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
-                                          const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
-                                          if (isWeekendGuard) {
-                                              bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
-                                          }
                                           cellStyles += " opacity-70";
                                       }
                                       cellStyles += " cursor-default";
@@ -965,16 +964,14 @@ const App: React.FC = () => {
                                       cellStyles += " bg-slate-100 opacity-50 cursor-pointer bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')]";
                                   } else if (open) { 
                                       bgColor = col.customColor || '#FFFFFF'; 
-                                      const timeRange = parseTimeRange(col.timeRange);
-                                      const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
-                                      const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
-                                      if (isWeekendGuard) {
-                                          bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
-                                      }
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   } else { 
                                       bgColor = '#e2e8f0'; 
                                       cellStyles += " opacity-30 cursor-not-allowed";
+                                  }
+
+                                  if (isWeekendGuard) {
+                                      bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                   }
 
                                   if(assigned && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";

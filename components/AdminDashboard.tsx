@@ -1333,7 +1333,10 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 } else {
                                                     // Cellule libre - 70% d'opacité
                                                     bgColor = col.customColor ? `${col.customColor}B3` : '#FFFFFFB3';
-                                                    if (isWeekendGuard) bgColor = `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), ${bgColor}`;
+                                                }
+                                                
+                                                if (isWeekendGuard) {
+                                                    bgColor = `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), ${bgColor}`;
                                                 }
                                                 
                                                 const style: React.CSSProperties = {
