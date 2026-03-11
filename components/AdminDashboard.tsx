@@ -1328,8 +1328,13 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                                 
                                                 if (isClosed) bgColor = '#fee2e2'; // red-100
-                                                else if (assigned) bgColor = '#16a34a'; // green-600
-                                                else if (isWeekendGuard) bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
+                                                else if (assigned) {
+                                                    bgColor = col.customColor || '#FFFFFF';
+                                                } else {
+                                                    // Cellule libre - 70% d'opacité
+                                                    bgColor = col.customColor ? `${col.customColor}B3` : '#FFFFFFB3';
+                                                    if (isWeekendGuard) bgColor = `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), ${bgColor}`;
+                                                }
                                                 
                                                 const style: React.CSSProperties = {
                                                     background: bgColor
@@ -1343,7 +1348,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                         style={style}
                                                     >
                                                         {isClosed && <div className="absolute inset-0 flex items-center justify-center"><div className="w-full h-[2px] bg-red-400 rotate-45 absolute"></div><div className="w-full h-[2px] bg-red-400 -rotate-45 absolute"></div></div>}
-                                                        {!isClosed && assigned && <span className="text-[9px] font-black text-white block leading-tight drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
+                                                        {!isClosed && assigned && <span className="text-[9px] font-black text-slate-900 block leading-tight drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
                                                     </td>
                                                 );
                                             })}

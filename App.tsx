@@ -969,11 +969,11 @@ const App: React.FC = () => {
                                   
                                   if (isConsultationMode) {
                                       if (isAssignedToMe) {
-                                          bgColor = '#16a34a'; // Green 600
-                                          cellStyles += " shadow-[inset_0_0_0_2px_#4ade80] z-20 scale-[1.05] rounded-sm text-white";
+                                          bgColor = '#fde047'; // Yellow 300
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";
                                       } else if (isAssignedToOther) {
-                                          bgColor = '#475569'; // Slate 600
-                                          cellStyles += " opacity-90 text-white";
+                                          bgColor = col.customColor || '#FFFFFF';
+                                          cellStyles += " opacity-100 text-slate-900";
                                       } else if (isClosed) {
                                           bgColor = '#e2e8f0'; // Slate 200
                                           cellStyles += " opacity-50";
@@ -985,15 +985,15 @@ const App: React.FC = () => {
                                           if (isWeekendGuard) {
                                               bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                           }
-                                          cellStyles += " opacity-40";
+                                          cellStyles += " opacity-70";
                                       }
                                       cellStyles += " cursor-default";
                                   } else if (isAssignedToMe) { 
-                                      bgColor = '#16a34a'; // Green 600 - Validé pour moi
-                                      cellStyles += " shadow-[inset_0_0_0_2px_#4ade80] z-20 scale-[1.05] rounded-sm"; 
+                                      bgColor = '#fde047'; // Yellow 300
+                                      cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]"; 
                                   } else if (isAssignedToOther) { 
-                                      bgColor = '#475569'; // Slate 600 - Validé pour un autre
-                                      cellStyles += " opacity-90 cursor-not-allowed"; 
+                                      bgColor = col.customColor || '#FFFFFF';
+                                      cellStyles += " opacity-100 cursor-not-allowed text-slate-900"; 
                                   } else if (hasMultiplePending) {
                                       if (myPendingChoices.length === 2) {
                                           const color1 = getChoiceColor(myPendingChoices[0].category);
@@ -1020,7 +1020,7 @@ const App: React.FC = () => {
                                       if (isWeekendGuard) {
                                           bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                       }
-                                      cellStyles += " hover:bg-blue-50 cursor-pointer";
+                                      cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   } else { 
                                       bgColor = '#e2e8f0'; 
                                       cellStyles += " opacity-30 cursor-not-allowed";
@@ -1049,7 +1049,7 @@ const App: React.FC = () => {
 
                                       {/* Cas 2 : Garde Validée (Moi ou Autre) - Affiche le trigramme */}
                                       {(isAssignedToMe || isAssignedToOther) && (
-                                          <span className="text-[12px] md:text-[10px] font-black text-white drop-shadow-sm tracking-wide block leading-tight">
+                                          <span className="text-[12px] md:text-[10px] font-black drop-shadow-sm tracking-wide block leading-tight text-slate-900">
                                               {assigned?.userTrigram}
                                           </span>
                                       )}
