@@ -59,8 +59,8 @@ export const RoundInfo: React.FC<Props> = ({ round, stepInstruction }) => {
 
       {/* Expanded Content Panel */}
       <div className={`
-          overflow-hidden transition-all duration-500 ease-in-out border-t border-slate-800 bg-slate-900/50
-          ${isExpanded ? 'max-h-[80vh] opacity-100' : 'max-h-0 opacity-0'}
+          transition-all duration-500 ease-in-out border-t border-slate-800 bg-slate-900/50
+          ${isExpanded ? 'max-h-[80vh] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0 overflow-hidden'}
       `}>
         <div className="p-6 md:p-8 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
             
