@@ -105,7 +105,7 @@ export const ChatAssistant: React.FC<Props> = ({ trigram, currentRoundId, column
   const existingChoicesContext = useMemo(() => {
       if (myCurrentPhaseChoices.length === 0) return "Aucun choix posé pour l'instant dans cette phase.";
       return myCurrentPhaseChoices.map(c => {
-          const suffix = c.subRank > 1 ? `.${String.fromCharCode(96 + c.subRank)}` : ''; 
+          const suffix = c.subRank > 1 ? `.${String.fromCharCode(95 + c.subRank)}` : ''; 
           return `- Le ${c.row}/${c.month + 1}: Col ${c.col} (${c.colTimeRange}) -> Priorité ${c.groupIndex}${suffix}`;
       }).join('\n');
   }, [myCurrentPhaseChoices]);

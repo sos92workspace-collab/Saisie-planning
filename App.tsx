@@ -592,7 +592,7 @@ const App: React.FC = () => {
     const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
     let nextSubRank = 1;
     if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
-    if (nextSubRank > 11) { alert("Limite atteinte : Max 10 alternatives."); return; }
+    if (nextSubRank > 27) { alert("Limite atteinte : Max 26 alternatives."); return; }
 
     const baseColDef = COLUMNS.find(c => c.id === colId);
     const colConfig = columnConfigs.find(c => c.column_id === colId);
@@ -660,6 +660,8 @@ const App: React.FC = () => {
           if (existingInGroup.length > 0) {
               nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
           }
+
+          if (nextSubRank > 27) continue;
 
           if (nextSubRank === 1) {
               const assignedSameDay = [...currentChoicesState, ...newChoices].filter(c => 
