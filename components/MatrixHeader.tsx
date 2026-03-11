@@ -5,11 +5,13 @@ import { ColumnDefinition } from '../types';
 interface Props {
   columns: ColumnDefinition[];
   isEditClosuresMode?: boolean;
-  onColumnClick?: (colId: number) => void;
+  onColumnClick?: (colId: number, month: number, year: number) => void;
   globalClosures?: any[];
+  month?: number;
+  year?: number;
 }
 
-export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onColumnClick, globalClosures = [] }) => {
+export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onColumnClick, globalClosures = [], month, year }) => {
   return (
     <thead className="sticky top-0 z-40 shadow-md bg-white">
       {/* Single Row: Date & Columns */}
@@ -18,9 +20,9 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
             Date
         </th>
         {columns.map((col) => {
-          const isColClosed = globalClosures.some(gc => gc.col_id === col.id && gc.row === null);
+          const isColClosed = globalClosures.some(gc => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
           return (
-          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && onColumnClick(col.id)} className={`group border-r border-slate-300 min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer hover:bg-red-100' : 'hover:bg-slate-50'} ${isColClosed ? 'bg-red-100/50' : ''}`}>
+          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-300 min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer hover:bg-red-100' : 'hover:bg-slate-50'} ${isColClosed ? 'bg-red-100/50' : ''}`}>
             <div className={`flex flex-col leading-none py-1 h-full justify-center ${isEditClosuresMode ? '' : 'cursor-help'}`}>
               <span className="text-[9px] md:text-[7px] text-slate-400 font-normal mb-0.5">{col.id}</span>
               <span className={`font-black text-[11px] md:text-[9px] ${isColClosed ? 'text-red-600 line-through' : 'text-slate-800'}`}>{col.label}</span>

@@ -92,6 +92,7 @@ const App: React.FC = () => {
   const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [showUnavailabilityModal, setShowUnavailabilityModal] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [isConsultationMode, setIsConsultationMode] = useState(false);
 
   useEffect(() => {
     const checkOrientation = () => setIsPortrait(window.innerHeight > window.innerWidth);
@@ -201,9 +202,9 @@ const App: React.FC = () => {
             let isValid = true;
             
             // Check global closures
-            const isColClosed = latestGlobalClosures.some((g: any) => g.col_id === choice.col && g.row === null);
+            const isColClosed = latestGlobalClosures.some((g: any) => g.col_id === choice.col && g.row === null && (g.month === null || (g.month === choice.month && g.year === choice.year)));
             const isCellClosed = latestGlobalClosures.some((g: any) => g.col_id === choice.col && g.row === choice.row && g.month === choice.month && g.year === choice.year);
-            if (isColClosed || isCellClosed) isValid = false;
+            if (isColClosed ? !isCellClosed : isCellClosed) isValid = false;
 
             // Check column config open/closed
             const colCfg = latestColumnConfigs.find(c => c.column_id === choice.col);
@@ -804,12 +805,15 @@ const App: React.FC = () => {
       {isPortrait && <LandscapeLockScreen />}
       {isDataSyncing && <div className="absolute top-0 left-0 w-full h-1 bg-blue-600 z-[100] animate-pulse"></div>}
       
-      {!accessStatus.allowed && (
+      {!accessStatus.allowed && !isConsultationMode && (
         <div className="absolute inset-0 z-[200] bg-slate-900/90 backdrop-blur-xl flex items-center justify-center p-8 text-center">
             <div className="max-w-md space-y-6">
                 <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Accès Restreint</h2>
                 <p className="text-slate-400 font-bold leading-relaxed">{accessStatus.message}</p>
-                <button onClick={() => setViewMode(ViewMode.LOGIN)} className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-500 hover:text-white transition-all">Retourner à l'accueil</button>
+                <div className="flex flex-col gap-3">
+                    <button onClick={() => setIsConsultationMode(true)} className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-900/20">Consulter le planning attribué</button>
+                    <button onClick={() => setViewMode(ViewMode.LOGIN)} className="px-8 py-4 bg-white/10 text-white border border-white/20 rounded-2xl font-black uppercase tracking-widest hover:bg-white/20 transition-all">Retourner à l'accueil</button>
+                </div>
             </div>
         </div>
       )}
@@ -826,18 +830,44 @@ const App: React.FC = () => {
           />
       )}
 
-      <RoundInfo round={activeRound} stepInstruction={currentStepInstruction} />
+      {!isConsultationMode && <RoundInfo round={activeRound} stepInstruction={currentStepInstruction} />}
       
       <header className="bg-white border-b px-4 h-[72px] flex items-center justify-between z-30 shrink-0 shadow-sm overflow-x-auto">
-        <div className="flex items-center gap-6"><StepProgressBar currentStep={currentStep} round={activeRound} /></div>
+        <div className="flex items-center gap-6">
+            {!isConsultationMode && <StepProgressBar currentStep={currentStep} round={activeRound} />}
+            {isConsultationMode && (
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg shadow-slate-200">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/></svg>
+                    </div>
+                    <div>
+                        <h1 className="text-sm font-black uppercase tracking-tight text-slate-900 leading-none">Consultation Planning</h1>
+                        <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Mode Lecture Seule</p>
+                    </div>
+                </div>
+            )}
+        </div>
         <div className="flex items-center gap-4">
-            {currentUser?.role === 'DOCTOR' && currentStep !== AppStep.RECAP_ORDERING && (
-                <button 
-                    onClick={() => setShowUnavailabilityModal(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase hover:bg-red-500 hover:text-white transition-all shadow-sm whitespace-nowrap"
-                >
-                    <span className="hidden md:inline">Gérer mes indisponibilités</span>
-                </button>
+            {currentUser?.role === 'DOCTOR' && (
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={() => setIsConsultationMode(!isConsultationMode)}
+                        className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
+                    >
+                        <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
+                        <span className="md:hidden">Planning</span>
+                    </button>
+
+                    {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && (
+                        <button 
+                            onClick={() => setShowUnavailabilityModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase hover:bg-red-500 hover:text-white transition-all shadow-sm whitespace-nowrap"
+                        >
+                            <span className="hidden md:inline">Gérer mes indisponibilités</span>
+                            <span className="md:hidden">Indispo</span>
+                        </button>
+                    )}
+                </div>
             )}
 
           <div className="text-right hidden sm:block">
@@ -847,20 +877,20 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          {currentStep > AppStep.NORMAL_SELECTION && (
+          {!isConsultationMode && currentStep > AppStep.NORMAL_SELECTION && (
              <button onClick={goToPrevStep} className="px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
           )}
 
-          {currentStep < AppStep.RECAP_ORDERING ? (
+          {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
               <button onClick={goToNextStep} className="px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
           ) : (
               <button onClick={handleFinalValidation} className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
-          )}
+          ))}
           <button onClick={() => setViewMode(ViewMode.LOGIN)} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
         </div>
       </header>
 
-      {currentStep !== AppStep.RECAP_ORDERING && (
+      {currentStep !== AppStep.RECAP_ORDERING && !isConsultationMode && (
         <div className="bg-slate-100 border-b px-4 py-3 md:px-8 md:py-4 flex flex-col md:flex-row items-center gap-4 md:gap-8 z-20 shrink-0 shadow-inner justify-between sticky top-0 md:static">
             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto no-scrollbar">
                 <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest whitespace-nowrap">Indice Priorité :</span>
@@ -899,7 +929,7 @@ const App: React.FC = () => {
                   
                   <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-x-auto">
                      <table className="w-full border-separate border-spacing-0 table-fixed">
-                        <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} />
+                        <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} month={month} year={year} />
                         <tbody>
                           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                             const date = new Date(year, month, day);
@@ -916,9 +946,9 @@ const App: React.FC = () => {
                                     </div>
                                 </td>
                                 {dynamicColumns.map(col => {
-                                  const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null);
+                                  const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
                                   const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                                  const isClosed = isColClosed || isCellClosed;
+                                  const isClosed = isColClosed ? !isCellClosed : isCellClosed;
                                   
                                   const open = isColOpen(col.id, currentStep, day, month, year) && !isClosed;
                                   const isBlocked = isBlockedByUnavailability(day, col.id, month, year);
@@ -937,7 +967,28 @@ const App: React.FC = () => {
                                   let cellStyles = "border-r border-b border-slate-50 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
                                   let bgColor = '#FFFFFF';
                                   
-                                  if (isAssignedToMe) { 
+                                  if (isConsultationMode) {
+                                      if (isAssignedToMe) {
+                                          bgColor = '#16a34a'; // Green 600
+                                          cellStyles += " shadow-[inset_0_0_0_2px_#4ade80] z-20 scale-[1.05] rounded-sm text-white";
+                                      } else if (isAssignedToOther) {
+                                          bgColor = '#475569'; // Slate 600
+                                          cellStyles += " opacity-90 text-white";
+                                      } else if (isClosed) {
+                                          bgColor = '#e2e8f0'; // Slate 200
+                                          cellStyles += " opacity-50";
+                                      } else {
+                                          bgColor = col.customColor || '#FFFFFF';
+                                          const timeRange = parseTimeRange(col.timeRange);
+                                          const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
+                                          const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
+                                          if (isWeekendGuard) {
+                                              bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
+                                          }
+                                          cellStyles += " opacity-40";
+                                      }
+                                      cellStyles += " cursor-default";
+                                  } else if (isAssignedToMe) { 
                                       bgColor = '#16a34a'; // Green 600 - Validé pour moi
                                       cellStyles += " shadow-[inset_0_0_0_2px_#4ade80] z-20 scale-[1.05] rounded-sm"; 
                                   } else if (isAssignedToOther) { 
@@ -965,7 +1016,7 @@ const App: React.FC = () => {
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       const timeRange = parseTimeRange(col.timeRange);
                                       const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
-                                      const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation');
+                                      const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                       if (isWeekendGuard) {
                                           bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                       }
@@ -975,21 +1026,21 @@ const App: React.FC = () => {
                                       cellStyles += " opacity-30 cursor-not-allowed";
                                   }
 
-                                  if(assigned && !isAssignedToMe) cellStyles += " cursor-not-allowed";
+                                  if(assigned && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
 
                                   return (
-                                    <td key={col.id} onClick={() => open && !assigned && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
+                                    <td key={col.id} onClick={() => !isConsultationMode && open && !assigned && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
                                       {/* Contenu de la case */}
                                       
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
-                                      {!assigned && hasMultiplePending && (
+                                      {!isConsultationMode && !assigned && hasMultiplePending && (
                                         <div className="flex flex-col items-center justify-center leading-none w-full h-full relative">
                                             <span className="absolute top-0.5 left-1 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[0].groupIndex}</span>
                                             <span className="absolute bottom-0.5 right-1 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[1].groupIndex}</span>
                                             {myPendingChoices.length > 2 && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[2].groupIndex}</span>}
                                         </div>
                                       )}
-                                      {!assigned && !hasMultiplePending && myPending && (
+                                      {!isConsultationMode && !assigned && !hasMultiplePending && myPending && (
                                         <div className="flex flex-col items-center justify-center leading-none">
                                             <span className="text-[12px] md:text-[10px] font-black">{myPending.groupIndex}</span>
                                             {myPending.subRank > 1 && <span className="text-[9px] md:text-[7px] font-black opacity-80 lowercase">.{String.fromCharCode(95 + myPending.subRank)}</span>}

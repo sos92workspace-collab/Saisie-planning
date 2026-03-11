@@ -1090,9 +1090,9 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
           return;
       }
 
-      const isColClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === null);
+      const isColClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
       const isCellClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
-      if (isColClosed || isCellClosed) {
+      if (isColClosed ? !isCellClosed : isCellClosed) {
           alert("Cette case est fermée.");
           return;
       }
@@ -1164,15 +1164,15 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
       setEditingCell(null);
   };
 
-  const handleColumnClick = async (colId: number) => {
+  const handleColumnClick = async (colId: number, month: number, year: number) => {
       if (!isEditClosuresMode) return;
-      const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === null);
+      const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === null && gc.month === month && gc.year === year);
       if (existing) {
           await supabase.from('global_closures').delete().eq('id', existing.id);
           setGlobalClosures((prev: any[]) => prev.filter(gc => gc.id !== existing.id));
       } else {
-          const { data, error } = await supabase.from('global_closures').insert({ col_id: colId, row: null, month: null, year: null }).select();
-          if (data && !error) setGlobalClosures((prev: any[]) => [...prev, data[0]]);
+          const { data, error } = await supabase.from('global_closures').insert({ col_id: colId, row: null, month: month + 1, year }).select();
+          if (data && !error) setGlobalClosures((prev: any[]) => [...prev, { ...data[0], month: data[0].month - 1 }]);
       }
   };
 
@@ -1255,7 +1255,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                     <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
                     <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-x-auto">
                         <table className="w-full border-separate border-spacing-0 table-fixed">
-                            <MatrixHeader columns={dynamicColumns} isEditClosuresMode={isEditClosuresMode} onColumnClick={handleColumnClick} globalClosures={globalClosures} />
+                            <MatrixHeader columns={dynamicColumns} isEditClosuresMode={isEditClosuresMode} onColumnClick={handleColumnClick} globalClosures={globalClosures} month={month} year={year} />
                             <tbody>
                                 {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                                     const date = new Date(year, month, day);
@@ -1272,9 +1272,9 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 </div>
                                             </td>
                                             {dynamicColumns.map(col => {
-                                                const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null);
+                                                const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
                                                 const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                                                const isClosed = isColClosed || isCellClosed;
+                                                const isClosed = isColClosed ? !isCellClosed : isCellClosed;
                                                 
                                                 const assigned = choices.find((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
                                                 
@@ -1282,7 +1282,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 
                                                 const timeRange = parseTimeRange(col.timeRange);
                                                 const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
-                                                const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation');
+                                                const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                                 
                                                 if (isClosed) bgColor = '#fee2e2'; // red-100
                                                 else if (assigned) bgColor = '#16a34a'; // green-600
