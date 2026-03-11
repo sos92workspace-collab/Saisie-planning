@@ -108,6 +108,55 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           if (pendingTarget === 'DOCTOR') query = query.eq('user_role', 'DOCTOR');
           else if (pendingTarget === 'SUBSTITUTE') query = query.eq('user_role', 'SUBSTITUTE');
           await query;
+
+          // RE-INDEX remaining choices for affected users to ensure priorities start from 1
+          let fetchQuery = supabase.from('choices').select('*').neq('status', 'ARCHIVED');
+          if (pendingTarget === 'DOCTOR') fetchQuery = fetchQuery.eq('user_role', 'DOCTOR');
+          else if (pendingTarget === 'SUBSTITUTE') fetchQuery = fetchQuery.eq('user_role', 'SUBSTITUTE');
+          
+          const { data: remainingChoices } = await fetchQuery;
+          
+          if (remainingChoices && remainingChoices.length > 0) {
+              const grouped: Record<string, Record<string, any[]>> = {};
+              remainingChoices.forEach(c => {
+                  if (!grouped[c.user_trigram]) grouped[c.user_trigram] = {};
+                  if (!grouped[c.user_trigram][c.category]) grouped[c.user_trigram][c.category] = [];
+                  grouped[c.user_trigram][c.category].push(c);
+              });
+              
+              const updates = [];
+              for (const userTri in grouped) {
+                  for (const cat in grouped[userTri]) {
+                      const userCatChoices = grouped[userTri][cat];
+                      userCatChoices.sort((a, b) => {
+                          if (a.group_index !== b.group_index) return a.group_index - b.group_index;
+                          return a.sub_rank - b.sub_rank;
+                      });
+                      
+                      let currentGroupIndex = 0;
+                      let lastOldGroupIndex = -1;
+                      let currentSubRank = 1;
+                      
+                      for (const choice of userCatChoices) {
+                          if (choice.group_index !== lastOldGroupIndex) {
+                              currentGroupIndex++;
+                              currentSubRank = 1;
+                              lastOldGroupIndex = choice.group_index;
+                          } else {
+                              currentSubRank++;
+                          }
+                          
+                          if (choice.group_index !== currentGroupIndex || choice.sub_rank !== currentSubRank) {
+                              updates.push(supabase.from('choices').update({
+                                  group_index: currentGroupIndex,
+                                  sub_rank: currentSubRank
+                              }).eq('id', choice.id));
+                          }
+                      }
+                  }
+              }
+              if (updates.length > 0) await Promise.all(updates);
+          }
       } else {
           // RESET MODE: Clear choices, unavailabilities, global_closures, column_quotas
           await supabase.from('choices').delete().neq('id', '0');

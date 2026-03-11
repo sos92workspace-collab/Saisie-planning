@@ -194,78 +194,34 @@ const App: React.FC = () => {
         const latestAssigned = assigned ? assigned.map(fromDb) : [];
 
         const myPendingChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.status === 'PENDING');
-        const allCurrentChoices = [...latestAssigned, ...myPendingChoices];
         const validChoices: Choice[] = [];
         const invalidChoices: Choice[] = [];
 
         for (const choice of myPendingChoices) {
             let isValid = true;
             
-            // Check global closures
-            const isColClosed = latestGlobalClosures.some((g: any) => g.col_id === choice.col && g.row === null && (g.month === null || (g.month === choice.month && g.year === choice.year)));
-            const isCellClosed = latestGlobalClosures.some((g: any) => g.col_id === choice.col && g.row === choice.row && g.month === choice.month && g.year === choice.year);
-            if (isColClosed ? !isCellClosed : isCellClosed) isValid = false;
+            // Check for overlaps with ALREADY ASSIGNED shifts for the SAME user
+            const myAssignedSameDay = latestAssigned.filter(a => 
+                a.userTrigram === trigram.toUpperCase() && 
+                a.row === choice.row && 
+                a.month === choice.month && 
+                a.year === choice.year
+            );
 
-            // Check column config open/closed
-            const colCfg = latestColumnConfigs.find(c => c.column_id === choice.col);
-            if (colCfg) {
-                const date = new Date(choice.year, choice.month, choice.row);
-                const dayOfWeek = date.getDay(); 
-                const type: 'w' | 's' | 'd' = (dayOfWeek === 0) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
-
-                if (currentUser && currentUser.role !== 'ADMIN' && latestShiftGlobalSettings) {
-                    const isDoctor = currentUser.role === 'DOCTOR';
-                    const isTargetActive = isDoctor ? latestShiftGlobalSettings.target_doctor_active : latestShiftGlobalSettings.target_substitute_active;
-                    
-                    if (isTargetActive && latestShiftDefinitions.length > 0) {
-                        const matchingShifts = latestShiftDefinitions.filter((s: any) => choice.col >= s.start_col && choice.col <= s.end_col);
-                        for (const shift of matchingShifts) {
-                            // MODIFIED: Count ALL ASSIGNED from DB, ignore role
-                            const takenCount = latestAssigned.filter((c: any) => 
-                                c.row === choice.row && c.month === choice.month && c.year === choice.year &&
-                                c.col >= shift.start_col && c.col <= shift.end_col
-                            ).length;
-                            const max = isDoctor ? latestShiftGlobalSettings.target_doctor_max : latestShiftGlobalSettings.target_substitute_max;
-                            if (takenCount >= max) isValid = false;
-                        }
-                    }
-                }
-
-                if (choice.category === 'normal') {
-                    if (type === 'w' && !colCfg.open_normal_w) isValid = false;
-                    if (type === 's' && !colCfg.open_normal_s) isValid = false;
-                    if (type === 'd' && !colCfg.open_normal_d) isValid = false;
-                } else if (choice.category === 'bad_bonus') {
-                    if (type === 'w' && !colCfg.open_bad_w) isValid = false;
-                    if (type === 's' && !colCfg.open_bad_s) isValid = false;
-                    if (type === 'd' && !colCfg.open_bad_d) isValid = false;
-                } else if (choice.category === 'good_bonus') {
-                    if (type === 'w' && !colCfg.open_good_w) isValid = false;
-                    if (type === 's' && !colCfg.open_good_s) isValid = false;
-                    if (type === 'd' && !colCfg.open_good_d) isValid = false;
-                }
-            }
-
-            // Check unavailabilities
-            const constraints = latestUnavailabilities.filter((u: any) => u.day === choice.row && u.month === choice.month && u.year === choice.year);
-            if (constraints.length > 0) {
-                if (constraints.some((u: any) => u.period === 'FULL')) isValid = false;
-                else {
-                    const colDef = COLUMNS.find(c => c.id === choice.col);
-                    const colTimeRange = colCfg?.custom_time_range || colDef?.timeRange;
-                    if (colTimeRange) {
-                        if (constraints.some((u: any) => {
-                            if (PERIOD_MAPPING[u.period]) return PERIOD_MAPPING[u.period].includes(choice.col);
-                            return doRangesOverlap(u.period, colTimeRange);
-                        })) {
-                            isValid = false;
-                        }
+            const choiceTimeRange = choice.colTimeRange || COLUMNS.find(c => c.id === choice.col)?.timeRange;
+            
+            if (choiceTimeRange) {
+                for (const assigned of myAssignedSameDay) {
+                    const assignedTimeRange = assigned.colTimeRange || COLUMNS.find(c => c.id === assigned.col)?.timeRange;
+                    if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange)) {
+                        isValid = false;
+                        break;
                     }
                 }
             }
-
-            // Check if already assigned
-            if (latestAssigned.some(c => c.row === choice.row && c.col === choice.col && c.month === choice.month && c.year === choice.year)) {
+            
+            // Keep the check for "already assigned to someone else" as a hard constraint
+            if (isValid && latestAssigned.some(c => c.row === choice.row && c.col === choice.col && c.month === choice.month && c.year === choice.year)) {
                 isValid = false;
             }
 
@@ -274,7 +230,7 @@ const App: React.FC = () => {
         }
 
         if (invalidChoices.length > 0) {
-            const msg = `Certains de vos choix ne sont plus compatibles avec les paramètres actuels du tour (cases fermées, indisponibilités, ou déjà attribuées).\n\n` +
+            const msg = `Certains de vos choix sont incompatibles avec des gardes qui vous ont déjà été attribuées ou ont été prises par d'autres praticiens.\n\n` +
                         `Les choix suivants vont être supprimés :\n` +
                         invalidChoices.map(c => `- ${new Date(c.year, c.month, c.row).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} : ${c.colLabel}`).join('\n') +
                         `\n\nVoulez-vous continuer et transmettre les choix restants ?`;
@@ -616,17 +572,8 @@ const App: React.FC = () => {
        return;
     }
 
-    if (!isColOpen(colId, currentStep, row, month, year)) return;
-    if (isBlockedByUnavailability(row, colId, month, year)) return;
-
-    const isColClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === null);
-    const isCellClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
-    if (isColClosed || isCellClosed) {
-        alert("Cette case est fermée par l'administrateur.");
-        return;
-    }
-
-    // Check if cell is ALREADY assigned to someone else
+    // Removed strict blocking for closures and unavailabilities as per user request
+    // Only block if cell is ALREADY assigned to someone else
     const assignedToOther = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED' && c.userTrigram !== cleanTri);
     if (assignedToOther) {
         return; 
@@ -644,22 +591,18 @@ const App: React.FC = () => {
     const finalTimeRange = colConfig?.custom_time_range || baseColDef?.timeRange || '';
 
     if (baseColDef) {
-        const mainChoicesSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year);
-        let hasOverlap = false;
-        let overlapRange = '';
-        for (const existingChoice of mainChoicesSameDay) {
-            const existingTimeRange = existingChoice.colTimeRange || COLUMNS.find(c => c.id === existingChoice.col)?.timeRange;
+        // Check specifically for overlaps with ALREADY ASSIGNED shifts for the SAME user
+        const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        
+        for (const assignedChoice of assignedSameDay) {
+            const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
             if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange)) {
-                hasOverlap = true;
-                overlapRange = existingTimeRange;
-                break;
-            }
-        }
-        if (hasOverlap) {
-            if (!window.confirm(`⚠️ AVERTISSEMENT : Vous avez déjà sélectionné une garde avec des horaires incompatibles (${overlapRange}).\n\nVoulez-vous conserver ce choix malgré tout ?`)) {
+                alert(`⚠️ ACTION BLOQUÉE : Une garde vous a déjà été attribuée sur des horaires incompatibles (${existingTimeRange}).`);
                 return;
             }
         }
+        
+        // For pending choices, we remove the warning as per user request to "enlève les alertes d'incompatibilité"
     }
 
     const newChoice: Choice = {
@@ -690,9 +633,6 @@ const App: React.FC = () => {
           const baseColDef = COLUMNS.find(c => c.id === colId);
           if(!baseColDef) continue;
           
-          if (!isColOpen(colId, currentStep, row, month, year)) continue;
-          if (isBlockedByUnavailability(row, colId, month, year)) continue;
-
           const finalLabel = colConfig?.custom_label || baseColDef.label;
           const finalType = colConfig?.custom_type || baseColDef.type;
           const finalTimeRange = colConfig?.custom_time_range || baseColDef.timeRange;
@@ -711,17 +651,17 @@ const App: React.FC = () => {
           }
 
           if (nextSubRank === 1) {
-              const mainChoicesSameDay = [...currentChoicesState, ...newChoices].filter(c => 
+              const assignedSameDay = [...currentChoicesState, ...newChoices].filter(c => 
                   c.userTrigram === user.trigram && 
                   c.row === row && 
                   c.month === month && 
                   c.year === year &&
-                  c.subRank === 1
+                  c.status === 'ASSIGNED'
               );
               
               let overlapFound = false;
-              for (const existingChoice of mainChoicesSameDay) {
-                  const existingTimeRange = existingChoice.colTimeRange || COLUMNS.find(c => c.id === existingChoice.col)?.timeRange;
+              for (const assignedChoice of assignedSameDay) {
+                  const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
                   if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange)) {
                       overlapFound = true;
                       break;
@@ -1011,7 +951,7 @@ const App: React.FC = () => {
                                       cellStyles += " text-white shadow-md z-10 cursor-pointer scale-[0.98]";
                                   } else if (isBlocked) { 
                                       bgColor = '#f1f5f9'; 
-                                      cellStyles += " bg-slate-100 opacity-50 cursor-not-allowed bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')]";
+                                      cellStyles += " bg-slate-100 opacity-50 cursor-pointer bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')]";
                                   } else if (open) { 
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       const timeRange = parseTimeRange(col.timeRange);
@@ -1023,13 +963,13 @@ const App: React.FC = () => {
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   } else { 
                                       bgColor = '#e2e8f0'; 
-                                      cellStyles += " opacity-30 cursor-not-allowed";
+                                      cellStyles += " opacity-30 cursor-pointer";
                                   }
 
                                   if(assigned && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
 
                                   return (
-                                    <td key={col.id} onClick={() => !isConsultationMode && open && !assigned && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
+                                    <td key={col.id} onClick={() => !isConsultationMode && !assigned && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
                                       {/* Contenu de la case */}
                                       
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
