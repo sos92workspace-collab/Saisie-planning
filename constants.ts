@@ -1,6 +1,62 @@
 
 import { GuardType, Site, ColumnDefinition, Round, HeaderConfig } from './types';
 
+export const parseTimeRange = (range: string): { start: number, end: number } | null => {
+  if (!range) return null;
+  const match = range.match(/(\d+)[hH]?[-]?(\d+)?[hH]?/);
+  if (!match) return null;
+  let start = parseInt(match[1], 10);
+  let end = match[2] ? parseInt(match[2], 10) : start + 1; 
+  if (end < start) end += 24;
+  return { start, end };
+};
+
+export const getEasterDate = (year: number): Date => {
+  const f = Math.floor,
+    G = year % 19,
+    C = f(year / 100),
+    H = (C - f(C / 4) - f((8 * C + 13) / 25) + 19 * G + 15) % 30,
+    I = H - f(H / 28) * (1 - f(29 / (H + 1)) * f((21 - G) / 11)),
+    J = (year + f(year / 4) + I + 2 - C + f(C / 4)) % 7,
+    L = I - J,
+    month = 3 + f((L + 40) / 44),
+    day = L + 28 - 31 * f(month / 4);
+  return new Date(year, month - 1, day);
+};
+
+export const isPublicHoliday = (date: Date): boolean => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+
+  const fixedHolidays = [
+    { d: 1, m: 0 },
+    { d: 1, m: 4 },
+    { d: 8, m: 4 },
+    { d: 14, m: 6 },
+    { d: 15, m: 7 },
+    { d: 1, m: 10 },
+    { d: 11, m: 10 },
+    { d: 25, m: 11 },
+  ];
+
+  if (fixedHolidays.some(h => h.d === day && h.m === month)) return true;
+
+  const easter = getEasterDate(year);
+  const easterMonday = new Date(easter);
+  easterMonday.setDate(easter.getDate() + 1);
+  
+  const ascension = new Date(easter);
+  ascension.setDate(easter.getDate() + 39);
+  
+  const whitMonday = new Date(easter);
+  whitMonday.setDate(easter.getDate() + 50);
+
+  const variableHolidays = [easterMonday, ascension, whitMonday];
+  
+  return variableHolidays.some(h => h.getDate() === day && h.getMonth() === month);
+};
+
 export const DAYS_OF_WEEK = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
 
 const generateDefaultRounds = (): Round[] => {

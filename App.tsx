@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS } from './constants';
+import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 import { StepProgressBar } from './components/StepProgressBar';
@@ -34,67 +34,6 @@ const getDefaultColor = (colorClass: string) => {
   const match = colorClass?.match(/bg-\[#([0-9a-fA-F]{6})\]/);
   if (match) return `#${match[1]}`;
   return '#FFFFFF';
-};
-
-// Utilitaire pour parser les horaires (ex: "08h-12h" ou "8-12")
-const parseTimeRange = (range: string): { start: number, end: number } | null => {
-  if (!range) return null;
-  const match = range.match(/(\d+)[hH]?[-]?(\d+)?[hH]?/);
-  if (!match) return null;
-  let start = parseInt(match[1], 10);
-  let end = match[2] ? parseInt(match[2], 10) : start + 1; 
-  if (end < start) end += 24;
-  return { start, end };
-};
-
-// Helper to calculate Easter date
-const getEasterDate = (year: number): Date => {
-  const f = Math.floor,
-    G = year % 19,
-    C = f(year / 100),
-    H = (C - f(C / 4) - f((8 * C + 13) / 25) + 19 * G + 15) % 30,
-    I = H - f(H / 28) * (1 - f(29 / (H + 1)) * f((21 - G) / 11)),
-    J = (year + f(year / 4) + I + 2 - C + f(C / 4)) % 7,
-    L = I - J,
-    month = 3 + f((L + 40) / 44),
-    day = L + 28 - 31 * f(month / 4);
-  return new Date(year, month - 1, day);
-};
-
-// Helper to check if a date is a public holiday in France
-const isPublicHoliday = (date: Date): boolean => {
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0-11
-  const day = date.getDate();
-
-  // Fixed holidays
-  const fixedHolidays = [
-    { d: 1, m: 0 }, // Jour de l'an
-    { d: 1, m: 4 }, // Fête du travail
-    { d: 8, m: 4 }, // Victoire 1945
-    { d: 14, m: 6 }, // Fête nationale
-    { d: 15, m: 7 }, // Assomption
-    { d: 1, m: 10 }, // Toussaint
-    { d: 11, m: 10 }, // Armistice 1918
-    { d: 25, m: 11 }, // Noël
-  ];
-
-  if (fixedHolidays.some(h => h.d === day && h.m === month)) return true;
-
-  // Variable holidays based on Easter
-  const easter = getEasterDate(year);
-  const easterMonday = new Date(easter);
-  easterMonday.setDate(easter.getDate() + 1);
-  
-  const ascension = new Date(easter);
-  ascension.setDate(easter.getDate() + 39);
-  
-  const whitMonday = new Date(easter);
-  whitMonday.setDate(easter.getDate() + 50);
-
-  const variableHolidays = [easterMonday, ascension, whitMonday];
-  
-  return variableHolidays.some(h => h.getDate() === day && h.getMonth() === month);
 };
 
 // Vérifie si deux plages se chevauchent
@@ -1024,6 +963,12 @@ const App: React.FC = () => {
                                       cellStyles += " bg-slate-100 opacity-50 cursor-not-allowed bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')]";
                                   } else if (open) { 
                                       bgColor = col.customColor || '#FFFFFF'; 
+                                      const timeRange = parseTimeRange(col.timeRange);
+                                      const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
+                                      const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation');
+                                      if (isWeekendGuard) {
+                                          bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
+                                      }
                                       cellStyles += " hover:bg-blue-50 cursor-pointer";
                                   } else { 
                                       bgColor = '#e2e8f0'; 

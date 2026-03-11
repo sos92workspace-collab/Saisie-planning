@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, GuardType, Site, UserRole, ColumnDefinition, ShiftDefinition, ShiftGlobalSettings } from '../types';
-import { COLUMNS, DEFAULT_HEADERS } from '../constants';
+import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from '../constants';
 import { MatrixHeader } from './MatrixHeader';
 
 interface Props {
@@ -1261,9 +1261,11 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                     const date = new Date(year, month, day);
                                     const dayName = date.toLocaleDateString('fr-FR', { weekday: 'short' }).substring(0, 3).replace('.', '');
                                     const isSunday = date.getDay() === 0;
+                                    const isHoliday = isPublicHoliday(date);
+                                    const isOffDay = isSunday || isHoliday;
                                     return (
-                                        <tr key={day} className={`h-8 hover:bg-slate-50 ${isSunday ? 'bg-red-50/30' : ''}`}>
-                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-16 h-8 font-black ${isSunday ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
+                                        <tr key={day} className={`h-8 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-16 h-8 font-black ${isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
                                                 <div className="flex items-center justify-center gap-1">
                                                     <span className="text-[10px] font-normal opacity-70">{dayName}</span>
                                                     <span className="text-[10px]">{day}</span>
@@ -1277,11 +1279,17 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 const assigned = choices.find((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
                                                 
                                                 let bgColor = col.customColor || '#FFFFFF';
+                                                
+                                                const timeRange = parseTimeRange(col.timeRange);
+                                                const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
+                                                const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation');
+                                                
                                                 if (isClosed) bgColor = '#fee2e2'; // red-100
                                                 else if (assigned) bgColor = '#16a34a'; // green-600
+                                                else if (isWeekendGuard) bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                                 
                                                 const style: React.CSSProperties = {
-                                                    backgroundColor: bgColor
+                                                    background: bgColor
                                                 };
                                                 
                                                 return (
