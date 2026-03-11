@@ -219,6 +219,8 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               setColumnConfigs={setColumnConfigs}
               headerConfigs={headerConfigs}
               setHeaderConfigs={setHeaderConfigs}
+              shiftGlobalSettings={shiftGlobalSettings}
+              users={users}
               supabase={supabase} 
               refreshRounds={refreshData} 
               onShowHeaderHelp={() => setShowHeaderSqlHelp(true)}
@@ -228,6 +230,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
             <ShiftsPanel
               shiftDefinitions={shiftDefinitions}
               shiftGlobalSettings={shiftGlobalSettings}
+              users={users}
               supabase={supabase}
               refreshData={refreshData}
             />
@@ -297,7 +300,7 @@ const UsersPanel = ({ users, supabase, refreshData }: any) => {
   );
 };
 
-const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshData }: any) => {
+const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshData, users }: any) => {
   return (
     <div className="p-4 md:p-8 overflow-y-auto h-full custom-scrollbar">
       <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-300">
@@ -402,7 +405,7 @@ const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshD
   );
 };
 
-const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelectedRoundId, columnConfigs, setColumnConfigs, headerConfigs, setHeaderConfigs, supabase, refreshRounds, onShowHeaderHelp }: any) => {
+const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelectedRoundId, columnConfigs, setColumnConfigs, headerConfigs, setHeaderConfigs, shiftGlobalSettings, users, supabase, refreshRounds, onShowHeaderHelp }: any) => {
   const [instructions, setInstructions] = useState(round?.instructions || '');
   const [roundTitle, setRoundTitle] = useState(round?.title || '');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -759,6 +762,46 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                     </div>
                 </div>
                 
+                <div className="bg-white p-6 md:p-8 rounded-3xl border shadow-sm space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-black uppercase tracking-tight">Tête de Liste (Paramètre Commun)</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Médecin Tête de Liste</label>
+                             <select 
+                                value={shiftGlobalSettings?.head_doctor_trigram || ''} 
+                                onChange={async (e) => {
+                                    await supabase.from('shift_global_settings').update({ head_doctor_trigram: e.target.value || null }).eq('id', 1);
+                                    refreshRounds();
+                                }} 
+                                className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm outline-none text-slate-900"
+                             >
+                                <option value="">Aucun</option>
+                                {users.filter((u: any) => u.role === 'DOCTOR').map((u: any) => (
+                                    <option key={u.trigram} value={u.trigram}>{u.trigram}</option>
+                                ))}
+                             </select>
+                        </div>
+                        <div className="space-y-2">
+                             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Remplaçant Tête de Liste</label>
+                             <select 
+                                value={shiftGlobalSettings?.head_substitute_trigram || ''} 
+                                onChange={async (e) => {
+                                    await supabase.from('shift_global_settings').update({ head_substitute_trigram: e.target.value || null }).eq('id', 1);
+                                    refreshRounds();
+                                }} 
+                                className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm outline-none text-slate-900"
+                             >
+                                <option value="">Aucun</option>
+                                {users.filter((u: any) => u.role === 'SUBSTITUTE').map((u: any) => (
+                                    <option key={u.trigram} value={u.trigram}>{u.trigram}</option>
+                                ))}
+                             </select>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="bg-white p-6 md:p-8 rounded-3xl border shadow-sm space-y-6">
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                          <h3 className="text-lg font-black uppercase tracking-tight">Période du Planning</h3>
