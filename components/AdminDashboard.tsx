@@ -236,7 +236,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
             />
           )}
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} />}
-          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} />}
+          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} />}
         </div>
       </main>
     </div>
@@ -1368,7 +1368,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
   );
 };
 
-const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp }: any) => {
+const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound }: any) => {
     const [subTab, setSubTab] = useState<'journal' | 'data'>('journal');
     const [showExportModal, setShowExportModal] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'REFUSED'>('ALL');
@@ -1482,6 +1482,68 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp }: any) => {
         setShowExportModal(false);
     };
 
+    const generate4DExport = () => {
+        let validMonths: {month: number, year: number}[] = [];
+        if (activeRound) {
+            const startM = activeRound.monthStart ?? 0;
+            const startY = activeRound.yearStart ?? 2025;
+            for (let i = 0; i < (activeRound.numMonths || 1); i++) {
+                let m = startM + i;
+                let y = startY;
+                if (m > 11) {
+                    m -= 12;
+                    y += 1;
+                }
+                validMonths.push({ month: m, year: y });
+            }
+        }
+
+        const dataToExport = choices.filter((c: any) => {
+            if (c.status !== 'ASSIGNED') return false;
+            if (validMonths.length > 0) {
+                return validMonths.some(vm => vm.month === c.month && vm.year === c.year);
+            }
+            return true;
+        });
+        
+        let period = '';
+        if (activeRound) {
+            const year = activeRound.yearStart ?? 2025;
+            const month = String((activeRound.monthStart ?? 0) + 1).padStart(2, '0');
+            period = `${year}${month}`;
+        } else if (dataToExport.length > 0) {
+            const firstChoice = dataToExport[0];
+            const year = firstChoice.year;
+            const month = String(firstChoice.month + 1).padStart(2, '0');
+            period = `${year}${month}`;
+        } else {
+            const now = new Date();
+            period = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mn = String(now.getMinutes()).padStart(2, '0');
+        const hhmn = `${hh}${mn}`;
+
+        const filename = `plan_importauto_${period}_${hhmn}.csv`;
+
+        const header = "Trigramme,Tour,Année,Mois,Jour,Colonne ID,Catégorie";
+        const rows = dataToExport.map((c: any) => {
+            return `${c.userTrigram},${c.roundId},${c.year},${c.month + 1},${c.row},${c.col},${c.category}`;
+        });
+        
+        const csvContent = "data:text/csv;charset=utf-8," + [header, ...rows].join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setShowExportModal(false);
+    };
+
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc';
         if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -1579,6 +1641,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp }: any) => {
                             <button onClick={() => generateCSV('ALL')} className="w-full py-4 px-6 bg-slate-900 text-white rounded-2xl flex items-center justify-between group hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
                                 <span className="font-black text-xs uppercase tracking-widest">Tout Exporter</span>
                                 <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded">{choices.length}</span>
+                            </button>
+                            <button onClick={generate4DExport} className="w-full py-4 px-6 bg-indigo-600 text-white rounded-2xl flex items-center justify-between group hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2">
+                                <span className="font-black text-xs uppercase tracking-widest">Exporter 4D</span>
+                                <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded">{choices.filter((c:any) => c.status === 'ASSIGNED').length}</span>
                             </button>
                         </div>
                         <div className="p-4 bg-slate-50 border-t flex justify-center">
