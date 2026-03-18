@@ -741,6 +741,10 @@ const App: React.FC = () => {
         return; // Cell is closed for this round/step or globally
     }
 
+    if (isBlockedByUnavailability(row, colId, month, year)) {
+        return; // Cell is blocked by user's unavailability
+    }
+
     const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
     let nextSubRank = 1;
     if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
@@ -1142,13 +1146,16 @@ const App: React.FC = () => {
                                   } else if (!open) { 
                                       bgColor = '#f1f5f9'; // slate-100 for grayed out closed cells
                                       cellStyles += " opacity-40 cursor-not-allowed";
-                                  } else if (isBlocked) { 
-                                      const baseColor = col.customColor || '#FFFFFF';
-                                      bgColor = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4='), ${baseColor}`; 
-                                      cellStyles += " opacity-50 cursor-pointer";
                                   } else { 
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
+                                  }
+
+                                  if (!isConsultationMode && isBlocked) {
+                                      bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #ef4444 calc(50% - 1.5px), #ef4444 calc(50% + 1.5px), transparent calc(50% + 1.5px)), ${bgColor}`;
+                                      if (!myPending && !hasMultiplePending) {
+                                          cellStyles = cellStyles.replace('cursor-pointer', 'cursor-not-allowed');
+                                      }
                                   }
 
                                   if (isWeekendGuard) {
@@ -1158,7 +1165,13 @@ const App: React.FC = () => {
                                   if(assignedList.length > 0 && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
 
                                   return (
-                                    <td key={col.id} onClick={() => !isConsultationMode && assignedList.length === 0 && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
+                                    <td 
+                                      key={col.id} 
+                                      onClick={() => !isConsultationMode && assignedList.length === 0 && handleCellClick(day, col.id, month, year)} 
+                                      className={cellStyles} 
+                                      style={{ background: bgColor }}
+                                      title={(!isConsultationMode && isBlocked) ? "Indisponibilité" : undefined}
+                                    >
                                       {/* Contenu de la case */}
                                       
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
