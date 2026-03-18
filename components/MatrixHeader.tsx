@@ -9,23 +9,35 @@ interface Props {
   globalClosures?: any[];
   month?: number;
   year?: number;
+  closedColumns?: number[];
 }
 
-export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onColumnClick, globalClosures = [], month, year }) => {
+export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onColumnClick, globalClosures = [], month, year, closedColumns = [] }) => {
   return (
     <thead className="sticky top-0 z-40 shadow-md bg-white">
       {/* Single Row: Date & Columns */}
-      <tr className="bg-white text-slate-900 text-[11px] md:text-[9px] font-bold border-b border-slate-300 h-12">
-        <th className="sticky left-0 z-50 w-20 md:w-16 bg-white border-r border-slate-300 uppercase tracking-tighter shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs md:text-[10px] align-middle">
+      <tr className="bg-white text-slate-900 text-[11px] md:text-[9px] font-bold border-b border-slate-200 h-12">
+        <th className="sticky left-0 z-50 w-20 md:w-16 bg-white border-r border-slate-200 uppercase tracking-tighter shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs md:text-[10px] align-middle">
             Date
         </th>
         {columns.map((col) => {
-          const isColClosed = globalClosures.some(gc => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
+          const isColClosedGlobal = globalClosures.some(gc => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
+          const isColClosedForStep = closedColumns.includes(col.id);
+          const isColClosed = isColClosedGlobal || isColClosedForStep;
+          
+          let bgClass = isEditClosuresMode ? 'hover:bg-red-100' : 'hover:bg-slate-50';
+          if (isColClosedGlobal) bgClass = isEditClosuresMode ? 'bg-red-100/50' : 'bg-slate-100';
+          else if (isColClosedForStep) bgClass = 'bg-slate-100';
+
+          let textClass = 'text-slate-800';
+          if (isColClosedGlobal) textClass = isEditClosuresMode ? 'text-red-600 line-through' : 'text-slate-400';
+          else if (isColClosedForStep) textClass = 'text-slate-400';
+
           return (
-          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-300 min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer hover:bg-red-100' : 'hover:bg-slate-50'} ${isColClosed ? 'bg-red-100/50' : ''}`}>
+          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-200 min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer' : ''} ${bgClass}`}>
             <div className={`flex flex-col leading-none py-1 h-full justify-center ${isEditClosuresMode ? '' : 'cursor-help'}`}>
-              <span className="text-[9px] md:text-[7px] text-slate-400 font-normal mb-0.5">{col.id}</span>
-              <span className={`font-black text-[11px] md:text-[9px] ${isColClosed ? 'text-red-600 line-through' : 'text-slate-800'}`}>{col.label}</span>
+              <span className={`text-[9px] md:text-[7px] font-normal mb-0.5 ${isColClosedForStep ? 'text-slate-300' : 'text-slate-400'}`}>{col.id}</span>
+              <span className={`font-black text-[11px] md:text-[9px] ${textClass}`}>{col.label}</span>
             </div>
             
             {/* Tooltip on Hover - Positioned BELOW (top-full) to avoid being cut off */}

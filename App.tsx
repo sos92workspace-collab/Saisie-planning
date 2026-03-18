@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { ChevronDown, Calendar } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
@@ -52,6 +53,157 @@ const PERIOD_MAPPING: { [key: string]: number[] } = {
   'APREM': [26, 27, 28, 29, 30, 31, 32, 33, 34],
   'SOIR': [35, 36, 37, 38, 39, 40, 41, 42],
   'NUIT': [43, 44, 45, 46]
+};
+
+const MonthCounters = ({ month, year, choices, columns, userTrigram }: {
+    month: number,
+    year: number,
+    choices: Choice[],
+    columns: any[],
+    userTrigram: string
+}) => {
+    const [expanded, setExpanded] = useState<string | null>(null);
+
+    const stats = {
+        'Consultation': { total: 0, semaine: 0, samediAprem: 0, dimancheJf: 0 },
+        'Téléconsultation': { total: 0, semaine: 0, samediAprem: 0, dimancheJf: 0 },
+        'Visite': { total: 0, semaine: 0, samediAprem: 0, dimancheJf: 0 },
+    };
+
+    const myAssigned = choices.filter(c => 
+        c.month === month && 
+        c.year === year && 
+        c.userTrigram === userTrigram && 
+        c.status === 'ASSIGNED'
+    );
+
+    myAssigned.forEach(choice => {
+        const col = columns.find(c => c.id === choice.col);
+        if (!col) return;
+        
+        const type = col.type as 'Consultation' | 'Téléconsultation' | 'Visite';
+        if (!stats[type]) return;
+
+        const date = new Date(year, month, choice.row);
+        const isHoliday = isPublicHoliday(date);
+        const isSunday = date.getDay() === 0;
+        const isSaturday = date.getDay() === 6;
+        const timeRange = parseTimeRange(col.timeRange);
+
+        stats[type].total++;
+
+        if (isSunday || isHoliday) {
+            stats[type].dimancheJf++;
+        } else if (isSaturday && timeRange && timeRange.start >= 12) {
+            stats[type].samediAprem++;
+        } else {
+            stats[type].semaine++;
+        }
+    });
+
+    return (
+        <div className="flex flex-wrap gap-4 px-4">
+            {(['Consultation', 'Téléconsultation', 'Visite'] as const).map(type => {
+                const data = stats[type];
+                const isExpanded = expanded === type;
+                return (
+                    <div key={type} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex-1 min-w-[200px]">
+                        <button 
+                            onClick={() => setExpanded(isExpanded ? null : type)}
+                            className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="font-bold text-slate-700 text-sm">{type}</span>
+                                <span className="bg-blue-100 text-blue-700 py-0.5 px-2.5 rounded-full text-xs font-black">{data.total}</span>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isExpanded && (
+                            <div className="px-4 py-3 bg-white border-t border-slate-100 space-y-2 text-xs">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-500 font-medium">Semaine</span>
+                                    <span className="font-black text-slate-700">{data.semaine}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-500 font-medium">Samedi Aprem</span>
+                                    <span className="font-black text-slate-700">{data.samediAprem}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-500 font-medium">Dimanche & JF</span>
+                                    <span className="font-black text-slate-700">{data.dimancheJf}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    );
+};
+
+const exportToICS = (month: number, year: number, choices: Choice[], columns: any[], userTrigram: string) => {
+    const myAssigned = choices.filter(c => 
+        c.month === month && 
+        c.year === year && 
+        c.userTrigram === userTrigram && 
+        c.status === 'ASSIGNED'
+    );
+
+    if (myAssigned.length === 0) {
+        alert("Aucune garde assignée pour ce mois.");
+        return;
+    }
+
+    let icsContent = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Planning Gardes//FR\r\n";
+
+    myAssigned.forEach(choice => {
+        const col = columns.find(c => c.id === choice.col);
+        if (!col) return;
+
+        const date = new Date(year, month, choice.row);
+        const timeRange = parseTimeRange(col.timeRange);
+        
+        let startHour = 8;
+        let endHour = 20;
+        
+        if (timeRange) {
+            startHour = timeRange.start;
+            endHour = timeRange.end;
+        }
+
+        const formatICSDate = (d: Date, h: number) => {
+            const pad = (n: number) => n.toString().padStart(2, '0');
+            const actualDate = new Date(d);
+            let actualHour = h;
+            if (actualHour >= 24) {
+                actualDate.setDate(actualDate.getDate() + 1);
+                actualHour -= 24;
+            }
+            return `${actualDate.getFullYear()}${pad(actualDate.getMonth() + 1)}${pad(actualDate.getDate())}T${pad(actualHour)}0000`;
+        };
+
+        const dtStart = formatICSDate(date, startHour);
+        const dtEnd = formatICSDate(date, endHour);
+        const summary = `Garde ${col.type || ''} - ${col.label || ''}`;
+
+        icsContent += "BEGIN:VEVENT\r\n";
+        icsContent += `UID:${choice.id || Math.random().toString(36).substring(7)}@planning\r\n`;
+        icsContent += `DTSTAMP:${formatICSDate(new Date(), new Date().getHours())}Z\r\n`;
+        icsContent += `DTSTART;TZID=Europe/Paris:${dtStart}\r\n`;
+        icsContent += `DTEND;TZID=Europe/Paris:${dtEnd}\r\n`;
+        icsContent += `SUMMARY:${summary}\r\n`;
+        icsContent += "END:VEVENT\r\n";
+    });
+
+    icsContent += "END:VCALENDAR\r\n";
+
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `gardes_${year}_${(month + 1).toString().padStart(2, '0')}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 };
 
 // --- COMPONENT: Landscape Lock Screen ---
@@ -876,13 +1028,36 @@ const App: React.FC = () => {
           <div className="flex-1 overflow-auto custom-scrollbar p-4 space-y-12 pb-32">
             {monthsToDisplay.map(({ month, year, label }) => {
               const daysInMonth = new Date(year, month + 1, 0).getDate();
+              
+              // Compute which columns are entirely closed for this step
+              const closedColumnsForStep = dynamicColumns.filter(col => {
+                  const cfg = columnConfigs.find(c => c.column_id === col.id);
+                  if (!cfg) return false;
+                  if (currentStep === AppStep.NORMAL_SELECTION) return !cfg.open_normal_w && !cfg.open_normal_s && !cfg.open_normal_d;
+                  if (currentStep === AppStep.BAD_BONUS_SELECTION) return !cfg.open_bad_w && !cfg.open_bad_s && !cfg.open_bad_d;
+                  if (currentStep === AppStep.GOOD_BONUS_SELECTION) return !cfg.open_good_w && !cfg.open_good_s && !cfg.open_good_d;
+                  return false;
+              }).map(col => col.id);
+
               return (
                 <div key={`${year}-${month}`} className="space-y-4">
-                  <div className="flex items-center gap-4 px-4"><h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2><div className="h-px bg-slate-200 flex-1"></div></div>
+                  <div className="flex items-center gap-4 px-4">
+                    <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
+                    <div className="h-px bg-slate-200 flex-1"></div>
+                    <button 
+                        onClick={() => exportToICS(month, year, choices, dynamicColumns, trigram.toUpperCase())}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors text-sm font-bold shadow-sm"
+                    >
+                        <Calendar className="w-4 h-4" />
+                        <span className="hidden sm:inline">Exporter mes gardes</span>
+                    </button>
+                  </div>
                   
+                  <MonthCounters month={month} year={year} choices={choices} columns={dynamicColumns} userTrigram={trigram.toUpperCase()} />
+
                   <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-x-auto">
                      <table className="w-full border-separate border-spacing-0 table-fixed">
-                        <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} month={month} year={year} />
+                        <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} month={month} year={year} closedColumns={closedColumnsForStep} />
                         <tbody>
                           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                             const date = new Date(year, month, day);
@@ -893,7 +1068,7 @@ const App: React.FC = () => {
                             const isWeekend = date.getDay() === 6 || isOffDay;
                             return (
                               <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isWeekend ? 'bg-red-50/30' : ''}`}>
-                                <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isWeekend ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
+                                <td className={`sticky left-0 border-r border-b border-slate-200 text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isWeekend ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
                                     <div className="flex items-center justify-center gap-1">
                                         <span className="text-[10px] md:text-[8px] font-normal opacity-70">{dayName}</span>
                                         <span className="text-[12px] md:text-[10px]">{day}</span>
@@ -918,7 +1093,7 @@ const App: React.FC = () => {
                                   const isAssignedToMe = assignedList.some(a => a.userTrigram === trigram.toUpperCase());
                                   const isAssignedToOther = assignedList.length > 0 && !isAssignedToMe;
                                   
-                                  let cellStyles = "border-r border-b border-slate-50 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
+                                  let cellStyles = "border-r border-b border-slate-200 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
                                   let bgColor = '#FFFFFF';
                                   
                                   const timeRange = parseTimeRange(col.timeRange);
@@ -933,8 +1108,8 @@ const App: React.FC = () => {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-100 text-slate-900";
                                       } else if (isClosed) {
-                                          bgColor = col.customColor || '#FFFFFF';
-                                          cellStyles += " opacity-50";
+                                          bgColor = '#f1f5f9'; // slate-100 for global closures
+                                          cellStyles += " opacity-40";
                                       } else {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-70";
@@ -942,10 +1117,10 @@ const App: React.FC = () => {
                                       cellStyles += " cursor-default";
                                   } else if (isAssignedToMe) { 
                                       bgColor = '#fde047'; // Yellow 300
-                                      cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]"; 
+                                      cellStyles += open ? " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]" : " opacity-60 z-20 rounded-sm text-slate-900 font-bold"; 
                                   } else if (assignedList.length > 0) { 
-                                      bgColor = col.customColor || '#FFFFFF';
-                                      cellStyles += " opacity-100 cursor-not-allowed text-slate-900"; 
+                                      bgColor = open ? (col.customColor || '#FFFFFF') : '#f1f5f9';
+                                      cellStyles += open ? " opacity-100 cursor-not-allowed text-slate-900" : " opacity-50 cursor-not-allowed text-slate-500"; 
                                   } else if (hasMultiplePending) {
                                       if (myPendingChoices.length === 2) {
                                           const color1 = getChoiceColor(myPendingChoices[0].category);
@@ -957,20 +1132,23 @@ const App: React.FC = () => {
                                           const color3 = getChoiceColor(myPendingChoices[2].category);
                                           bgColor = `linear-gradient(135deg, ${color1} 33%, ${color2} 33% 66%, ${color3} 66%)`;
                                       }
-                                      cellStyles += " text-white shadow-md z-10 cursor-pointer scale-[0.98]";
+                                      cellStyles += open ? " text-white shadow-md z-10 cursor-pointer scale-[0.98]" : " text-white shadow-sm z-10 cursor-not-allowed opacity-60";
                                   } else if (myPending) { 
                                       bgColor = getChoiceColor(myPending.category); 
-                                      cellStyles += " text-white shadow-md z-10 cursor-pointer scale-[0.98]";
+                                      cellStyles += open ? " text-white shadow-md z-10 cursor-pointer scale-[0.98]" : " text-white shadow-sm z-10 cursor-not-allowed opacity-60";
+                                  } else if (isClosed) {
+                                      bgColor = '#f1f5f9'; // slate-100 for global closures
+                                      cellStyles += " opacity-40 cursor-not-allowed";
+                                  } else if (!open) { 
+                                      bgColor = '#f1f5f9'; // slate-100 for grayed out closed cells
+                                      cellStyles += " opacity-40 cursor-not-allowed";
                                   } else if (isBlocked) { 
                                       const baseColor = col.customColor || '#FFFFFF';
                                       bgColor = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4='), ${baseColor}`; 
                                       cellStyles += " opacity-50 cursor-pointer";
-                                  } else if (open) { 
-                                      bgColor = col.customColor || '#FFFFFF'; 
-                                      cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   } else { 
                                       bgColor = col.customColor || '#FFFFFF'; 
-                                      cellStyles += " opacity-30 cursor-not-allowed";
+                                      cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   }
 
                                   if (isWeekendGuard) {

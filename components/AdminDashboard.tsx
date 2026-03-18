@@ -1209,7 +1209,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
 
   const handleColumnClick = async (colId: number, month: number, year: number) => {
       if (!isEditClosuresMode) return;
-      const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === null && gc.month === month && gc.year === year);
+      const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === null && (gc.month === month && gc.year === year || gc.month === null));
       if (existing) {
           await supabase.from('global_closures').delete().eq('id', existing.id);
           setGlobalClosures((prev: any[]) => prev.filter(gc => gc.id !== existing.id));
@@ -1347,7 +1347,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                     <td 
                                                         key={col.id} 
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-50 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && <div className="absolute inset-0 flex items-center justify-center"><div className="w-full h-[2px] bg-red-400 rotate-45 absolute"></div><div className="w-full h-[2px] bg-red-400 -rotate-45 absolute"></div></div>}
