@@ -908,15 +908,15 @@ const App: React.FC = () => {
                                   const isBlocked = isBlockedByUnavailability(day, col.id, month, year);
                                   
                                   // Récupérer une garde validée (ASSIGNED) sur cette case
-                                  const assigned = choices.find(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
+                                  const assignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
                                   
                                   // Mes vœux en attente
                                   const myPendingChoices = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.userTrigram === trigram.toUpperCase() && ch.status === 'PENDING');
                                   const myPending = myPendingChoices.find(ch => ch.category === category) || myPendingChoices[0];
                                   const hasMultiplePending = myPendingChoices.length > 1;
                                   
-                                  const isAssignedToMe = assigned && assigned.userTrigram === trigram.toUpperCase();
-                                  const isAssignedToOther = assigned && !isAssignedToMe;
+                                  const isAssignedToMe = assignedList.some(a => a.userTrigram === trigram.toUpperCase());
+                                  const isAssignedToOther = assignedList.length > 0 && !isAssignedToMe;
                                   
                                   let cellStyles = "border-r border-b border-slate-50 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
                                   let bgColor = '#FFFFFF';
@@ -929,7 +929,7 @@ const App: React.FC = () => {
                                       if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";
-                                      } else if (isAssignedToOther) {
+                                      } else if (assignedList.length > 0) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-100 text-slate-900";
                                       } else if (isClosed) {
@@ -943,7 +943,7 @@ const App: React.FC = () => {
                                   } else if (isAssignedToMe) { 
                                       bgColor = '#fde047'; // Yellow 300
                                       cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]"; 
-                                  } else if (isAssignedToOther) { 
+                                  } else if (assignedList.length > 0) { 
                                       bgColor = col.customColor || '#FFFFFF';
                                       cellStyles += " opacity-100 cursor-not-allowed text-slate-900"; 
                                   } else if (hasMultiplePending) {
@@ -977,32 +977,36 @@ const App: React.FC = () => {
                                       bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                   }
 
-                                  if(assigned && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
+                                  if(assignedList.length > 0 && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
 
                                   return (
-                                    <td key={col.id} onClick={() => !isConsultationMode && !assigned && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
+                                    <td key={col.id} onClick={() => !isConsultationMode && assignedList.length === 0 && handleCellClick(day, col.id, month, year)} className={cellStyles} style={{ background: bgColor }}>
                                       {/* Contenu de la case */}
                                       
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
-                                      {!isConsultationMode && !assigned && hasMultiplePending && (
+                                      {!isConsultationMode && assignedList.length === 0 && hasMultiplePending && (
                                         <div className="flex flex-col items-center justify-center leading-none w-full h-full relative">
                                             <span className="absolute top-0.5 left-1 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[0].groupIndex}</span>
                                             <span className="absolute bottom-0.5 right-1 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[1].groupIndex}</span>
                                             {myPendingChoices.length > 2 && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[2].groupIndex}</span>}
                                         </div>
                                       )}
-                                      {!isConsultationMode && !assigned && !hasMultiplePending && myPending && (
+                                      {!isConsultationMode && assignedList.length === 0 && !hasMultiplePending && myPending && (
                                         <div className="flex flex-col items-center justify-center leading-none">
                                             <span className="text-[12px] md:text-[10px] font-black">{myPending.groupIndex}</span>
                                             {myPending.subRank > 1 && <span className="text-[9px] md:text-[7px] font-black opacity-80 lowercase">.{String.fromCharCode(95 + myPending.subRank)}</span>}
                                         </div>
                                       )}
 
-                                      {/* Cas 2 : Garde Validée (Moi ou Autre) - Affiche le trigramme */}
+                                      {/* Cas 2 : Garde Validée (Moi ou Autre) - Affiche le(s) trigramme(s) */}
                                       {(isAssignedToMe || isAssignedToOther) && (
-                                          <span className="text-[12px] md:text-[10px] font-black drop-shadow-sm tracking-wide block leading-tight text-slate-900">
-                                              {assigned?.userTrigram}
-                                          </span>
+                                          <div className="flex flex-col items-center justify-center gap-[1px]">
+                                              {assignedList.map((a, i) => (
+                                                  <span key={i} className="text-[12px] md:text-[10px] font-black drop-shadow-sm tracking-wide block leading-tight text-slate-900">
+                                                      {a.userTrigram}
+                                                  </span>
+                                              ))}
+                                          </div>
                                       )}
                                     </td>
                                   );

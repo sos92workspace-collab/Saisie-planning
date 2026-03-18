@@ -137,7 +137,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
       return {
         id: cols[0], user_trigram: cols[1], user_role: cols[2], round_id: Number(cols[3]),
         submitted_at: cols[4] ? new Date(cols[4]).toISOString() : new Date().toISOString(),
-        year: Number(cols[5]), month: Number(cols[6]) - 1, row: Number(cols[7]),
+        year: Number(cols[5]), month: Number(cols[6]), row: Number(cols[7]),
         col: Number(cols[8]), col_label: cols[9], col_type: cols[10], col_time_range: cols[11],
         category: cols[12], group_index: Number(cols[13]), sub_rank: Number(cols[14]), status: cols[15]
       };
@@ -1407,7 +1407,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                         round_id: Number(cols[3]),
                         submitted_at: cols[4] ? new Date(cols[4]).toISOString() : new Date().toISOString(),
                         year: Number(cols[5]),
-                        month: Number(cols[6]) - 1,
+                        month: Number(cols[6]),
                         row: Number(cols[7]),
                         col: Number(cols[8]),
                         col_label: cols[9],
@@ -1437,7 +1437,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     const dateParts = cols[1].split('/');
                     if (dateParts.length !== 3) return null;
                     const day = Number(dateParts[0]);
-                    const month = Number(dateParts[1]) - 1;
+                    const month = Number(dateParts[1]);
                     const year = Number(dateParts[2]);
 
                     const colId = Number(cols[7]);
