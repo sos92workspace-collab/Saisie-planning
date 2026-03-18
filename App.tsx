@@ -933,7 +933,7 @@ const App: React.FC = () => {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-100 text-slate-900";
                                       } else if (isClosed) {
-                                          bgColor = '#e2e8f0'; // Slate 200
+                                          bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-50";
                                       } else {
                                           bgColor = col.customColor || '#FFFFFF';
@@ -962,13 +962,14 @@ const App: React.FC = () => {
                                       bgColor = getChoiceColor(myPending.category); 
                                       cellStyles += " text-white shadow-md z-10 cursor-pointer scale-[0.98]";
                                   } else if (isBlocked) { 
-                                      bgColor = '#f1f5f9'; 
-                                      cellStyles += " bg-slate-100 opacity-50 cursor-pointer bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4=')]";
+                                      const baseColor = col.customColor || '#FFFFFF';
+                                      bgColor = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSI0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxwYXRoIGQ9Ik0tMSwxIGw1LC01IE0wLDQgbDQsLTQgTTMsNSBsNSwtNSIgc3Ryb2tlPSIjOTRhM2I4IiBzdHJva2Utd2lkdGg9IjEiLz48L3N2Zz4='), ${baseColor}`; 
+                                      cellStyles += " opacity-50 cursor-pointer";
                                   } else if (open) { 
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   } else { 
-                                      bgColor = '#e2e8f0'; 
+                                      bgColor = col.customColor || '#FFFFFF'; 
                                       cellStyles += " opacity-30 cursor-not-allowed";
                                   }
 
