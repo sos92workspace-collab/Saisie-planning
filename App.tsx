@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { ChevronDown, Calendar } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
@@ -233,6 +233,7 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.NORMAL_SELECTION);
   const [choices, setChoices] = useState<Choice[]>([]);
+  const clickTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const [rounds, setRounds] = useState<Round[]>(DEFAULT_ROUNDS);
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -669,13 +670,14 @@ const App: React.FC = () => {
       
   }, [currentStep, category, viewMode]);
 
-  const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number) => {
+  const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false) => {
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
 
     const cleanTri = trigram.trim().toUpperCase();
     const existing = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.userTrigram === cleanTri && c.category === category);
     
     if (existing) {
+       if (isDoubleClick) return;
        if (existing.status === 'ASSIGNED') {
            alert("Impossible de modifier une garde validée. Veuillez contacter l'administrateur.");
            return;
@@ -745,10 +747,19 @@ const App: React.FC = () => {
         return; // Cell is blocked by user's unavailability
     }
 
-    const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
+    let targetGroupIndex = activePriority;
     let nextSubRank = 1;
-    if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
-    if (nextSubRank > 27) { alert("Limite atteinte : Max 26 alternatives."); return; }
+
+    if (isDoubleClick) {
+        const userPendingChoices = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category);
+        const maxGroupIndex = userPendingChoices.length > 0 ? Math.max(...userPendingChoices.map(c => c.groupIndex)) : 0;
+        targetGroupIndex = maxGroupIndex + 1;
+        setActivePriority(targetGroupIndex);
+    } else {
+        const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
+        if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
+        if (nextSubRank > 27) { alert("Limite atteinte : Max 26 alternatives."); return; }
+    }
 
     const baseColDef = COLUMNS.find(c => c.id === colId);
     const colConfig = columnConfigs.find(c => c.column_id === colId);
@@ -773,7 +784,7 @@ const App: React.FC = () => {
 
     const newChoice: Choice = {
         id: Math.random().toString(36).substring(2, 11), row, col: colId, month, year,
-        groupIndex: activePriority, subRank: nextSubRank, category, 
+        groupIndex: targetGroupIndex, subRank: nextSubRank, category, 
         userTrigram: cleanTri, userRole: currentUser?.role || 'DOCTOR',
         status: 'PENDING', submittedAt: new Date().toISOString(), roundId: currentRoundId,
         colLabel: finalLabel, colType: finalType, colTimeRange: finalTimeRange
@@ -1167,7 +1178,30 @@ const App: React.FC = () => {
                                   return (
                                     <td 
                                       key={col.id} 
-                                      onClick={() => !isConsultationMode && assignedList.length === 0 && handleCellClick(day, col.id, month, year)} 
+                                      onClick={(e) => {
+                                          if (isConsultationMode || assignedList.length > 0) return;
+                                          const cellKey = `${day}-${col.id}`;
+                                          const existingTimeout = clickTimeoutsRef.current.get(cellKey);
+                                          if (existingTimeout) {
+                                              clearTimeout(existingTimeout);
+                                          }
+                                          const newTimeout = setTimeout(() => {
+                                              handleCellClick(day, col.id, month, year, false);
+                                              clickTimeoutsRef.current.delete(cellKey);
+                                          }, 250);
+                                          clickTimeoutsRef.current.set(cellKey, newTimeout);
+                                      }}
+                                      onDoubleClick={(e) => {
+                                          e.preventDefault();
+                                          if (isConsultationMode || assignedList.length > 0) return;
+                                          const cellKey = `${day}-${col.id}`;
+                                          const existingTimeout = clickTimeoutsRef.current.get(cellKey);
+                                          if (existingTimeout) {
+                                              clearTimeout(existingTimeout);
+                                              clickTimeoutsRef.current.delete(cellKey);
+                                          }
+                                          handleCellClick(day, col.id, month, year, true);
+                                      }}
                                       className={cellStyles} 
                                       style={{ background: bgColor }}
                                       title={(!isConsultationMode && isBlocked) ? "Indisponibilité" : undefined}
