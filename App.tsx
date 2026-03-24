@@ -19,6 +19,13 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 11);
+};
+
 const fromDb = (db: any): Choice => ({
   id: db.id, row: db.row, col: db.col, month: db.month - 1, year: db.year,
   groupIndex: db.group_index, subRank: db.sub_rank, category: db.category,
@@ -38,11 +45,19 @@ const getDefaultColor = (colorClass: string) => {
 };
 
 // Vérifie si deux plages se chevauchent
-const doRangesOverlap = (r1: string, r2: string): boolean => {
+const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0): boolean => {
   const t1 = parseTimeRange(r1);
   const t2 = parseTimeRange(r2);
   if (!t1 || !t2) return false;
-  return Math.max(t1.start, t2.start) < Math.min(t1.end, t2.end);
+  
+  // Calculate overlap in minutes
+  const overlapStart = Math.max(t1.start, t2.start);
+  const overlapEnd = Math.min(t1.end, t2.end);
+  
+  if (overlapStart < overlapEnd) {
+      return (overlapEnd - overlapStart) > maxOverlapMinutes;
+  }
+  return false;
 };
 
 const PERIOD_MAPPING: { [key: string]: number[] } = {
@@ -94,7 +109,7 @@ const MonthCounters = ({ month, year, choices, columns, userTrigram }: {
 
         if (isSunday || isHoliday) {
             stats[type].dimancheJf++;
-        } else if (isSaturday && timeRange && timeRange.start >= 12) {
+        } else if (isSaturday && timeRange && timeRange.start >= 12 * 60) {
             stats[type].samediAprem++;
         } else {
             stats[type].semaine++;
@@ -163,32 +178,34 @@ const exportToICS = (month: number, year: number, choices: Choice[], columns: an
         const date = new Date(year, month, choice.row);
         const timeRange = parseTimeRange(col.timeRange);
         
-        let startHour = 8;
-        let endHour = 20;
+        let startMins = 8 * 60;
+        let endMins = 20 * 60;
         
         if (timeRange) {
-            startHour = timeRange.start;
-            endHour = timeRange.end;
+            startMins = timeRange.start;
+            endMins = timeRange.end;
         }
 
-        const formatICSDate = (d: Date, h: number) => {
+        const formatICSDate = (d: Date, totalMins: number) => {
             const pad = (n: number) => n.toString().padStart(2, '0');
             const actualDate = new Date(d);
-            let actualHour = h;
+            let actualHour = Math.floor(totalMins / 60);
+            let actualMin = totalMins % 60;
+            
             if (actualHour >= 24) {
                 actualDate.setDate(actualDate.getDate() + 1);
                 actualHour -= 24;
             }
-            return `${actualDate.getFullYear()}${pad(actualDate.getMonth() + 1)}${pad(actualDate.getDate())}T${pad(actualHour)}0000`;
+            return `${actualDate.getFullYear()}${pad(actualDate.getMonth() + 1)}${pad(actualDate.getDate())}T${pad(actualHour)}${pad(actualMin)}00`;
         };
 
-        const dtStart = formatICSDate(date, startHour);
-        const dtEnd = formatICSDate(date, endHour);
+        const dtStart = formatICSDate(date, startMins);
+        const dtEnd = formatICSDate(date, endMins);
         const summary = `Garde ${col.type || ''} - ${col.label || ''}`;
 
         icsContent += "BEGIN:VEVENT\r\n";
         icsContent += `UID:${choice.id || Math.random().toString(36).substring(7)}@planning\r\n`;
-        icsContent += `DTSTAMP:${formatICSDate(new Date(), new Date().getHours())}Z\r\n`;
+        icsContent += `DTSTAMP:${formatICSDate(new Date(), new Date().getHours() * 60 + new Date().getMinutes())}Z\r\n`;
         icsContent += `DTSTART;TZID=Europe/Paris:${dtStart}\r\n`;
         icsContent += `DTEND;TZID=Europe/Paris:${dtEnd}\r\n`;
         icsContent += `SUMMARY:${summary}\r\n`;
@@ -233,6 +250,8 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.NORMAL_SELECTION);
   const [choices, setChoices] = useState<Choice[]>([]);
+  const prevChoicesCountRef = useRef<number>(-1);
+  const prevCategoryRef = useRef<string>('');
   const clickTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const [rounds, setRounds] = useState<Round[]>(DEFAULT_ROUNDS);
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([]);
@@ -275,6 +294,7 @@ const App: React.FC = () => {
   }, [currentStep]);
 
   const currentStepInstruction = useMemo(() => {
+     if (!activeRound) return "";
      if (currentStep === AppStep.NORMAL_SELECTION) return activeRound.instructions_normal;
      if (currentStep === AppStep.BAD_BONUS_SELECTION) return activeRound.instructions_bad_bonus;
      if (currentStep === AppStep.GOOD_BONUS_SELECTION) return activeRound.instructions_good_bonus;
@@ -282,6 +302,7 @@ const App: React.FC = () => {
   }, [currentStep, activeRound]);
 
   const goToNextStep = () => {
+      if (!activeRound) return;
       if (currentStep === AppStep.NORMAL_SELECTION) {
           if (activeRound.step_good_bonus_active) setCurrentStep(AppStep.GOOD_BONUS_SELECTION);
           else if (activeRound.step_bad_bonus_active) setCurrentStep(AppStep.BAD_BONUS_SELECTION);
@@ -295,6 +316,7 @@ const App: React.FC = () => {
   };
 
   const goToPrevStep = () => {
+      if (!activeRound) return;
       if (currentStep === AppStep.RECAP_ORDERING) {
           if (activeRound.step_bad_bonus_active) setCurrentStep(AppStep.BAD_BONUS_SELECTION);
           else if (activeRound.step_good_bonus_active) setCurrentStep(AppStep.GOOD_BONUS_SELECTION);
@@ -330,6 +352,26 @@ const App: React.FC = () => {
         }
 
         const { data: rd } = await supabase.from('rounds').select('*').eq('id', currentRoundId).single();
+        
+        if (rd?.is_locked) {
+            alert("La saisie est temporairement fermée par l'administrateur. Il n'est plus possible de transmettre des choix.");
+            setRounds(prev => prev.map(r => r.id === rd.id ? { ...r, isLocked: true } : r));
+            setIsDataSyncing(false);
+            return;
+        }
+        if (currentUser?.role === 'DOCTOR' && !rd?.is_active_doctors) {
+            alert("Le tour n'est plus ouvert aux titulaires. Il n'est plus possible de transmettre des choix.");
+            setRounds(prev => prev.map(r => r.id === rd.id ? { ...r, isActiveDoctors: false } : r));
+            setIsDataSyncing(false);
+            return;
+        }
+        if (currentUser?.role === 'SUBSTITUTE' && !rd?.is_active_substitutes) {
+            alert("Le tour n'est plus ouvert aux remplaçants. Il n'est plus possible de transmettre des choix.");
+            setRounds(prev => prev.map(r => r.id === rd.id ? { ...r, isActiveSubstitutes: false } : r));
+            setIsDataSyncing(false);
+            return;
+        }
+
         const { data: gc } = await supabase.from('global_closures').select('*');
         const { data: cfg } = await supabase.from('column_configs').select('*').eq('round_id', currentRoundId);
         const { data: sd } = await supabase.from('shift_definitions').select('*');
@@ -345,6 +387,7 @@ const App: React.FC = () => {
         const latestShiftDefinitions = sd || [];
         const latestShiftGlobalSettings = sgs || null;
         const latestAssigned = assigned ? assigned.map(fromDb) : [];
+        const maxOverlapMinutes = rd?.max_overlap_minutes || 0;
 
         const myPendingChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.status === 'PENDING');
         const validChoices: Choice[] = [];
@@ -366,7 +409,7 @@ const App: React.FC = () => {
             if (choiceTimeRange) {
                 for (const assigned of myAssignedSameDay) {
                     const assignedTimeRange = assigned.colTimeRange || COLUMNS.find(c => c.id === assigned.col)?.timeRange;
-                    if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange)) {
+                    if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange, maxOverlapMinutes)) {
                         isValid = false;
                         break;
                     }
@@ -414,18 +457,20 @@ const App: React.FC = () => {
         }
 
         // Delete existing PENDING choices for user in DB
-        await supabase.from('choices').delete().eq('user_trigram', trigram.toUpperCase()).eq('status', 'PENDING');
+        const { error: deleteError } = await supabase.from('choices').delete().eq('user_trigram', trigram.toUpperCase()).eq('status', 'PENDING');
+        if (deleteError) throw deleteError;
 
         // Insert final choices
         if (finalChoices.length > 0) {
             const payload = finalChoices.map(c => ({
-                id: c.id, row: c.row, col: c.col, month: c.month + 1, year: c.year,
+                id: generateId(), row: c.row, col: c.col, month: c.month + 1, year: c.year,
                 group_index: c.groupIndex, sub_rank: c.subRank, category: c.category,
                 user_trigram: c.userTrigram, user_role: c.userRole,
                 status: c.status, submitted_at: c.submittedAt, round_id: c.roundId,
                 col_label: c.colLabel, col_type: c.colType, col_time_range: c.colTimeRange
             }));
-            await supabase.from('choices').insert(payload);
+            const { error } = await supabase.from('choices').insert(payload);
+            if (error) throw error;
         }
 
         if (finalChoices.length === 0 && invalidChoices.length > 0) {
@@ -470,6 +515,7 @@ const App: React.FC = () => {
 
   const accessStatus = useMemo(() => {
     if (!currentUser || currentUser.role === 'ADMIN' || viewMode === ViewMode.ADMIN) return { allowed: true };
+    if (!activeRound) return { allowed: false, message: "Aucun tour n'est actif." };
     if (activeRound.isLocked) return { allowed: false, message: "La saisie est temporairement fermée par l'administrateur." };
     if (currentUser.role === 'DOCTOR' && !activeRound.isActiveDoctors) return { allowed: false, message: "Le tour n'est pas encore ouvert aux titulaires." };
     if (currentUser.role === 'SUBSTITUTE' && !activeRound.isActiveSubstitutes) return { allowed: false, message: "Le tour n'est pas encore ouvert aux remplaçants." };
@@ -527,6 +573,7 @@ const App: React.FC = () => {
             instructions_bad_bonus: r.instructions_bad_bonus ?? "",
             step_good_bonus_active: r.step_good_bonus_active ?? true,
             instructions_good_bonus: r.instructions_good_bonus ?? "",
+            maxOverlapMinutes: r.max_overlap_minutes ?? 0,
         })).sort((a: any, b: any) => a.id - b.id));
         const { data: cfg } = await supabase.from('column_configs').select('*').eq('round_id', currentRoundId);
         if (cfg) setColumnConfigs(cfg);
@@ -670,6 +717,30 @@ const App: React.FC = () => {
       
   }, [currentStep, category, viewMode]);
 
+  // --- EFFECT: Auto-select lowest available priority when a choice is removed ---
+  useEffect(() => {
+      if (viewMode !== ViewMode.APP) return;
+      
+      const userChoices = choices.filter(c => 
+          c.userTrigram === trigram.toUpperCase() && 
+          c.category === category &&
+          c.status === 'PENDING'
+      );
+      
+      if (category === prevCategoryRef.current && prevChoicesCountRef.current !== -1 && userChoices.length < prevChoicesCountRef.current) {
+          // A choice was removed within the same category
+          const usedPriorities = new Set(userChoices.map(c => c.groupIndex));
+          let lowestAvailable = 1;
+          while (usedPriorities.has(lowestAvailable)) {
+              lowestAvailable++;
+          }
+          setActivePriority(lowestAvailable);
+      }
+      
+      prevChoicesCountRef.current = userChoices.length;
+      prevCategoryRef.current = category;
+  }, [choices, category, trigram, viewMode]);
+
   const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false) => {
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
 
@@ -767,13 +838,16 @@ const App: React.FC = () => {
     const finalType = colConfig?.custom_type || baseColDef?.type || '';
     const finalTimeRange = colConfig?.custom_time_range || baseColDef?.timeRange || '';
 
+    const currentRound = rounds.find(r => r.id === currentRoundId);
+    const maxOverlapMinutes = currentRound?.maxOverlapMinutes || 0;
+
     if (baseColDef) {
         // Check specifically for overlaps with ALREADY ASSIGNED shifts for the SAME user
         const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && c.status === 'ASSIGNED');
         
         for (const assignedChoice of assignedSameDay) {
             const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-            if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange)) {
+            if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
                 alert(`⚠️ ACTION BLOQUÉE : Une garde vous a déjà été attribuée sur des horaires incompatibles (${existingTimeRange}).`);
                 return;
             }
@@ -783,7 +857,7 @@ const App: React.FC = () => {
     }
 
     const newChoice: Choice = {
-        id: Math.random().toString(36).substring(2, 11), row, col: colId, month, year,
+        id: generateId(), row, col: colId, month, year,
         groupIndex: targetGroupIndex, subRank: nextSubRank, category, 
         userTrigram: cleanTri, userRole: currentUser?.role || 'DOCTOR',
         status: 'PENDING', submittedAt: new Date().toISOString(), roundId: currentRoundId,
@@ -797,6 +871,9 @@ const App: React.FC = () => {
       const newChoices: Choice[] = [];
       const user = users.find(u => u.trigram === trigram.toUpperCase());
       if (!user) return;
+
+      const currentRound = rounds.find(r => r.id === currentRoundId);
+      const maxOverlapMinutes = currentRound?.maxOverlapMinutes || 0;
 
       const currentChoicesState = choices; 
 
@@ -842,7 +919,7 @@ const App: React.FC = () => {
               let overlapFound = false;
               for (const assignedChoice of assignedSameDay) {
                   const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange)) {
+                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
                       overlapFound = true;
                       break;
                   }
@@ -851,7 +928,7 @@ const App: React.FC = () => {
           }
 
           const choice: Choice = {
-              id: Math.random().toString(36).substring(2, 11),
+              id: generateId(),
               row, col: colId, month, year,
               groupIndex: targetPriority, 
               subRank: nextSubRank, 
@@ -1112,7 +1189,7 @@ const App: React.FC = () => {
                                   let bgColor = '#FFFFFF';
                                   
                                   const timeRange = parseTimeRange(col.timeRange);
-                                  const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
+                                  const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14 * 60);
                                   const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                   
                                   if (isConsultationMode) {

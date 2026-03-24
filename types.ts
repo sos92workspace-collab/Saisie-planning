@@ -22,6 +22,7 @@ export interface ColumnDefinition {
   colorClass: string;
   headerLabel?: string;
   customColor?: string | null;
+  orderIndex?: number;
 }
 
 export type ChoiceCategory = 'normal' | 'good_bonus' | 'bad_bonus';
@@ -102,6 +103,7 @@ export interface Round {
   instructions_bad_bonus: string;
   step_good_bonus_active: boolean;
   instructions_good_bonus: string;
+  maxOverlapMinutes?: number;
 }
 
 export interface ColumnConfig {

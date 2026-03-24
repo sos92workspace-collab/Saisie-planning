@@ -3,11 +3,17 @@ import { GuardType, Site, ColumnDefinition, Round, HeaderConfig } from './types'
 
 export const parseTimeRange = (range: string): { start: number, end: number } | null => {
   if (!range) return null;
-  const match = range.match(/(\d+)[hH]?[-]?(\d+)?[hH]?/);
+  const match = range.match(/(\d+)(?:[hH](\d*))?\s*[-a-zA-Zà-ÿ\s]*\s*(\d+)(?:[hH](\d*))?/);
   if (!match) return null;
-  let start = parseInt(match[1], 10);
-  let end = match[2] ? parseInt(match[2], 10) : start + 1; 
-  if (end < start) end += 24;
+  let startHour = parseInt(match[1], 10);
+  let startMin = match[2] ? parseInt(match[2], 10) || 0 : 0;
+  let endHour = parseInt(match[3], 10);
+  let endMin = match[4] ? parseInt(match[4], 10) || 0 : 0;
+  
+  let start = startHour * 60 + startMin;
+  let end = endHour * 60 + endMin;
+  
+  if (end <= start) end += 24 * 60;
   return { start, end };
 };
 

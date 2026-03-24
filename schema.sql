@@ -2,6 +2,7 @@
 alter table choices add column if not exists col_label text;
 alter table choices add column if not exists col_type text;
 alter table choices add column if not exists col_time_range text;
+alter table rounds add column if not exists max_overlap_minutes int default 0;
 
 drop table if exists shift_definitions cascade;
 create table if not exists shift_definitions (
@@ -17,6 +18,14 @@ create table if not exists shift_global_settings (
   target_substitute_max integer default 0,
   target_doctor_active boolean default false,
   target_doctor_max integer default 0
+);
+
+create table if not exists logs (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  user_trigram text,
+  action text,
+  details jsonb
 );
 
 insert into shift_global_settings (id) values (1) on conflict (id) do nothing;

@@ -28,6 +28,14 @@ const generateId = () => {
 export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRounds, supabase, onLogout }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>(AdminTab.USERS);
   const [selectedRoundId, setSelectedRoundId] = useState<number>(1);
+
+  const logAction = useCallback(async (action: string, details: any) => {
+    try {
+      await supabase.from('logs').insert([{ action, details, user_trigram: 'ADMIN' }]);
+    } catch (e) {
+      console.error('Failed to log action', e);
+    }
+  }, [supabase]);
   const [allChoices, setAllChoices] = useState<Choice[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([]);
   const [headerConfigs, setHeaderConfigs] = useState<HeaderConfig[]>([]);
@@ -67,6 +75,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           instructions_bad_bonus: r.instructions_bad_bonus ?? "",
           step_good_bonus_active: r.step_good_bonus_active ?? true,
           instructions_good_bonus: r.instructions_good_bonus ?? "",
+          maxOverlapMinutes: r.max_overlap_minutes ?? 0,
         })));
       }
       const { data: cd } = await supabase.from('choices').select('*').neq('status', 'ARCHIVED');
@@ -108,12 +117,12 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           if (pendingTarget === 'DOCTOR') query = query.eq('user_role', 'DOCTOR');
           else if (pendingTarget === 'SUBSTITUTE') query = query.eq('user_role', 'SUBSTITUTE');
           await query;
+          logAction('VIDER_BASE', { mode: 'PENDING', target: pendingTarget });
       } else {
-          // RESET MODE: Clear choices, unavailabilities, global_closures, column_quotas
-          await supabase.from('choices').delete().neq('id', '0');
-          await supabase.from('unavailabilities').delete().neq('id', '0');
-          await supabase.from('global_closures').delete().neq('id', '0');
-          await supabase.from('column_quotas').delete().neq('column_id', 0);
+          // RESET MODE: Clear choices, unavailabilities
+          await supabase.from('choices').delete().not('id', 'is', null);
+          await supabase.from('unavailabilities').delete().not('id', 'is', null);
+          logAction('VIDER_BASE', { mode: 'ALL' });
       }
       await refreshData();
       alert("Base mise à jour.");
@@ -172,7 +181,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
 
                     <button onClick={() => setDeleteMode('ALL')} className={`w-full p-4 border-2 rounded-2xl transition-all ${deleteMode === 'ALL' ? 'border-red-500 bg-red-50' : 'border-slate-100'}`}>
                         <span className="block text-sm font-black uppercase text-red-600">Réinitialiser la base de données</span>
-                        <span className="block text-[10px] font-bold text-red-400 mt-1">Supprime TOUS les choix, indisponibilités et fermetures</span>
+                        <span className="block text-[10px] font-bold text-red-400 mt-1">Supprime TOUS les choix et indisponibilités (les fermetures sont conservées)</span>
                     </button>
                 </div>
                 <div className="p-6 bg-slate-50 border-t flex gap-3">
@@ -207,7 +216,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {isLoading && <div className="text-[9px] font-black text-blue-600 uppercase tracking-widest animate-pulse">Chargement...</div>}
         </header>
         <div className="flex-1 overflow-hidden">
-          {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} />}
+          {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} logAction={logAction} />}
           {activeTab === AdminTab.CONFIG && (
             <ConfigPanel 
               round={selectedRound} 
@@ -224,6 +233,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               supabase={supabase} 
               refreshRounds={refreshData} 
               onShowHeaderHelp={() => setShowHeaderSqlHelp(true)}
+              logAction={logAction}
             />
           )}
           {activeTab === AdminTab.SHIFTS && (
@@ -233,26 +243,39 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               users={users}
               supabase={supabase}
               refreshData={refreshData}
+              logAction={logAction}
             />
           )}
-          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} />}
-          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} />}
+          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
+          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} />}
         </div>
       </main>
     </div>
   );
 };
 
-const UsersPanel = ({ users, supabase, refreshData }: any) => {
+const UsersPanel = ({ users, supabase, refreshData, logAction }: any) => {
   const [newTri, setNewTri] = useState('');
   const [newPwd, setNewPwd] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('DOCTOR');
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'DOCTOR' | 'SUBSTITUTE'>('ALL');
 
   const addUser = async () => {
     if (newTri.length !== 3) return;
     await supabase.from('users').insert({ trigram: newTri.toUpperCase(), password: newPwd || '1234', role: newRole });
+    logAction('AJOUT_UTILISATEUR', { trigram: newTri.toUpperCase(), role: newRole });
     setNewTri(''); setNewPwd(''); refreshData();
   };
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((u: any) => {
+      const matchesSearch = u.trigram.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+      return matchesSearch && matchesRole;
+    });
+  }, [users, searchQuery, roleFilter]);
 
   const UserCard: React.FC<{ u: any }> = ({ u }) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -270,14 +293,14 @@ const UsersPanel = ({ users, supabase, refreshData }: any) => {
             {isEditing ? (
               <div className="flex items-center gap-1">
                 <input value={pwd} onChange={e => setPwd(e.target.value)} className="p-1 border rounded text-[10px] w-20 outline-none" autoFocus />
-                <button onClick={async () => { await supabase.from('users').update({ password: pwd }).eq('trigram', u.trigram); setIsEditing(false); refreshData(); }} className="text-green-600 font-bold text-xs">✓</button>
+                <button onClick={async () => { await supabase.from('users').update({ password: pwd }).eq('trigram', u.trigram); logAction('MODIFICATION_UTILISATEUR', { trigram: u.trigram }); setIsEditing(false); refreshData(); }} className="text-green-600 font-bold text-xs">✓</button>
               </div>
             ) : (
               <span className="text-[10px] font-black cursor-pointer hover:text-blue-600" onClick={() => setIsEditing(true)}>{u.password || '----'}</span>
             )}
           </div>
         </div>
-        <button onClick={async () => { if(confirm(`Supprimer ${u.trigram} ?`)) { await supabase.from('users').delete().eq('trigram', u.trigram); refreshData(); } }} className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-600 transition-all p-2">✕</button>
+        <button onClick={async () => { if(confirm(`Supprimer ${u.trigram} ?`)) { await supabase.from('users').delete().eq('trigram', u.trigram); logAction('SUPPRESSION_UTILISATEUR', { trigram: u.trigram }); refreshData(); } }} className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-600 transition-all p-2">✕</button>
       </div>
     );
   };
@@ -293,14 +316,36 @@ const UsersPanel = ({ users, supabase, refreshData }: any) => {
         </div>
         <button onClick={addUser} className="px-8 bg-slate-900 text-white rounded-2xl font-black h-[58px] uppercase tracking-widest text-[10px]">Ajouter</button>
       </div>
+
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-4 rounded-3xl border shadow-sm">
+        <div className="relative w-full md:w-64">
+          <input 
+            type="text" 
+            placeholder="Rechercher un trigramme..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-slate-50 border rounded-2xl text-sm font-bold outline-none focus:ring-2 ring-blue-50 text-slate-900"
+          />
+          <svg className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        </div>
+        <div className="flex bg-slate-100 p-1 rounded-2xl w-full md:w-auto">
+          <button onClick={() => setRoleFilter('ALL')} className={`flex-1 md:flex-none px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${roleFilter === 'ALL' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Tous</button>
+          <button onClick={() => setRoleFilter('DOCTOR')} className={`flex-1 md:flex-none px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${roleFilter === 'DOCTOR' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Titulaires</button>
+          <button onClick={() => setRoleFilter('SUBSTITUTE')} className={`flex-1 md:flex-none px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${roleFilter === 'SUBSTITUTE' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Remplaçants</button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        {users.map((u: any) => <UserCard key={u.trigram} u={u} />)}
+        {filteredUsers.map((u: any) => <UserCard key={u.trigram} u={u} />)}
+        {filteredUsers.length === 0 && (
+          <div className="col-span-full text-center p-8 text-slate-400 font-medium">Aucun utilisateur trouvé.</div>
+        )}
       </div>
     </div>
   );
 };
 
-const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshData, users }: any) => {
+const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshData, users, logAction }: any) => {
   return (
     <div className="p-4 md:p-8 overflow-y-auto h-full custom-scrollbar">
       <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-300">
@@ -405,7 +450,7 @@ const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshD
   );
 };
 
-const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelectedRoundId, columnConfigs, setColumnConfigs, headerConfigs, setHeaderConfigs, shiftGlobalSettings, users, supabase, refreshRounds, onShowHeaderHelp }: any) => {
+const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelectedRoundId, columnConfigs, setColumnConfigs, headerConfigs, setHeaderConfigs, shiftGlobalSettings, users, supabase, refreshRounds, onShowHeaderHelp, logAction }: any) => {
   const [instructions, setInstructions] = useState(round?.instructions || '');
   const [roundTitle, setRoundTitle] = useState(round?.title || '');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -460,10 +505,15 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         if (flags.isActiveDoctors !== undefined) payload.is_active_doctors = flags.isActiveDoctors;
         if (flags.isActiveSubstitutes !== undefined) payload.is_active_substitutes = flags.isActiveSubstitutes;
         if (flags.isLocked !== undefined) payload.is_locked = flags.isLocked;
+        if (flags.maxOverlapMinutes !== undefined) payload.max_overlap_minutes = flags.maxOverlapMinutes;
         
         const { error } = await supabase.from('rounds').update(payload).eq('id', selectedRoundId);
         if (error) throw error;
         await refreshRounds();
+        
+        if (flags.isLocked !== undefined) {
+            logAction('VERROUILLAGE_TOUR', { tourId: selectedRoundId, nomTour: roundTitle, etat: flags.isLocked ? 'VERROUILLÉ' : 'DÉVERROUILLÉ' });
+        }
     } catch (e) {
         console.error("Erreur mise à jour drapeaux:", e);
     } finally {
@@ -506,6 +556,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         if (error) throw error;
         alert("Période du planning mise à jour pour TOUS les tours.");
         refreshRounds();
+        logAction('MODIFICATION_PERIODE', { mois: period.month + 1, annee: period.year, nbMois: period.numMonths });
     } catch (e: any) {
         alert("Erreur lors de la mise à jour globale : " + e.message);
     } finally {
@@ -520,8 +571,26 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         await supabase.from('rounds').update({ is_active: false }).neq('id', 0);
         await supabase.from('rounds').update({ is_active: true }).eq('id', selectedRoundId);
         await refreshRounds();
+        logAction('CHANGEMENT_TOUR_ACTIF', { tourId: selectedRoundId, nomTour: roundTitle });
     } catch (e) {
         console.error("Erreur activation tour:", e);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
+  const isGloballyLocked = allRounds.every(r => r.isLocked);
+
+  const toggleGlobalLock = async () => {
+    if (isUpdating) return;
+    const newState = !isGloballyLocked;
+    setIsUpdating(true);
+    try {
+        await supabase.from('rounds').update({ is_locked: newState }).neq('id', 0);
+        await refreshRounds();
+        logAction('VERROUILLAGE_GLOBAL', { etat: newState ? 'VERROUILLÉ' : 'DÉVERROUILLÉ' });
+    } catch (e) {
+        console.error("Erreur verrouillage global:", e);
     } finally {
         setIsUpdating(false);
     }
@@ -575,67 +644,73 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         }
     });
 
+    if (Object.keys(cleanSettings).length === 0) {
+        setIsUpdating(false);
+        return;
+    }
+
     try {
         const isGlobalUpdate = Object.keys(cleanSettings).some(key => 
             ['custom_label', 'custom_header_label', 'custom_type', 'custom_site', 'custom_time_range', 'custom_color'].includes(key)
         );
 
-        let updates: any[] = [];
-
         if (isGlobalUpdate) {
-            // Apply to all rounds for global fields
+            // Fetch existing configs for these columns across all rounds
+            const { data: existingConfigs } = await supabase
+                .from('column_configs')
+                .select('*')
+                .in('column_id', selectedColIds);
+            
+            const existingMap = new Map();
+            if (existingConfigs) {
+                existingConfigs.forEach((c: any) => existingMap.set(`${c.round_id}-${c.column_id}`, c));
+            }
+
+            const upserts: any[] = [];
             allRounds.forEach((r: Round) => {
                 selectedColIds.forEach(colId => {
-                    // We only have columnConfigs for the selected round in state, 
-                    // but upsert will merge with existing DB rows if we only provide the fields we want to change.
-                    // Wait, Supabase upsert replaces the whole row if we don't provide all fields?
-                    // Actually, if we just want to update, we should probably fetch them or just trust upsert if it's a partial update?
-                    // Supabase upsert replaces the entire row. To do a partial update on multiple rows, we should use update().
-                    // But since we might need to insert if they don't exist, it's tricky.
-                    // Let's just use update() for global fields, assuming they exist, or we can just upsert with the current config from selectedRound.
-                    // Actually, the safest way to update specific fields across all rounds is to use a loop of updates.
+                    const key = `${r.id}-${colId}`;
+                    const existing = existingMap.get(key) || { round_id: r.id, column_id: colId };
+                    upserts.push({ ...existing, ...cleanSettings });
                 });
             });
-            
-            // Better approach for global fields: use update() with an in() filter
-            for (const key of Object.keys(cleanSettings)) {
-                if (['custom_label', 'custom_header_label', 'custom_type', 'custom_site', 'custom_time_range', 'custom_color'].includes(key)) {
-                    await supabase.from('column_configs')
-                        .update({ [key]: cleanSettings[key] })
-                        .in('column_id', selectedColIds);
-                } else {
-                    // For non-global fields (like openings) in a bulk action that mixed them (though UI separates them)
-                    await supabase.from('column_configs')
-                        .update({ [key]: cleanSettings[key] })
-                        .eq('round_id', selectedRoundId)
-                        .in('column_id', selectedColIds);
-                }
-            }
+
+            await supabase.from('column_configs').upsert(upserts, { onConflict: 'round_id,column_id' });
             
             // Also update local state for the current round
             setColumnConfigs((prev: any[]) => {
-                return prev.map(c => {
-                    if (selectedColIds.includes(c.column_id)) {
-                        return { ...c, ...cleanSettings };
+                const newConfigs = [...prev];
+                selectedColIds.forEach(colId => {
+                    const idx = newConfigs.findIndex(c => c.column_id === colId);
+                    if (idx >= 0) {
+                        newConfigs[idx] = { ...newConfigs[idx], ...cleanSettings };
+                    } else {
+                        newConfigs.push({ round_id: selectedRoundId, column_id: colId, ...cleanSettings });
                     }
-                    return c;
                 });
+                return newConfigs;
             });
 
         } else {
             // Apply only to selected round (e.g., openings)
-            await supabase.from('column_configs')
-                .update(cleanSettings)
-                .eq('round_id', selectedRoundId)
-                .in('column_id', selectedColIds);
+            const upserts = selectedColIds.map(colId => {
+                const existing = columnConfigs.find((c: any) => c.column_id === colId) || { round_id: selectedRoundId, column_id: colId };
+                return { ...existing, ...cleanSettings };
+            });
+            
+            await supabase.from('column_configs').upsert(upserts, { onConflict: 'round_id,column_id' });
                 
             setColumnConfigs((prev: any[]) => {
-                return prev.map(c => {
-                    if (selectedColIds.includes(c.column_id)) {
-                        return { ...c, ...cleanSettings };
+                const newConfigs = [...prev];
+                selectedColIds.forEach(colId => {
+                    const idx = newConfigs.findIndex(c => c.column_id === colId);
+                    if (idx >= 0) {
+                        newConfigs[idx] = { ...newConfigs[idx], ...cleanSettings };
+                    } else {
+                        newConfigs.push({ round_id: selectedRoundId, column_id: colId, ...cleanSettings });
                     }
-                    return c;
                 });
+                return newConfigs;
             });
         }
         
@@ -712,16 +787,47 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
       <div className="p-4 md:p-6 bg-white border-b flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-center justify-between shrink-0">
-         <div className="flex items-center gap-4 w-full md:w-auto">
-             <div className="flex flex-col flex-1">
-                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour Actif</label>
-                 <select value={selectedRoundId} onChange={e => setSelectedRoundId(Number(e.target.value))} className="bg-slate-50 border border-slate-200 text-slate-900 text-sm font-bold rounded-xl px-4 py-2 outline-none focus:ring-2 ring-blue-50 w-full">
-                    {allRounds.map((r: Round) => <option key={r.id} value={r.id}>{r.title}</option>)}
-                 </select>
+         <div className="flex flex-col md:flex-row items-start md:items-center gap-6 w-full md:w-auto">
+             <div className="flex flex-col">
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour</label>
+                 <div className="flex items-center gap-3">
+                     <select value={selectedRoundId} onChange={e => setSelectedRoundId(Number(e.target.value))} className="bg-slate-50 border border-slate-200 text-slate-900 text-sm font-bold rounded-xl px-4 py-2 outline-none focus:ring-2 ring-blue-50 min-w-[200px]">
+                        {allRounds.map((r: Round) => <option key={r.id} value={r.id}>{r.title}</option>)}
+                     </select>
+                     {round && !round.isActive && (
+                         <button onClick={setRoundActive} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 transition-all whitespace-nowrap">Activer ce tour</button>
+                     )}
+                 </div>
              </div>
-             {round && !round.isActive && (
-                 <button onClick={setRoundActive} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 transition-all whitespace-nowrap">Activer</button>
-             )}
+             
+             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
+
+             <div className="flex flex-col">
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour actuellement actif</label>
+                 {isGloballyLocked ? (
+                     <div className="text-sm font-black text-red-600 flex items-center gap-2">
+                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                         SYSTÈME VERROUILLÉ
+                     </div>
+                 ) : (
+                     <div className="text-sm font-black text-emerald-600 flex items-center gap-2">
+                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                         {allRounds.find(r => r.isActive)?.title || "Aucun"}
+                     </div>
+                 )}
+             </div>
+
+             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
+
+             <div className="flex flex-col">
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Verrouillage Global</label>
+                 <label className="flex items-center gap-3 cursor-pointer">
+                     <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isGloballyLocked ? 'bg-red-500' : 'bg-slate-200'}`} onClick={toggleGlobalLock}>
+                         <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isGloballyLocked ? 'translate-x-6' : ''}`}></div>
+                     </div>
+                     <span className={`text-xs font-bold ${isGloballyLocked ? 'text-red-600' : 'text-slate-400'}`}>{isGloballyLocked ? 'VERROUILLÉ' : 'DÉVERROUILLÉ'}</span>
+                 </label>
+             </div>
          </div>
          <div className="flex gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
             <button onClick={() => setActiveSubTab('general')} className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeSubTab === 'general' ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>Général</button>
@@ -736,29 +842,34 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                     <div className="bg-white p-6 rounded-3xl border shadow-sm">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Accès Titulaires</h3>
                         <label className="flex items-center gap-3 cursor-pointer">
-                            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${round.isActiveDoctors ? 'bg-blue-600' : 'bg-slate-200'}`} onClick={() => updateRoundFlags({ isActiveDoctors: !round.isActiveDoctors })}>
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${round.isActiveDoctors ? 'translate-x-6' : ''}`}></div>
+                            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${round?.isActiveDoctors ? 'bg-blue-600' : 'bg-slate-200'}`} onClick={() => updateRoundFlags({ isActiveDoctors: !round?.isActiveDoctors })}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${round?.isActiveDoctors ? 'translate-x-6' : ''}`}></div>
                             </div>
-                            <span className={`text-xs font-bold ${round.isActiveDoctors ? 'text-blue-600' : 'text-slate-400'}`}>{round.isActiveDoctors ? 'OUVERT' : 'FERMÉ'}</span>
+                            <span className={`text-xs font-bold ${round?.isActiveDoctors ? 'text-blue-600' : 'text-slate-400'}`}>{round?.isActiveDoctors ? 'OUVERT' : 'FERMÉ'}</span>
                         </label>
                     </div>
                     <div className="bg-white p-6 rounded-3xl border shadow-sm">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Accès Remplaçants</h3>
                         <label className="flex items-center gap-3 cursor-pointer">
-                            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${round.isActiveSubstitutes ? 'bg-orange-500' : 'bg-slate-200'}`} onClick={() => updateRoundFlags({ isActiveSubstitutes: !round.isActiveSubstitutes })}>
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${round.isActiveSubstitutes ? 'translate-x-6' : ''}`}></div>
+                            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${round?.isActiveSubstitutes ? 'bg-orange-500' : 'bg-slate-200'}`} onClick={() => updateRoundFlags({ isActiveSubstitutes: !round?.isActiveSubstitutes })}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${round?.isActiveSubstitutes ? 'translate-x-6' : ''}`}></div>
                             </div>
-                            <span className={`text-xs font-bold ${round.isActiveSubstitutes ? 'text-orange-600' : 'text-slate-400'}`}>{round.isActiveSubstitutes ? 'OUVERT' : 'FERMÉ'}</span>
+                            <span className={`text-xs font-bold ${round?.isActiveSubstitutes ? 'text-orange-600' : 'text-slate-400'}`}>{round?.isActiveSubstitutes ? 'OUVERT' : 'FERMÉ'}</span>
                         </label>
                     </div>
                     <div className="bg-white p-6 rounded-3xl border shadow-sm">
-                        <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Verrouillage Global</h3>
-                        <label className="flex items-center gap-3 cursor-pointer">
-                            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${round.isLocked ? 'bg-red-500' : 'bg-slate-200'}`} onClick={() => updateRoundFlags({ isLocked: !round.isLocked })}>
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${round.isLocked ? 'translate-x-6' : ''}`}></div>
-                            </div>
-                            <span className={`text-xs font-bold ${round.isLocked ? 'text-red-600' : 'text-slate-400'}`}>{round.isLocked ? 'VERROUILLÉ' : 'DÉVERROUILLÉ'}</span>
-                        </label>
+                        <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest" title="Tolérance de chevauchement entre gardes (en minutes)">Tolérance Chevauchement</h3>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="number" 
+                                min="0" 
+                                step="15"
+                                className="w-20 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                value={round?.maxOverlapMinutes || 0}
+                                onChange={(e) => updateRoundFlags({ maxOverlapMinutes: parseInt(e.target.value) || 0 })}
+                            />
+                            <span className="text-xs font-bold text-slate-400">min</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -772,8 +883,10 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                              <select 
                                 value={shiftGlobalSettings?.head_doctor_trigram || ''} 
                                 onChange={async (e) => {
-                                    await supabase.from('shift_global_settings').update({ head_doctor_trigram: e.target.value || null }).eq('id', 1);
+                                    const val = e.target.value || null;
+                                    await supabase.from('shift_global_settings').update({ head_doctor_trigram: val }).eq('id', 1);
                                     refreshRounds();
+                                    logAction('MODIFICATION_TETE_LISTE', { type: 'MEDECIN', trigram: val || 'Aucun' });
                                 }} 
                                 className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm outline-none text-slate-900"
                              >
@@ -788,8 +901,10 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                              <select 
                                 value={shiftGlobalSettings?.head_substitute_trigram || ''} 
                                 onChange={async (e) => {
-                                    await supabase.from('shift_global_settings').update({ head_substitute_trigram: e.target.value || null }).eq('id', 1);
+                                    const val = e.target.value || null;
+                                    await supabase.from('shift_global_settings').update({ head_substitute_trigram: val }).eq('id', 1);
                                     refreshRounds();
+                                    logAction('MODIFICATION_TETE_LISTE', { type: 'REMPLACANT', trigram: val || 'Aucun' });
                                 }} 
                                 className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm outline-none text-slate-900"
                              >
@@ -1088,7 +1203,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   );
 };
 
-const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, headerConfigs, supabase, globalClosures, setGlobalClosures }: any) => {
+const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction }: any) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
@@ -1147,6 +1262,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
               const { error } = await supabase.from('choices').delete().eq('id', assignedChoice.id);
               if (!error) {
                   setChoices((prev: any[]) => prev.filter((c: any) => c.id !== assignedChoice.id));
+                  logAction('SUPPRESSION_GARDE', { user: assignedChoice.userTrigram, date: `${row}/${month+1}/${year}`, col: colId });
               } else {
                   alert("Erreur lors de la suppression");
               }
@@ -1175,6 +1291,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
           const { error } = await supabase.from('choices').update({ status: 'ASSIGNED' }).eq('id', pending.id);
           if (!error) {
               setChoices((prev: any[]) => prev.map((c: any) => c.id === pending.id ? { ...c, status: 'ASSIGNED' } : c));
+              logAction('VALIDATION_GARDE', { user: cleanTri, date: `${editingCell.row}/${editingCell.month+1}/${editingCell.year}`, col: editingCell.col });
           }
       } else {
           const newPayload = {
@@ -1199,6 +1316,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                   colLabel: data[0].col_label, colType: data[0].col_type, colTimeRange: data[0].col_time_range
               };
               setChoices((prev: any[]) => [...prev, newChoice]);
+              logAction('ASSIGNATION_MANUELLE', { user: cleanTri, date: `${editingCell.row}/${editingCell.month+1}/${editingCell.year}`, col: editingCell.col });
           } else {
               console.error(error);
               alert("Erreur lors de l'attribution");
@@ -1324,7 +1442,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 let bgColor = col.customColor || '#FFFFFF';
                                                 
                                                 const timeRange = parseTimeRange(col.timeRange);
-                                                const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14);
+                                                const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14 * 60);
                                                 const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                                 
                                                 if (isClosed) bgColor = '#fee2e2'; // red-100
@@ -1347,10 +1465,15 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                     <td 
                                                         key={col.id} 
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'}`} 
                                                         style={style}
                                                     >
-                                                        {isClosed && <div className="absolute inset-0 flex items-center justify-center"><div className="w-full h-[2px] bg-red-400 rotate-45 absolute"></div><div className="w-full h-[2px] bg-red-400 -rotate-45 absolute"></div></div>}
+                                                        {isClosed && (
+                                                            <svg className="absolute inset-0 w-full h-full text-red-400/60 pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100">
+                                                                <line x1="0" y1="0" x2="100" y2="100" stroke="currentColor" strokeWidth="4" />
+                                                                <line x1="100" y1="0" x2="0" y2="100" stroke="currentColor" strokeWidth="4" />
+                                                            </svg>
+                                                        )}
                                                         {!isClosed && assigned && <span className="text-[9px] font-black text-slate-900 block leading-tight drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
                                                     </td>
                                                 );
@@ -1368,12 +1491,35 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
   );
 };
 
-const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound }: any) => {
-    const [subTab, setSubTab] = useState<'journal' | 'data'>('journal');
+const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction }: any) => {
+    const [subTab, setSubTab] = useState<'journal' | 'data' | 'history'>('journal');
     const [showExportModal, setShowExportModal] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'REFUSED'>('ALL');
     const [isDragging, setIsDragging] = useState(false);
     const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'default', direction: 'asc' });
+    const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+    const [logs, setLogs] = useState<any[]>([]);
+    const [logFilter, setLogFilter] = useState<'ALL' | 'SYSTEM' | 'USERS' | 'GUARDS'>('ALL');
+
+    useEffect(() => {
+        if (subTab === 'history') {
+            const fetchLogs = async () => {
+                const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false });
+                if (data) setLogs(data);
+            };
+            fetchLogs();
+        }
+    }, [subTab, supabase]);
+
+    const filteredLogs = useMemo(() => {
+        if (logFilter === 'ALL') return logs;
+        return logs.filter(log => {
+            if (logFilter === 'SYSTEM') return ['VIDER_BASE', 'CHANGEMENT_TOUR_ACTIF', 'VERROUILLAGE_GLOBAL', 'VERROUILLAGE_TOUR', 'MODIFICATION_PERIODE', 'MODIFICATION_TETE_LISTE'].includes(log.action);
+            if (logFilter === 'USERS') return ['AJOUT_UTILISATEUR', 'MODIFICATION_UTILISATEUR', 'SUPPRESSION_UTILISATEUR'].includes(log.action);
+            if (logFilter === 'GUARDS') return ['SUPPRESSION_GARDE', 'VALIDATION_GARDE', 'ASSIGNATION_MANUELLE', 'SUPPRESSION_VOEU'].includes(log.action);
+            return true;
+        });
+    }, [logs, logFilter]);
     
     // Process File Logic (Shared between Input and Drag&Drop)
     const processFileImport = (file: File, importType: 'CLASSIC' | '4D' = 'CLASSIC') => {
@@ -1604,9 +1750,39 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     };
 
     const filteredChoices = useMemo(() => {
-        if (filterStatus === 'ALL') return choices;
-        return choices.filter((c:any) => c.status === filterStatus);
-    }, [choices, filterStatus]);
+        let data = choices;
+        if (filterStatus !== 'ALL') {
+            data = data.filter((c:any) => c.status === filterStatus);
+        }
+        
+        Object.entries(columnFilters).forEach(([key, value]) => {
+            if (!value) return;
+            const searchStr = value.toLowerCase();
+            data = data.filter((c:any) => {
+                if (key === 'userTrigram') return c.userTrigram?.toLowerCase().includes(searchStr);
+                if (key === 'date') {
+                    const dateStr = new Date(c.year, c.month, c.row).toLocaleDateString('fr-FR');
+                    return dateStr.includes(searchStr);
+                }
+                if (key === 'col') {
+                    const colLabel = c.colLabel || c.colType || String(c.col);
+                    return colLabel.toLowerCase().includes(searchStr);
+                }
+                if (key === 'category') {
+                    const catStr = c.category === 'normal' ? 'Normal' : c.category === 'bad_bonus' ? 'Malus' : 'Bonus';
+                    return catStr.toLowerCase().includes(searchStr);
+                }
+                if (key === 'groupIndex') return String(c.groupIndex).includes(searchStr);
+                if (key === 'status') {
+                    const statusStr = c.status === 'PENDING' ? 'En Attente' : c.status === 'ASSIGNED' ? 'Validé' : c.status === 'REFUSED' ? 'Refusé' : 'Refusé (Alt)';
+                    return statusStr.toLowerCase().includes(searchStr);
+                }
+                return true;
+            });
+        });
+        
+        return data;
+    }, [choices, filterStatus, columnFilters]);
 
     const sortedChoices = useMemo(() => {
         let data = [...filteredChoices];
@@ -1724,6 +1900,12 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     >
                         Données
                     </button>
+                    <button 
+                        onClick={() => setSubTab('history')}
+                        className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${subTab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                        Historique
+                    </button>
                 </div>
             </div>
 
@@ -1748,7 +1930,6 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                     </button>
                                 ))}
                              </div>
-                             <button onClick={onRequestHelp} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors text-slate-600">Aide SQL</button>
                         </div>
                         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
                             <div className="overflow-auto custom-scrollbar flex-1">
@@ -1774,6 +1955,15 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                 Statut <SortIcon colKey="status" />
                                             </th>
                                             <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest text-right">Action</th>
+                                        </tr>
+                                        <tr className="bg-white border-b">
+                                            <th className="px-2 py-1"><input type="text" placeholder="Filtrer..." className="w-full text-xs p-1 border rounded" value={columnFilters['userTrigram'] || ''} onChange={e => setColumnFilters({...columnFilters, userTrigram: e.target.value})} /></th>
+                                            <th className="px-2 py-1"><input type="text" placeholder="Filtrer..." className="w-full text-xs p-1 border rounded" value={columnFilters['date'] || ''} onChange={e => setColumnFilters({...columnFilters, date: e.target.value})} /></th>
+                                            <th className="px-2 py-1"><input type="text" placeholder="Filtrer..." className="w-full text-xs p-1 border rounded" value={columnFilters['col'] || ''} onChange={e => setColumnFilters({...columnFilters, col: e.target.value})} /></th>
+                                            <th className="px-2 py-1"><input type="text" placeholder="Filtrer..." className="w-full text-xs p-1 border rounded" value={columnFilters['category'] || ''} onChange={e => setColumnFilters({...columnFilters, category: e.target.value})} /></th>
+                                            <th className="px-2 py-1"><input type="text" placeholder="Filtrer..." className="w-full text-xs p-1 border rounded" value={columnFilters['groupIndex'] || ''} onChange={e => setColumnFilters({...columnFilters, groupIndex: e.target.value})} /></th>
+                                            <th className="px-2 py-1"><input type="text" placeholder="Filtrer..." className="w-full text-xs p-1 border rounded" value={columnFilters['status'] || ''} onChange={e => setColumnFilters({...columnFilters, status: e.target.value})} /></th>
+                                            <th className="px-2 py-1"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -1822,14 +2012,104 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                     <td className="p-4 text-right">
                                                         <button 
                                                             onClick={async () => {
-                                                                if(!window.confirm("Supprimer ce vœu ?")) return;
+                                                                if(!window.confirm(c.status === 'ASSIGNED' ? "Supprimer cette garde attribuée ?" : "Supprimer ce vœu ?")) return;
                                                                 await supabase.from('choices').delete().eq('id', c.id);
                                                                 setChoices((prev: any[]) => prev.filter((x: any) => x.id !== c.id));
+                                                                if (c.status === 'ASSIGNED') {
+                                                                    logAction('SUPPRESSION_GARDE', { user: c.userTrigram, date: `${c.row}/${c.month+1}/${c.year}`, col: c.col });
+                                                                } else {
+                                                                    logAction('SUPPRESSION_VOEU', { user: c.userTrigram, date: `${c.row}/${c.month+1}/${c.year}`, col: c.col });
+                                                                }
                                                             }}
                                                             className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                                         >
                                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                                                         </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {subTab === 'history' && (
+                    <div className="h-full flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <div className="flex gap-2 p-1 bg-slate-100 rounded-xl overflow-x-auto no-scrollbar">
+                                {[
+                                    { id: 'ALL', label: 'Tout' },
+                                    { id: 'SYSTEM', label: 'Système' },
+                                    { id: 'USERS', label: 'Utilisateurs' },
+                                    { id: 'GUARDS', label: 'Gardes & Vœux' }
+                                ].map(f => (
+                                    <button 
+                                        key={f.id} 
+                                        onClick={() => setLogFilter(f.id as any)} 
+                                        className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${logFilter === f.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
+                            <div className="overflow-auto custom-scrollbar flex-1">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50 border-b sticky top-0 z-10">
+                                        <tr>
+                                            <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest">Date</th>
+                                            <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest">Utilisateur</th>
+                                            <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest">Action</th>
+                                            <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest">Détails</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredLogs.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="p-8 text-center text-slate-400 font-medium">Aucun historique disponible.</td>
+                                            </tr>
+                                        ) : (
+                                            filteredLogs.map((log) => (
+                                                <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="p-4 whitespace-nowrap text-slate-500">{new Date(log.created_at).toLocaleString('fr-FR')}</td>
+                                                    <td className="p-4 font-bold text-slate-700">{log.user_trigram || 'Système'}</td>
+                                                    <td className="p-4">
+                                                        {(() => {
+                                                            switch (log.action) {
+                                                                case 'VIDER_BASE': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-[10px] font-black uppercase">Vider Base</span>;
+                                                                case 'CHANGEMENT_TOUR_ACTIF': return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-[10px] font-black uppercase">Changement Tour Actif</span>;
+                                                                case 'VERROUILLAGE_GLOBAL': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-[10px] font-black uppercase">Verrouillage Global</span>;
+                                                                case 'VERROUILLAGE_TOUR': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-[10px] font-black uppercase">Verrouillage Tour</span>;
+                                                                case 'MODIFICATION_PERIODE': return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-[10px] font-black uppercase">Période</span>;
+                                                                case 'MODIFICATION_TETE_LISTE': return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-[10px] font-black uppercase">Tête de Liste</span>;
+                                                                case 'AJOUT_UTILISATEUR': return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-[10px] font-black uppercase">Ajout Utilisateur</span>;
+                                                                case 'MODIFICATION_UTILISATEUR': return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-[10px] font-black uppercase">Modif Utilisateur</span>;
+                                                                case 'SUPPRESSION_UTILISATEUR': return <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-md text-[10px] font-black uppercase">Suppr Utilisateur</span>;
+                                                                case 'SUPPRESSION_GARDE': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-[10px] font-black uppercase">Suppr Garde</span>;
+                                                                case 'VALIDATION_GARDE': return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md text-[10px] font-black uppercase">Validation Garde</span>;
+                                                                case 'ASSIGNATION_MANUELLE': return <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-md text-[10px] font-black uppercase">Assignation Manuelle</span>;
+                                                                case 'SUPPRESSION_VOEU': return <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-md text-[10px] font-black uppercase">Suppr Vœu</span>;
+                                                                default: return <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md text-[10px] font-black uppercase">{log.action}</span>;
+                                                            }
+                                                        })()}
+                                                    </td>
+                                                    <td className="p-4">
+                                                        {log.details ? (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {Object.entries(log.details).map(([k, v]) => (
+                                                                    <div key={k} className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
+                                                                        <span className="text-[9px] font-black uppercase text-slate-400">{k}:</span>
+                                                                        <span className="text-xs font-bold text-slate-700">{String(v)}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 italic text-xs">Aucun détail</span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))
