@@ -263,8 +263,11 @@ const App: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [showUnavailabilityModal, setShowUnavailabilityModal] = useState(false);
+  const [showReproductionModal, setShowReproductionModal] = useState(false);
+  const [reproductionStep, setReproductionStep] = useState<AppStep | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
   const [isConsultationMode, setIsConsultationMode] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
 
   useEffect(() => {
     const checkOrientation = () => setIsPortrait(window.innerHeight > window.innerWidth);
@@ -626,6 +629,68 @@ const App: React.FC = () => {
     } else {
       setLoginError('Identifiants invalides.');
     }
+  };
+
+  const handleReproduceChoices = () => {
+    if (!reproductionStep) return;
+    
+    const sourceCategory = reproductionStep === AppStep.NORMAL_SELECTION ? 'normal' : 
+                           reproductionStep === AppStep.GOOD_BONUS_SELECTION ? 'good_bonus' : 'bad_bonus';
+    
+    const targetCategory = currentStep === AppStep.NORMAL_SELECTION ? 'normal' : 
+                           currentStep === AppStep.GOOD_BONUS_SELECTION ? 'good_bonus' : 'bad_bonus';
+
+    const sourceChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.category === sourceCategory && c.status === 'PENDING');
+    
+    const currentCategoryChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.category === targetCategory && c.status === 'PENDING');
+    let maxGroupIndex = currentCategoryChoices.length > 0 ? Math.max(...currentCategoryChoices.map(c => c.groupIndex)) : 0;
+
+    const newChoices: Choice[] = [];
+    
+    const groupedSourceChoices = sourceChoices.reduce((acc, choice) => {
+        if (!acc[choice.groupIndex]) acc[choice.groupIndex] = [];
+        acc[choice.groupIndex].push(choice);
+        return acc;
+    }, {} as Record<number, Choice[]>);
+
+    const sortedGroupIndices = Object.keys(groupedSourceChoices).map(Number).sort((a, b) => a - b);
+    
+    for (const groupIndex of sortedGroupIndices) {
+        const group = groupedSourceChoices[groupIndex].sort((a, b) => a.subRank - b.subRank);
+        let hasAddedToGroup = false;
+        let currentSubRank = 1;
+        
+        for (const choice of group) {
+            if (isColOpen(choice.col, currentStep, choice.row, choice.month, choice.year)) {
+                const alreadyExists = currentCategoryChoices.some(c => c.row === choice.row && c.col === choice.col && c.month === choice.month && c.year === choice.year);
+                if (!alreadyExists) {
+                    if (!hasAddedToGroup) {
+                        maxGroupIndex++;
+                        hasAddedToGroup = true;
+                    }
+                    newChoices.push({
+                        ...choice,
+                        id: crypto.randomUUID(),
+                        category: targetCategory,
+                        groupIndex: maxGroupIndex,
+                        subRank: currentSubRank,
+                        submittedAt: new Date().toISOString()
+                    });
+                    currentSubRank++;
+                }
+            }
+        }
+    }
+
+    if (newChoices.length > 0) {
+        setChoices(prev => [...prev, ...newChoices]);
+        alert(`${newChoices.length} choix ont été reproduits avec succès.`);
+    } else {
+        alert("Aucun choix compatible n'a pu être reproduit.");
+    }
+    
+    setShowReproductionModal(false);
+    setReproductionStep(null);
   };
 
   const isColOpen = useCallback((colId: number, step: AppStep, day: number, month: number, year: number) => {
@@ -1027,6 +1092,55 @@ const App: React.FC = () => {
           />
       )}
 
+      {showReproductionModal && (
+        <div className="fixed inset-0 z-[300] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border">
+                <div className="p-6 border-b bg-slate-50">
+                    <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">Reproduire mes choix</h2>
+                    <p className="text-sm text-slate-500 font-medium mt-1">Sélectionnez l'étape dont vous souhaitez reproduire les choix.</p>
+                </div>
+                <div className="p-6 space-y-4">
+                    {currentStep > AppStep.NORMAL_SELECTION && (
+                        <button 
+                            onClick={() => setReproductionStep(AppStep.NORMAL_SELECTION)}
+                            className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${reproductionStep === AppStep.NORMAL_SELECTION ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}
+                        >
+                            <div className="font-black text-slate-900 uppercase">Étape 1</div>
+                            <div className="text-xs text-slate-500 font-medium">Garde cible</div>
+                        </button>
+                    )}
+                    {currentStep > AppStep.GOOD_BONUS_SELECTION && (
+                        <button 
+                            onClick={() => setReproductionStep(AppStep.GOOD_BONUS_SELECTION)}
+                            className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${reproductionStep === AppStep.GOOD_BONUS_SELECTION ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300'}`}
+                        >
+                            <div className="font-black text-slate-900 uppercase">Étape 2</div>
+                            <div className="text-xs text-slate-500 font-medium">Bonne garde</div>
+                        </button>
+                    )}
+                </div>
+                <div className="p-6 border-t bg-slate-50 flex justify-end gap-3">
+                    <button 
+                        onClick={() => {
+                            setShowReproductionModal(false);
+                            setReproductionStep(null);
+                        }}
+                        className="px-6 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-200 transition-colors"
+                    >
+                        Annuler
+                    </button>
+                    <button 
+                        onClick={handleReproduceChoices}
+                        disabled={!reproductionStep}
+                        className="px-6 py-2.5 rounded-xl font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md"
+                    >
+                        Valider
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {!isConsultationMode && <RoundInfo round={activeRound} stepInstruction={currentStepInstruction} />}
       
       <header className="bg-white border-b px-4 h-[72px] flex items-center justify-between z-30 shrink-0 shadow-sm overflow-x-auto">
@@ -1104,18 +1218,25 @@ const App: React.FC = () => {
                 </div>
             </div>
             
-            <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border shadow-sm w-full md:w-auto justify-center">
-                <div className={`w-2 h-2 rounded-full animate-pulse`} style={{ backgroundColor: getChoiceColor(category) }}></div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
-                    Mode : {category === 'normal' ? 'Garde Cible' : category === 'good_bonus' ? 'Bonne Garde' : 'Garde Normale'}
-                </span>
+            <div className="flex items-center gap-4">
+                {activeRound?.allow_choice_reproduction && currentStep > AppStep.NORMAL_SELECTION && (
+                    <button onClick={() => setShowReproductionModal(true)} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-[10px] font-black uppercase hover:bg-purple-200 shadow-sm transition-all whitespace-nowrap">
+                        Reproduire mes choix
+                    </button>
+                )}
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border shadow-sm w-full md:w-auto justify-center">
+                    <div className={`w-2 h-2 rounded-full animate-pulse`} style={{ backgroundColor: getChoiceColor(category) }}></div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
+                        Mode : {category === 'normal' ? 'Étape 1' : category === 'good_bonus' ? 'Étape 2' : 'Étape 3 - Garde au choix'}
+                    </span>
+                </div>
             </div>
         </div>
       )}
 
       <div className="flex-1 overflow-hidden flex flex-col bg-slate-100">
         {currentStep === AppStep.RECAP_ORDERING ? (
-          <RecapView choices={choices.filter(c => c.userTrigram === trigram.toUpperCase())} columns={dynamicColumns} onReorder={setChoices} />
+          <RecapView choices={choices.filter(c => c.userTrigram === trigram.toUpperCase())} columns={dynamicColumns} onReorder={setChoices} activeRound={activeRound} />
         ) : (
           <div className="flex-1 overflow-auto custom-scrollbar p-4 space-y-12 pb-32">
             {monthsToDisplay.map(({ month, year, label }) => {
@@ -1147,9 +1268,9 @@ const App: React.FC = () => {
                   
                   <MonthCounters month={month} year={year} choices={choices} columns={dynamicColumns} userTrigram={trigram.toUpperCase()} />
 
-                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-x-auto">
+                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-auto max-h-[75vh] custom-scrollbar">
                      <table className="w-full border-separate border-spacing-0 table-fixed">
-                        <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} month={month} year={year} closedColumns={closedColumnsForStep} />
+                        <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} month={month} year={year} closedColumns={closedColumnsForStep} hoveredCell={hoveredCell} />
                         <tbody>
                           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                             const date = new Date(year, month, day);
@@ -1158,9 +1279,13 @@ const App: React.FC = () => {
                             const isHoliday = isPublicHoliday(date);
                             const isOffDay = isSunday || isHoliday;
                             const isWeekend = date.getDay() === 6 || isOffDay;
+                            
+                            const isHoveredRow = hoveredCell?.day === day && hoveredCell?.month === month && hoveredCell?.year === year;
+                            const rowHeaderBg = isHoveredRow ? 'bg-blue-100 text-blue-800' : (isWeekend ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900');
+                            
                             return (
                               <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isWeekend ? 'bg-red-50/30' : ''}`}>
-                                <td className={`sticky left-0 border-r border-b border-slate-200 text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${isWeekend ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
+                                <td className={`sticky left-0 border-r border-b border-slate-200 text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${rowHeaderBg}`}>
                                     <div className="flex items-center justify-center gap-1">
                                         <span className="text-[10px] md:text-[8px] font-normal opacity-70">{dayName}</span>
                                         <span className="text-[12px] md:text-[10px]">{day}</span>
@@ -1170,6 +1295,9 @@ const App: React.FC = () => {
                                   const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
                                   const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                                   const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                                  
+                                  const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
+                                  const isCrosshair = isHoveredRow || isHoveredCol;
                                   
                                   const open = isColOpen(col.id, currentStep, day, month, year) && !isClosed;
                                   const isBlocked = isBlockedByUnavailability(day, col.id, month, year);
@@ -1186,6 +1314,7 @@ const App: React.FC = () => {
                                   const isAssignedToOther = assignedList.length > 0 && !isAssignedToMe;
                                   
                                   let cellStyles = "border-r border-b border-slate-200 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
+                                  if (isCrosshair) cellStyles += "after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none ";
                                   let bgColor = '#FFFFFF';
                                   
                                   const timeRange = parseTimeRange(col.timeRange);
@@ -1255,6 +1384,8 @@ const App: React.FC = () => {
                                   return (
                                     <td 
                                       key={col.id} 
+                                      onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
+                                      onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
                                           if (isConsultationMode || assignedList.length > 0) return;
                                           const cellKey = `${day}-${col.id}`;
@@ -1288,9 +1419,28 @@ const App: React.FC = () => {
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
                                       {!isConsultationMode && assignedList.length === 0 && hasMultiplePending && (
                                         <div className="flex flex-col items-center justify-center leading-none w-full h-full relative">
-                                            <span className="absolute top-0.5 left-1 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[0].groupIndex}</span>
-                                            <span className="absolute bottom-0.5 right-1 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[1].groupIndex}</span>
-                                            {myPendingChoices.length > 2 && <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-[8px] font-black drop-shadow-md">{myPendingChoices[2].groupIndex}</span>}
+                                            <span className="absolute top-0.5 left-0.5 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                {myPendingChoices[0].groupIndex}
+                                                {myPendingChoices[0].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[0].subRank)}</span>}
+                                            </span>
+                                            
+                                            {myPendingChoices.length === 2 ? (
+                                                <span className="absolute bottom-0.5 right-0.5 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                    {myPendingChoices[1].groupIndex}
+                                                    {myPendingChoices[1].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[1].subRank)}</span>}
+                                                </span>
+                                            ) : (
+                                                <>
+                                                    <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                        {myPendingChoices[1].groupIndex}
+                                                        {myPendingChoices[1].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[1].subRank)}</span>}
+                                                    </span>
+                                                    <span className="absolute bottom-0.5 right-0.5 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                        {myPendingChoices[2].groupIndex}
+                                                        {myPendingChoices[2].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[2].subRank)}</span>}
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
                                       )}
                                       {!isConsultationMode && assignedList.length === 0 && !hasMultiplePending && myPending && (
@@ -1325,6 +1475,20 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {hoveredCell && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-sm text-white px-6 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-3 text-xs md:text-sm font-bold pointer-events-none border border-slate-700/50 animate-in fade-in slide-in-from-bottom-4">
+            <span className="text-blue-400 whitespace-nowrap">
+                {new Date(hoveredCell.year, hoveredCell.month, hoveredCell.day).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </span>
+            <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+            <span className="text-emerald-400 whitespace-nowrap">{hoveredCell.colType}</span>
+            <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+            <span className="text-orange-400 whitespace-nowrap">Col {hoveredCell.colId}</span>
+            <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+            <span className="whitespace-nowrap">{hoveredCell.colLabel}</span>
+        </div>
+      )}
     </div>
   );
 };

@@ -104,6 +104,7 @@ export interface Round {
   step_good_bonus_active: boolean;
   instructions_good_bonus: string;
   maxOverlapMinutes?: number;
+  allow_choice_reproduction: boolean;
 }
 
 export interface ColumnConfig {

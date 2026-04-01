@@ -9,9 +9,9 @@ interface Props {
 
 export const StepProgressBar: React.FC<Props> = ({ currentStep, round }) => {
   const steps = [
-    { id: AppStep.NORMAL_SELECTION, label: 'Gardes Cibles', color: 'bg-orange-500 shadow-orange-200', active: round?.step_normal_active ?? true },
-    { id: AppStep.GOOD_BONUS_SELECTION, label: 'Bonnes Gardes', color: 'bg-blue-600 shadow-blue-200', active: round?.step_good_bonus_active ?? true },
-    { id: AppStep.BAD_BONUS_SELECTION, label: 'Gardes Normales', color: 'bg-indigo-700 shadow-indigo-200', active: round?.step_bad_bonus_active ?? true },
+    { id: AppStep.NORMAL_SELECTION, label: 'Étape 1', color: 'bg-orange-500 shadow-orange-200', active: round?.step_normal_active ?? true },
+    { id: AppStep.GOOD_BONUS_SELECTION, label: 'Étape 2', color: 'bg-blue-600 shadow-blue-200', active: round?.step_good_bonus_active ?? true },
+    { id: AppStep.BAD_BONUS_SELECTION, label: 'Étape 3 - Garde au choix', color: 'bg-indigo-700 shadow-indigo-200', active: round?.step_bad_bonus_active ?? true },
     { id: AppStep.RECAP_ORDERING, label: 'Classement Final', color: 'bg-emerald-500 shadow-emerald-200', active: true },
   ].filter(s => s.active);
 

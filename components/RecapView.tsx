@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
-import { Choice, ColumnDefinition, ChoiceCategory } from '../types';
+import { Choice, ColumnDefinition, ChoiceCategory, Round } from '../types';
 
 interface Props {
   choices: Choice[];
   columns: ColumnDefinition[];
   onReorder: (newChoices: Choice[]) => void;
+  activeRound?: Round;
 }
 
 interface GroupedChoice {
@@ -29,7 +30,7 @@ const TrashIcon = () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
 );
 
-export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
+export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, activeRound }) => {
   // DnD State
   const [draggedItem, setDraggedItem] = useState<Choice | null>(null);
   const [draggedGroup, setDraggedGroup] = useState<{id: number, category: ChoiceCategory} | null>(null);
@@ -381,9 +382,9 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder }) => {
 
   return (
     <div className="flex flex-1 overflow-hidden bg-slate-100">
-      {renderGroupList(normalGroups, 'normal', 'Gardes Cibles', 'orange')}
-      {renderGroupList(goodBonusGroups, 'good_bonus', 'Bonnes Gardes', 'blue')}
-      {renderGroupList(badBonusGroups, 'bad_bonus', 'Gardes Normales', 'indigo')}
+      {(activeRound?.step_normal_active ?? true) && renderGroupList(normalGroups, 'normal', 'Étape 1', 'orange')}
+      {(activeRound?.step_good_bonus_active ?? true) && renderGroupList(goodBonusGroups, 'good_bonus', 'Étape 2', 'blue')}
+      {(activeRound?.step_bad_bonus_active ?? true) && renderGroupList(badBonusGroups, 'bad_bonus', 'Étape 3 - Garde au choix', 'indigo')}
     </div>
   );
 };

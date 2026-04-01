@@ -192,21 +192,28 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
         </div>
       )}
 
-      <aside className="hidden md:flex w-64 bg-slate-900 text-white flex-col shadow-2xl z-50 shrink-0 border-r border-slate-800">
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-lg shadow-inner">A</div>
-          <h2 className="text-xs font-black uppercase tracking-tighter">SOS 92</h2>
+      <aside className="hidden md:flex w-16 lg:w-48 bg-slate-900 text-white flex-col shadow-2xl z-50 shrink-0 border-r border-slate-800 transition-all duration-300">
+        <div className="p-4 lg:p-6 border-b border-slate-800 flex items-center justify-center lg:justify-start gap-3">
+          <div className="w-8 h-8 lg:w-10 lg:h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-sm lg:text-lg shadow-inner shrink-0">A</div>
+          <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
           {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }].map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
-              <span>{item.icon}</span> {item.label}
+            <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center lg:justify-start gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
+              <span className="text-lg lg:text-base">{item.icon}</span>
+              <span className="hidden lg:block">{item.label}</span>
             </button>
           ))}
         </nav>
-        <div className="p-4 border-t border-slate-800 space-y-3">
-            <button onClick={() => setShowDeleteModal(true)} disabled={isDeletingAll} className="w-full py-3 bg-slate-700 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all">⚠️ Vider la base</button>
-            <button onClick={onLogout} className="w-full py-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest">Déconnexion</button>
+        <div className="p-2 lg:p-4 border-t border-slate-800 space-y-3">
+            <button onClick={() => setShowDeleteModal(true)} disabled={isDeletingAll} className="w-full p-3 lg:py-3 bg-slate-700 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex justify-center lg:block" title="Vider la base">
+                <span className="lg:hidden">⚠️</span>
+                <span className="hidden lg:inline">⚠️ Vider la base</span>
+            </button>
+            <button onClick={onLogout} className="w-full p-3 lg:py-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center lg:block" title="Déconnexion">
+                <span className="lg:hidden">🚪</span>
+                <span className="hidden lg:inline">Déconnexion</span>
+            </button>
         </div>
       </aside>
 
@@ -506,6 +513,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         if (flags.isActiveSubstitutes !== undefined) payload.is_active_substitutes = flags.isActiveSubstitutes;
         if (flags.isLocked !== undefined) payload.is_locked = flags.isLocked;
         if (flags.maxOverlapMinutes !== undefined) payload.max_overlap_minutes = flags.maxOverlapMinutes;
+        if (flags.allow_choice_reproduction !== undefined) payload.allow_choice_reproduction = flags.allow_choice_reproduction;
         
         const { error } = await supabase.from('rounds').update(payload).eq('id', selectedRoundId);
         if (error) throw error;
@@ -837,7 +845,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
       <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
         {activeSubTab === 'general' && (
             <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-4 duration-300">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     {/* Access Controls */}
                     <div className="bg-white p-6 rounded-3xl border shadow-sm">
                         <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest">Accès Titulaires</h3>
@@ -870,6 +878,15 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                             />
                             <span className="text-xs font-bold text-slate-400">min</span>
                         </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl border shadow-sm">
+                        <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 tracking-widest" title="Permet aux médecins de reproduire leurs choix d'une étape précédente">Reproductibilité des choix</h3>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${round?.allow_choice_reproduction ? 'bg-emerald-500' : 'bg-slate-200'}`} onClick={() => updateRoundFlags({ allow_choice_reproduction: !round?.allow_choice_reproduction })}>
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${round?.allow_choice_reproduction ? 'translate-x-6' : ''}`}></div>
+                            </div>
+                            <span className={`text-xs font-bold ${round?.allow_choice_reproduction ? 'text-emerald-600' : 'text-slate-400'}`}>{round?.allow_choice_reproduction ? 'ACTIVÉ' : 'DÉSACTIVÉ'}</span>
+                        </label>
                     </div>
                 </div>
                 
@@ -1207,6 +1224,8 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
+  const [highlightedTrigram, setHighlightedTrigram] = useState<string | null>(null);
 
   const monthsToDisplay = useMemo(() => {
     const list = [];
@@ -1411,12 +1430,95 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
 
         {monthsToDisplay.map(({ month, year, label }) => {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            let totalOpenCells = 0;
+            let occupiedCells = 0;
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                for (const col of dynamicColumns) {
+                    const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
+                    const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
+                    const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                    
+                    if (!isClosed) {
+                        totalOpenCells++;
+                        const assigned = choices.find((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
+                        if (assigned) {
+                            occupiedCells++;
+                        }
+                    }
+                }
+            }
+
+            const freeCells = totalOpenCells - occupiedCells;
+            const fillPercentage = totalOpenCells > 0 ? Math.round((occupiedCells / totalOpenCells) * 100) : 0;
+
+            const activeUsersWithCounts = users.map((u: any) => {
+                const count = choices.filter((c: any) => c.userTrigram === u.trigram && c.status === 'ASSIGNED' && c.month === month && c.year === year).length;
+                return { trigram: u.trigram, count, role: u.role };
+            }).filter((u: any) => u.count > 0).sort((a: any, b: any) => a.trigram.localeCompare(b.trigram));
+
+            const doctorCounters = activeUsersWithCounts.filter((u: any) => u.role === 'DOCTOR');
+            const substituteCounters = activeUsersWithCounts.filter((u: any) => u.role === 'SUBSTITUTE');
+
             return (
                 <div key={`${year}-${month}`} className="space-y-4 mb-8">
-                    <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
-                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
+                        <div className="flex flex-wrap gap-2 text-xs font-bold uppercase tracking-widest">
+                            <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-2">
+                                <span>Occupées: {occupiedCells}</span>
+                            </div>
+                            <div className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100 flex items-center gap-2">
+                                <span>Libres: {freeCells}</span>
+                            </div>
+                            <div className="bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2">
+                                <span>Remplissage: {fillPercentage}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    {(doctorCounters.length > 0 || substituteCounters.length > 0) && (
+                        <div className="flex flex-col gap-3 p-4 bg-white rounded-2xl border shadow-sm">
+                            <div className="w-full text-[10px] font-black text-slate-400 uppercase tracking-widest">Compteurs de gardes acceptées</div>
+                            
+                            {doctorCounters.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Titulaires</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {doctorCounters.map((uc: any) => (
+                                            <div 
+                                                key={uc.trigram} 
+                                                onClick={() => setHighlightedTrigram(prev => prev === uc.trigram ? null : uc.trigram)}
+                                                className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 cursor-pointer transition-all ${highlightedTrigram === uc.trigram ? 'ring-2 ring-yellow-400 scale-105 shadow-md z-10 ' : ''} bg-blue-50 text-blue-700 border-blue-100`}>
+                                                <span>{uc.trigram}</span>
+                                                <span className="px-1.5 py-0.5 rounded-md text-white bg-blue-600">{uc.count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {substituteCounters.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="text-[9px] font-bold text-orange-600 uppercase tracking-widest">Remplaçants</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {substituteCounters.map((uc: any) => (
+                                            <div 
+                                                key={uc.trigram} 
+                                                onClick={() => setHighlightedTrigram(prev => prev === uc.trigram ? null : uc.trigram)}
+                                                className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 cursor-pointer transition-all ${highlightedTrigram === uc.trigram ? 'ring-2 ring-yellow-400 scale-105 shadow-md z-10 ' : ''} bg-orange-50 text-orange-700 border-orange-100`}>
+                                                <span>{uc.trigram}</span>
+                                                <span className="px-1.5 py-0.5 rounded-md text-white bg-orange-500">{uc.count}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-auto max-h-[75vh] custom-scrollbar">
                         <table className="w-full border-separate border-spacing-0 table-fixed">
-                            <MatrixHeader columns={dynamicColumns} isEditClosuresMode={isEditClosuresMode} onColumnClick={handleColumnClick} globalClosures={globalClosures} month={month} year={year} />
+                            <MatrixHeader columns={dynamicColumns} isEditClosuresMode={isEditClosuresMode} onColumnClick={handleColumnClick} globalClosures={globalClosures} month={month} year={year} hoveredCell={hoveredCell} />
                             <tbody>
                                 {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                                     const date = new Date(year, month, day);
@@ -1424,9 +1526,13 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                     const isSunday = date.getDay() === 0;
                                     const isHoliday = isPublicHoliday(date);
                                     const isOffDay = isSunday || isHoliday;
+                                    
+                                    const isHoveredRow = hoveredCell?.day === day && hoveredCell?.month === month && hoveredCell?.year === year;
+                                    const rowHeaderBg = isHoveredRow ? 'bg-blue-100 text-blue-800' : (isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900');
+                                    
                                     return (
                                         <tr key={day} className={`h-8 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
-                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-16 h-8 font-black ${isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900'}`}>
+                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-16 h-8 font-black ${rowHeaderBg}`}>
                                                 <div className="flex items-center justify-center gap-1">
                                                     <span className="text-[10px] font-normal opacity-70">{dayName}</span>
                                                     <span className="text-[10px]">{day}</span>
@@ -1436,6 +1542,9 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
                                                 const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                                                 const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                                                
+                                                const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
+                                                const isCrosshair = isHoveredRow || isHoveredCol;
                                                 
                                                 const assigned = choices.find((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
                                                 
@@ -1447,7 +1556,11 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 
                                                 if (isClosed) bgColor = '#fee2e2'; // red-100
                                                 else if (assigned) {
-                                                    bgColor = col.customColor || '#FFFFFF';
+                                                    if (highlightedTrigram && assigned.userTrigram === highlightedTrigram) {
+                                                        bgColor = '#fef08a'; // yellow-300
+                                                    } else {
+                                                        bgColor = col.customColor || '#FFFFFF';
+                                                    }
                                                 } else {
                                                     // Cellule libre - 70% d'opacité
                                                     bgColor = col.customColor ? `${col.customColor}B3` : '#FFFFFFB3';
@@ -1464,8 +1577,10 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 return (
                                                     <td 
                                                         key={col.id} 
+                                                        onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
+                                                        onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
@@ -1487,6 +1602,20 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                 </div>
             );
         })}
+
+        {hoveredCell && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-sm text-white px-6 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-3 text-xs md:text-sm font-bold pointer-events-none border border-slate-700/50 animate-in fade-in slide-in-from-bottom-4">
+                <span className="text-blue-400 whitespace-nowrap">
+                    {new Date(hoveredCell.year, hoveredCell.month, hoveredCell.day).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+                <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                <span className="text-emerald-400 whitespace-nowrap">{hoveredCell.colType}</span>
+                <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                <span className="text-orange-400 whitespace-nowrap">Col {hoveredCell.colId}</span>
+                <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                <span className="whitespace-nowrap">{hoveredCell.colLabel}</span>
+            </div>
+        )}
     </div>
   );
 };
@@ -1500,6 +1629,11 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
     const [logs, setLogs] = useState<any[]>([]);
     const [logFilter, setLogFilter] = useState<'ALL' | 'SYSTEM' | 'USERS' | 'GUARDS'>('ALL');
+    
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [importType, setImportType] = useState<'CLASSIC' | '4D'>('CLASSIC');
+    const [importTargetMonth, setImportTargetMonth] = useState<string>('ALL');
 
     useEffect(() => {
         if (subTab === 'history') {
@@ -1522,7 +1656,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     }, [logs, logFilter]);
     
     // Process File Logic (Shared between Input and Drag&Drop)
-    const processFileImport = (file: File, importType: 'CLASSIC' | '4D' = 'CLASSIC') => {
+    const processFileImport = (file: File, importType: 'CLASSIC' | '4D' = 'CLASSIC', targetMonthYear: string = 'ALL') => {
         if (!file) return;
 
         const reader = new FileReader();
@@ -1531,10 +1665,29 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             const lines = text.split('\n').filter(l => l.trim());
             
             // Skip header if present (assuming ID,Trigramme...)
-            const rows = lines.slice(1);
+            let rows = lines;
+            const firstLine = lines[0]?.toLowerCase() || '';
+            if (firstLine.includes('trigram') || firstLine.includes('id') || firstLine.includes('date') || firstLine.includes('med')) {
+                rows = lines.slice(1);
+            }
+            
             if (rows.length === 0) return;
 
-            if(!window.confirm(`Importer ${rows.length} lignes ? Cela écrasera les ID existants correspondants.`)) return;
+            let targetYear = -1;
+            let targetMonth = -1;
+            if (targetMonthYear !== 'ALL') {
+                const parts = targetMonthYear.split('-');
+                targetYear = Number(parts[0]);
+                targetMonth = Number(parts[1]);
+            }
+
+            let confirmMsg = `Importer ${rows.length} lignes ? Cela écrasera les ID existants correspondants.`;
+            if (targetMonthYear !== 'ALL') {
+                const monthName = new Date(targetYear, targetMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                confirmMsg = `Vous allez importer les gardes pour ${monthName}.\n\nATTENTION : Toutes les gardes actuellement validées (ASSIGNED) pour ce mois seront EFFACÉES et remplacées par le contenu de ce fichier.\n\nContinuer ?`;
+            }
+
+            if(!window.confirm(confirmMsg)) return;
 
             let upserts: any[] = [];
 
@@ -1545,6 +1698,11 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     const cols = matches.map(m => m.replace(/^"|"$/g, '').trim());
 
                     if (cols.length < 16) return null;
+                    
+                    const year = Number(cols[5]);
+                    const month = Number(cols[6]) - 1; // JS months are 0-indexed
+                    
+                    if (targetMonthYear !== 'ALL' && (year !== targetYear || month !== targetMonth)) return null;
 
                     return {
                         id: cols[0],
@@ -1552,8 +1710,8 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                         user_role: cols[2],
                         round_id: Number(cols[3]),
                         submitted_at: cols[4] ? new Date(cols[4]).toISOString() : new Date().toISOString(),
-                        year: Number(cols[5]),
-                        month: Number(cols[6]),
+                        year: year,
+                        month: month + 1, // DB stores 1-indexed month
                         row: Number(cols[7]),
                         col: Number(cols[8]),
                         col_label: cols[9],
@@ -1568,28 +1726,31 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             } else if (importType === '4D') {
                 upserts = rows.map(line => {
                     let cols = line.split('\t').map(c => c.trim());
-                    if (cols.length < 9) {
+                    if (cols.length < 8) {
                         cols = line.split(';').map(c => c.trim());
                     }
-                    if (cols.length < 9) {
+                    if (cols.length < 8) {
                         cols = line.split(',').map(c => c.trim());
                     }
                     
-                    if (cols.length < 9) return null;
+                    if (cols.length < 8) return null;
 
                     const trigram = cols[0];
-                    if (trigram === 'ZZZ' || trigram === 'YYY') return null;
+                    if (trigram === 'ZZZ' || trigram === 'YYY' || trigram === 'XXX') return null;
 
                     const dateParts = cols[1].split('/');
                     if (dateParts.length !== 3) return null;
                     const day = Number(dateParts[0]);
-                    const month = Number(dateParts[1]);
+                    const month = Number(dateParts[1]) - 1; // JS months are 0-indexed
                     const year = Number(dateParts[2]);
+                    
+                    if (targetMonthYear !== 'ALL' && (year !== targetYear || month !== targetMonth)) return null;
 
                     const colId = Number(cols[7]);
                     if (isNaN(colId)) return null;
 
-                    const id = `${trigram}_${activeRound?.id || 1}_${year}_${month}_${day}_${colId}`;
+                    // Generate a proper UUID for the choice
+                    const id = generateId();
 
                     return {
                         id: id,
@@ -1598,12 +1759,12 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                         round_id: activeRound?.id || 1,
                         submitted_at: new Date().toISOString(),
                         year: year,
-                        month: month,
+                        month: month + 1, // DB stores 1-indexed month
                         row: day,
                         col: colId,
-                        col_label: cols[8],
+                        col_label: cols[8] || '',
                         col_type: 'GUARD',
-                        col_time_range: `${cols[2]} - ${cols[4]}`,
+                        col_time_range: cols[2] && cols[4] ? `${cols[2]} - ${cols[4]}` : '',
                         category: 'normal',
                         group_index: 1,
                         sub_rank: 1,
@@ -1613,8 +1774,23 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             }
 
             if (upserts.length === 0) {
-                alert("Aucune donnée valide trouvée.");
+                alert(targetMonthYear !== 'ALL' ? "Aucune donnée valide trouvée pour le mois sélectionné." : "Aucune donnée valide trouvée.");
                 return;
+            }
+
+            // If a specific month is selected, delete existing ASSIGNED choices for that month
+            if (targetMonthYear !== 'ALL') {
+                const { error: deleteError } = await supabase.from('choices')
+                    .delete()
+                    .eq('status', 'ASSIGNED')
+                    .eq('year', targetYear)
+                    .eq('month', targetMonth + 1); // DB stores 1-indexed month
+                    
+                if (deleteError) {
+                    console.error("Erreur suppression:", deleteError);
+                    alert("Erreur lors de la suppression des anciennes gardes.");
+                    return;
+                }
             }
 
             const { error } = await supabase.from('choices').upsert(upserts);
@@ -1630,9 +1806,16 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     };
 
     // Import Handlers
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, importType: 'CLASSIC' | '4D' = 'CLASSIC') => {
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'CLASSIC' | '4D' = 'CLASSIC') => {
         const file = e.target.files?.[0];
-        if (file) processFileImport(file, importType);
+        if (file) {
+            setImportFile(file);
+            setImportType(type);
+            setImportTargetMonth('ALL');
+            setShowImportModal(true);
+        }
+        // Reset input value so the same file can be selected again
+        e.target.value = '';
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -1650,7 +1833,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         setIsDragging(false);
         const file = e.dataTransfer.files?.[0];
         if (file && file.name.endsWith('.csv')) {
-            processFileImport(file);
+            setImportFile(file);
+            setImportType('CLASSIC'); // Default to classic for drag and drop
+            setImportTargetMonth('ALL');
+            setShowImportModal(true);
         } else if (file) {
             alert("Veuillez déposer un fichier CSV valide.");
         }
@@ -1757,7 +1943,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         
         Object.entries(columnFilters).forEach(([key, value]) => {
             if (!value) return;
-            const searchStr = value.toLowerCase();
+            const searchStr = String(value).toLowerCase();
             data = data.filter((c:any) => {
                 if (key === 'userTrigram') return c.userTrigram?.toLowerCase().includes(searchStr);
                 if (key === 'date') {
@@ -2179,6 +2365,74 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     </div>
                 )}
             </div>
+            {showImportModal && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="p-8">
+                            <h3 className="text-2xl font-black text-slate-900 mb-2">Options d'importation</h3>
+                            <p className="text-slate-500 mb-6">Sélectionnez le mois pour lequel vous souhaitez importer les données. Les gardes validées du mois sélectionné seront remplacées.</p>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Mois cible</label>
+                                    <select 
+                                        value={importTargetMonth}
+                                        onChange={(e) => setImportTargetMonth(e.target.value)}
+                                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 font-medium text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                                    >
+                                        <option value="ALL">Tous les mois (Ajout / Mise à jour)</option>
+                                        {(() => {
+                                            const options = [];
+                                            if (activeRound) {
+                                                const startM = activeRound.monthStart ?? 0;
+                                                const startY = activeRound.yearStart ?? 2025;
+                                                for (let i = 0; i < (activeRound.numMonths || 1); i++) {
+                                                    let m = startM + i;
+                                                    let y = startY;
+                                                    if (m > 11) {
+                                                        m -= 12;
+                                                        y += 1;
+                                                    }
+                                                    const monthName = new Date(y, m, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                                                    options.push(
+                                                        <option key={`${y}-${m}`} value={`${y}-${m}`}>
+                                                            {monthName.charAt(0).toUpperCase() + monthName.slice(1)} (Remplacer)
+                                                        </option>
+                                                    );
+                                                }
+                                            }
+                                            return options;
+                                        })()}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                            <button 
+                                onClick={() => {
+                                    setShowImportModal(false);
+                                    setImportFile(null);
+                                }}
+                                className="flex-1 py-3 px-4 bg-white text-slate-700 font-bold rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors"
+                            >
+                                Annuler
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    if (importFile) {
+                                        processFileImport(importFile, importType, importTargetMonth);
+                                        setShowImportModal(false);
+                                        setImportFile(null);
+                                    }
+                                }}
+                                className="flex-1 py-3 px-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20"
+                            >
+                                Confirmer l'import
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

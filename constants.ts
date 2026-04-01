@@ -91,7 +91,8 @@ const generateDefaultRounds = (): Round[] => {
       instructions_bad_bonus: "",
       
       step_good_bonus_active: true,
-      instructions_good_bonus: ""
+      instructions_good_bonus: "",
+      allow_choice_reproduction: false
     });
   }
   return rounds;

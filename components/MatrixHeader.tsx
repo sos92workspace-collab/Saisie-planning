@@ -10,9 +10,10 @@ interface Props {
   month?: number;
   year?: number;
   closedColumns?: number[];
+  hoveredCell?: { day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null;
 }
 
-export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onColumnClick, globalClosures = [], month, year, closedColumns = [] }) => {
+export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onColumnClick, globalClosures = [], month, year, closedColumns = [], hoveredCell }) => {
   return (
     <thead className="sticky top-0 z-40 shadow-md bg-white">
       {/* Single Row: Date & Columns */}
@@ -24,13 +25,16 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
           const isColClosedGlobal = globalClosures.some(gc => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
           const isColClosedForStep = closedColumns.includes(col.id);
           const isColClosed = isColClosedGlobal || isColClosedForStep;
+          const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
           
           let bgClass = isEditClosuresMode ? 'hover:bg-red-100' : 'hover:bg-slate-50';
-          if (isColClosedGlobal) bgClass = isEditClosuresMode ? 'bg-red-100/50' : 'bg-slate-100';
+          if (isHoveredCol) bgClass = 'bg-blue-100';
+          else if (isColClosedGlobal) bgClass = isEditClosuresMode ? 'bg-red-100/50' : 'bg-slate-100';
           else if (isColClosedForStep) bgClass = 'bg-slate-100';
 
           let textClass = 'text-slate-800';
-          if (isColClosedGlobal) textClass = isEditClosuresMode ? 'text-red-600 line-through' : 'text-slate-400';
+          if (isHoveredCol) textClass = 'text-blue-800';
+          else if (isColClosedGlobal) textClass = isEditClosuresMode ? 'text-red-600 line-through' : 'text-slate-400';
           else if (isColClosedForStep) textClass = 'text-slate-400';
 
           return (
