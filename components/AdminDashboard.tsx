@@ -28,6 +28,7 @@ const generateId = () => {
 export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRounds, supabase, onLogout }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>(AdminTab.USERS);
   const [selectedRoundId, setSelectedRoundId] = useState<number>(1);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const logAction = useCallback(async (action: string, details: any) => {
     try {
@@ -192,27 +193,36 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
         </div>
       )}
 
-      <aside className="hidden md:flex w-16 lg:w-48 bg-slate-900 text-white flex-col shadow-2xl z-50 shrink-0 border-r border-slate-800 transition-all duration-300">
+      <aside className={`hidden md:flex ${isSidebarCollapsed ? 'w-16' : 'w-16 lg:w-48'} bg-slate-900 text-white flex-col shadow-2xl z-50 shrink-0 border-r border-slate-800 transition-all duration-300 relative`}>
+        <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-slate-800 border border-slate-700 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition-colors z-50 hidden lg:flex shadow-lg"
+            title={isSidebarCollapsed ? "Déplier le menu" : "Replier le menu"}
+        >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-300 ${isSidebarCollapsed ? 'rotate-180' : ''}`}>
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+        </button>
         <div className="p-4 lg:p-6 border-b border-slate-800 flex items-center justify-center lg:justify-start gap-3">
           <div className="w-8 h-8 lg:w-10 lg:h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-sm lg:text-lg shadow-inner shrink-0">A</div>
-          <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>
+          {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
           {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }].map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center lg:justify-start gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
+            <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
-              <span className="hidden lg:block">{item.label}</span>
+              {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
             </button>
           ))}
         </nav>
         <div className="p-2 lg:p-4 border-t border-slate-800 space-y-3">
-            <button onClick={() => setShowDeleteModal(true)} disabled={isDeletingAll} className="w-full p-3 lg:py-3 bg-slate-700 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex justify-center lg:block" title="Vider la base">
-                <span className="lg:hidden">⚠️</span>
-                <span className="hidden lg:inline">⚠️ Vider la base</span>
+            <button onClick={() => setShowDeleteModal(true)} disabled={isDeletingAll} className={`w-full p-3 lg:py-3 bg-slate-700 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:block'}`} title="Vider la base">
+                <span className={isSidebarCollapsed ? '' : 'lg:hidden'}>⚠️</span>
+                {!isSidebarCollapsed && <span className="hidden lg:inline">⚠️ Vider la base</span>}
             </button>
-            <button onClick={onLogout} className="w-full p-3 lg:py-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center lg:block" title="Déconnexion">
-                <span className="lg:hidden">🚪</span>
-                <span className="hidden lg:inline">Déconnexion</span>
+            <button onClick={onLogout} className={`w-full p-3 lg:py-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:block'}`} title="Déconnexion">
+                <span className={isSidebarCollapsed ? '' : 'lg:hidden'}>🚪</span>
+                {!isSidebarCollapsed && <span className="hidden lg:inline">Déconnexion</span>}
             </button>
         </div>
       </aside>
@@ -1516,7 +1526,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                             )}
                         </div>
                     )}
-                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-auto max-h-[75vh] custom-scrollbar">
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-auto flex-1 custom-scrollbar">
                         <table className="w-full border-separate border-spacing-0 table-fixed">
                             <MatrixHeader columns={dynamicColumns} isEditClosuresMode={isEditClosuresMode} onColumnClick={handleColumnClick} globalClosures={globalClosures} month={month} year={year} hoveredCell={hoveredCell} />
                             <tbody>
@@ -1531,11 +1541,11 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                     const rowHeaderBg = isHoveredRow ? 'bg-blue-100 text-blue-800' : (isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900');
                                     
                                     return (
-                                        <tr key={day} className={`h-8 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
-                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-16 h-8 font-black ${rowHeaderBg}`}>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <span className="text-[10px] font-normal opacity-70">{dayName}</span>
-                                                    <span className="text-[10px]">{day}</span>
+                                        <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-10 h-5 font-black ${rowHeaderBg}`}>
+                                                <div className="flex items-center justify-center gap-0.5">
+                                                    <span className="text-[7px] font-normal opacity-70">{dayName}</span>
+                                                    <span className="text-[7px]">{day}</span>
                                                 </div>
                                             </td>
                                             {dynamicColumns.map(col => {
@@ -1580,7 +1590,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[28px] w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[18px] w-[18px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
@@ -1589,7 +1599,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                                 <line x1="100" y1="0" x2="0" y2="100" stroke="currentColor" strokeWidth="4" />
                                                             </svg>
                                                         )}
-                                                        {!isClosed && assigned && <span className="text-[9px] font-black text-slate-900 block leading-tight drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
+                                                        {!isClosed && assigned && <span className="text-[6px] font-black text-slate-900 block leading-tight drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
                                                     </td>
                                                 );
                                             })}
