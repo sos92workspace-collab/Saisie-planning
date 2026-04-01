@@ -196,7 +196,9 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
                                           {item.subRank === 1 ? item.groupIndex : `${item.groupIndex}.${String.fromCharCode(95 + item.subRank)}`}
                                       </div>
                                       <div className="flex flex-col min-w-0">
-                                          <span className="font-bold text-slate-700 text-xs uppercase truncate">{colDef?.label || `Col ${item.col}`}</span>
+                                          <span className="font-bold text-slate-700 text-xs uppercase truncate">
+                                              C{item.col} {colDef?.label ? `- ${colDef.label}` : ''}
+                                          </span>
                                           <span className="text-[10px] text-slate-400 font-medium">
                                               {new Date(item.year, item.month, item.row).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
                                           </span>
