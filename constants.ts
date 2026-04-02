@@ -13,7 +13,6 @@ export const parseTimeRange = (range: string): { start: number, end: number } | 
   let start = startHour * 60 + startMin;
   let end = endHour * 60 + endMin;
   
-  if (end <= start) end += 24 * 60;
   return { start, end };
 };
 

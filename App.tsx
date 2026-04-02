@@ -51,12 +51,21 @@ const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0):
   const t2 = parseTimeRange(r2);
   if (!t1 || !t2) return false;
   
-  // Calculate overlap in minutes
-  const overlapStart = Math.max(t1.start, t2.start);
-  const overlapEnd = Math.min(t1.end, t2.end);
-  
-  if (overlapStart < overlapEnd) {
-      return (overlapEnd - overlapStart) > maxOverlapMinutes;
+  // Handle overnight shifts by splitting them into two ranges if they cross midnight
+  const ranges1 = t1.end <= t1.start ? [{start: t1.start, end: 24 * 60}, {start: 0, end: t1.end}] : [t1];
+  const ranges2 = t2.end <= t2.start ? [{start: t2.start, end: 24 * 60}, {start: 0, end: t2.end}] : [t2];
+
+  for (const rA of ranges1) {
+      for (const rB of ranges2) {
+          const overlapStart = Math.max(rA.start, rB.start);
+          const overlapEnd = Math.min(rA.end, rB.end);
+          
+          if (overlapStart < overlapEnd) {
+              if ((overlapEnd - overlapStart) > maxOverlapMinutes) {
+                  return true;
+              }
+          }
+      }
   }
   return false;
 };
