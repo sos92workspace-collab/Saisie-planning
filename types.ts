@@ -75,7 +75,8 @@ export interface UserProfile {
 export enum ViewMode {
   LOGIN = 'LOGIN',
   APP = 'APP',
-  ADMIN = 'ADMIN'
+  ADMIN = 'ADMIN',
+  LIST_INPUT = 'LIST_INPUT'
 }
 
 export enum AdminTab {
@@ -83,7 +84,8 @@ export enum AdminTab {
   CONFIG = 'PARAMÉTRAGE',
   SHIFTS = 'GARDES',
   PLANNING = 'PLANNING',
-  WISHES = 'CHOIX MÉDECIN'
+  WISHES = 'CHOIX MÉDECIN',
+  VERSIONS = 'VERSIONS'
 }
 
 export interface Round {

@@ -141,7 +141,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
     const maxGroup = groups.length > 0 ? Math.max(...groups.map(g => g.id)) : 0;
 
     return (
-        <div className="flex-1 flex flex-col min-w-[320px] bg-slate-50 border-r border-slate-200 overflow-hidden text-slate-900 last:border-r-0">
+        <div className="flex-1 flex flex-col w-full md:min-w-[320px] min-h-[400px] md:min-h-0 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden text-slate-900 last:border-r-0 last:border-b-0">
           <div className={`p-4 border-b-2 shadow-sm sticky top-0 bg-white z-30 ${themeColors.border} flex justify-between items-center`}>
             <h2 className={`text-[10px] font-black uppercase tracking-tight ${themeColors.text}`}>
               {title}
@@ -197,7 +197,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
                                       </div>
                                       <div className="flex flex-col min-w-0">
                                           <span className="font-bold text-slate-700 text-xs uppercase truncate">
-                                              C{item.col} {colDef?.label ? `- ${colDef.label}` : ''}
+                                              {colDef?.label ? `${colDef.label} - colonne ${item.col}` : `Colonne ${item.col}`}
                                           </span>
                                           <span className="text-[10px] text-slate-400 font-medium">
                                               {new Date(item.year, item.month, item.row).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
@@ -233,7 +233,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-slate-100">
+    <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden bg-slate-100">
       {(activeRound?.step_normal_active ?? true) && renderGroupList(normalGroups, 'normal', 'Étape 1', 'orange')}
       {(activeRound?.step_good_bonus_active ?? true) && renderGroupList(goodBonusGroups, 'good_bonus', 'Étape 2', 'blue')}
       {(activeRound?.step_bad_bonus_active ?? true) && renderGroupList(badBonusGroups, 'bad_bonus', 'Étape 3 - Garde au choix', 'indigo')}

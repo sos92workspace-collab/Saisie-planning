@@ -18,7 +18,7 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
     <thead className="sticky top-0 z-40 shadow-md bg-white">
       {/* Single Row: Date & Columns */}
       <tr className="bg-white text-slate-900 text-[9px] md:text-[7px] font-bold border-b border-slate-200 h-6">
-        <th className="sticky left-0 z-50 w-12 md:w-10 bg-white border-r border-slate-200 uppercase tracking-tighter shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-[9px] md:text-[7px] align-middle">
+        <th className="sticky left-0 z-50 w-20 md:w-16 bg-white border-r border-slate-200 uppercase tracking-tighter shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-[9px] md:text-[7px] align-middle">
             Date
         </th>
         {columns.map((col) => {
@@ -38,7 +38,7 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
           else if (isColClosedForStep) textClass = 'text-slate-400';
 
           return (
-          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-200 min-w-[30px] w-[30px] md:min-w-[18px] md:w-[18px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer' : ''} ${bgClass}`}>
+          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-200 min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer' : ''} ${bgClass}`}>
             <div className={`flex flex-col leading-none py-0.5 h-full justify-center ${isEditClosuresMode ? '' : 'cursor-help'}`}>
               <span className={`text-[7px] md:text-[5px] font-normal mb-0.5 ${isColClosedForStep ? 'text-slate-300' : 'text-slate-400'}`}>{col.id}</span>
               <span className={`font-black text-[8px] md:text-[6px] ${textClass}`}>{col.label}</span>

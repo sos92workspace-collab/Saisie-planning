@@ -109,14 +109,14 @@ export const UnavailabilityModal: React.FC<Props> = ({ isOpen, onClose, unavaila
                 
                 return (
                     <div key={`${monthInfo.year}-${monthInfo.month}`} className="mb-8 last:mb-0">
-                        <div className="flex items-center gap-4 mb-4 sticky top-0 bg-slate-50 z-10 py-2">
+                        <div className="flex items-center gap-4 mb-4 bg-slate-50 py-2">
                             <h3 className="text-lg font-black uppercase text-slate-800 tracking-widest px-4 py-2 bg-white rounded-lg shadow-sm border">{monthInfo.label}</h3>
                             <div className="h-px bg-slate-200 flex-1"></div>
                         </div>
 
-                        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="bg-slate-100 text-slate-500">
+                        <div className="bg-white border rounded-2xl shadow-sm">
+                            <table className="w-max min-w-full text-left border-collapse">
+                                <thead className="bg-slate-100 text-slate-500 sticky top-0 z-20 shadow-sm">
                                     <tr>
                                         <th className="p-3 text-[10px] font-black uppercase tracking-widest border-b border-r w-24 text-center">Date</th>
                                         <th className="p-3 text-[10px] font-black uppercase tracking-widest border-b border-r text-center w-32">Journée Entière</th>

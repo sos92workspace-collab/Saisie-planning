@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, GuardType, Site, UserRole, ColumnDefinition, ShiftDefinition, ShiftGlobalSettings } from '../types';
 import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from '../constants';
 import { MatrixHeader } from './MatrixHeader';
+import { VersionsPanel } from './VersionsPanel';
 
 interface Props {
   users: UserProfile[];
@@ -25,10 +26,38 @@ const generateId = () => {
   return Math.random().toString(36).substring(2, 11);
 };
 
+const generateAutoVersionName = async (supabase: any, activeRound: any) => {
+    const startM = activeRound?.monthStart ?? 0;
+    const startY = activeRound?.yearStart ?? 2025;
+    const numMonths = activeRound?.numMonths || 1;
+    
+    const months = [];
+    for (let i = 0; i < numMonths; i++) {
+        const d = new Date(startY, startM + i, 1);
+        months.push(d.toLocaleString('fr-FR', { month: 'long' }));
+    }
+    const monthsStr = months.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join('-');
+    const baseName = `${monthsStr} ${startY}`;
+
+    const { data: existingVersions } = await supabase.from('planning_versions').select('name').ilike('name', `${baseName} v%`);
+    let maxV = 0;
+    if (existingVersions && existingVersions.length > 0) {
+        existingVersions.forEach((v: any) => {
+            const match = v.name.match(/v(\d+)$/);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                if (num > maxV) maxV = num;
+            }
+        });
+    }
+    return `${baseName} v${maxV + 1}`;
+};
+
 export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRounds, supabase, onLogout }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>(AdminTab.USERS);
   const [selectedRoundId, setSelectedRoundId] = useState<number>(1);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const logAction = useCallback(async (action: string, details: any) => {
     try {
@@ -120,7 +149,37 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           await query;
           logAction('VIDER_BASE', { mode: 'PENDING', target: pendingTarget });
       } else {
-          // RESET MODE: Clear choices, unavailabilities
+          // RESET MODE: Automatically create a version first
+          const assignedChoices = allChoices.filter((c: any) => c.status === 'ASSIGNED');
+          if (assignedChoices.length > 0) {
+            const versionName = await generateAutoVersionName(supabase, activeRound);
+            
+            const { error: versionError } = await supabase.from('planning_versions').insert({
+              name: versionName,
+              data: assignedChoices
+            });
+            
+            if (versionError) {
+              if (versionError.message.includes('relation "planning_versions" does not exist')) {
+                alert("La table planning_versions n'existe pas. La version n'a pas pu être créée. Veuillez configurer la table dans l'onglet VERSIONS.");
+                const proceed = window.confirm("Continuer la réinitialisation SANS sauvegarde ?");
+                if (!proceed) {
+                  setIsDeletingAll(false);
+                  setShowDeleteModal(false);
+                  return;
+                }
+              } else {
+                console.error(versionError);
+                alert("Erreur lors de la création de la version automatique.");
+                setIsDeletingAll(false);
+                return;
+              }
+            } else {
+              logAction('CREATE_VERSION', { name: versionName, count: assignedChoices.length });
+            }
+          }
+
+          // Clear choices, unavailabilities
           await supabase.from('choices').delete().not('id', 'is', null);
           await supabase.from('unavailabilities').delete().not('id', 'is', null);
           logAction('VIDER_BASE', { mode: 'ALL' });
@@ -208,7 +267,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Versions', icon: '💾' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -227,11 +286,62 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50">
-        <header className="h-16 bg-white border-b px-8 flex items-center justify-between shrink-0">
-          <h1 className="text-xs font-black uppercase tracking-widest text-slate-400">{activeTab}</h1>
+      <main className="flex-1 flex flex-col overflow-hidden bg-slate-50 relative">
+        <header className="h-16 bg-white border-b px-4 md:px-8 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+            <h1 className="text-xs font-black uppercase tracking-widest text-slate-400">{activeTab}</h1>
+          </div>
           {isLoading && <div className="text-[9px] font-black text-blue-600 uppercase tracking-widest animate-pulse">Chargement...</div>}
         </header>
+
+        {/* Mobile Menu Overlay */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-[200] bg-slate-900/80 backdrop-blur-sm md:hidden flex">
+            <div className="w-64 bg-slate-900 h-full flex flex-col shadow-2xl animate-in slide-in-from-left duration-300">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-600 rounded-xl flex items-center justify-center font-black text-sm shadow-inner text-white shrink-0">A</div>
+                  <h2 className="text-xs font-black uppercase tracking-tighter text-white">SOS 92</h2>
+                </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+              </div>
+              <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Versions', icon: '💾' }].map(item => (
+                  <button 
+                    key={item.id} 
+                    onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
+                    className={`w-full flex items-center justify-start gap-3 p-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </nav>
+              <div className="p-4 border-t border-slate-800 space-y-3">
+                  <button onClick={() => { setShowDeleteModal(true); setIsMobileMenuOpen(false); }} disabled={isDeletingAll} className="w-full p-3 bg-slate-700 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex justify-center items-center gap-2">
+                      <span>⚠️ Vider la base</span>
+                  </button>
+                  <button onClick={onLogout} className="w-full p-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center items-center gap-2">
+                      <span>🚪 Déconnexion</span>
+                  </button>
+              </div>
+            </div>
+            <div className="flex-1" onClick={() => setIsMobileMenuOpen(false)}></div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-hidden">
           {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} logAction={logAction} />}
           {activeTab === AdminTab.CONFIG && (
@@ -265,6 +375,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           )}
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} />}
+          {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
         </div>
       </main>
     </div>
@@ -1117,7 +1228,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
 
                 <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-max min-w-full text-left border-collapse">
                             <thead className="bg-slate-900 text-white sticky top-0 z-10">
                                 <tr>
                                     <th className="p-4 border-b border-slate-800 w-10">
@@ -1366,6 +1477,37 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
       }
   };
 
+  const handleCreateVersion = async () => {
+    const assignedChoices = choices.filter((c: any) => c.status === 'ASSIGNED');
+    if (assignedChoices.length === 0) {
+      alert("Aucune garde n'est actuellement attribuée.");
+      return;
+    }
+
+    try {
+      const versionName = await generateAutoVersionName(supabase, activeRound);
+      
+      const { error } = await supabase.from('planning_versions').insert({
+        name: versionName,
+        data: assignedChoices
+      });
+      if (error) {
+        if (error.message.includes('relation "planning_versions" does not exist')) {
+          alert("La table planning_versions n'existe pas. Veuillez aller dans l'onglet VERSIONS pour voir la configuration requise.");
+        } else {
+          console.error(error);
+          alert("Erreur lors de la création de la version.");
+        }
+      } else {
+        logAction('CREATE_VERSION', { name: versionName, count: assignedChoices.length });
+        alert(`Version "${versionName}" créée avec succès (${assignedChoices.length} gardes).`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de la création de la version.");
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto custom-scrollbar p-8 pb-32 relative">
         <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-3xl border shadow-sm">
@@ -1373,12 +1515,20 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                 <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Planning Global</h2>
                 <p className="text-xs font-bold text-slate-400 mt-1">Gérez les attributions ou fermez des cases pour tous les tours.</p>
             </div>
-            <button 
-                onClick={() => setIsEditClosuresMode(!isEditClosuresMode)}
-                className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${isEditClosuresMode ? 'bg-red-600 text-white shadow-red-200 hover:bg-red-700' : 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800'}`}
-            >
-                {isEditClosuresMode ? 'Terminer la fermeture' : 'Fermer des cases'}
-            </button>
+            <div className="flex gap-3">
+                <button 
+                    onClick={handleCreateVersion}
+                    className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"
+                >
+                    Créer une version
+                </button>
+                <button 
+                    onClick={() => setIsEditClosuresMode(!isEditClosuresMode)}
+                    className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${isEditClosuresMode ? 'bg-red-600 text-white shadow-red-200 hover:bg-red-700' : 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800'}`}
+                >
+                    {isEditClosuresMode ? 'Terminer la fermeture' : 'Fermer des cases'}
+                </button>
+            </div>
         </div>
 
         {/* Assignment Modal */}
@@ -1526,8 +1676,8 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                             )}
                         </div>
                     )}
-                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-auto flex-1 custom-scrollbar">
-                        <table className="w-full border-separate border-spacing-0 table-fixed">
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-200">
+                        <table className="w-max min-w-full border-separate border-spacing-0 table-fixed">
                             <MatrixHeader columns={dynamicColumns} isEditClosuresMode={isEditClosuresMode} onColumnClick={handleColumnClick} globalClosures={globalClosures} month={month} year={year} hoveredCell={hoveredCell} />
                             <tbody>
                                 {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
@@ -1542,7 +1692,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                     
                                     return (
                                         <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
-                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-10 h-5 font-black ${rowHeaderBg}`}>
+                                            <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-5 font-black ${rowHeaderBg}`}>
                                                 <div className="flex items-center justify-center gap-0.5">
                                                     <span className="text-[7px] font-normal opacity-70">{dayName}</span>
                                                     <span className="text-[7px]">{day}</span>
@@ -1590,7 +1740,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[18px] w-[18px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
@@ -2129,7 +2279,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                         </div>
                         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
                             <div className="overflow-auto custom-scrollbar flex-1">
-                                <table className="w-full text-left text-sm">
+                                <table className="w-max min-w-full text-left text-sm">
                                     <thead className="bg-slate-50 border-b sticky top-0 z-10">
                                         <tr>
                                             <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('userTrigram')}>
@@ -2254,7 +2404,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                         </div>
                         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
                             <div className="overflow-auto custom-scrollbar flex-1">
-                                <table className="w-full text-left text-sm">
+                                <table className="w-max min-w-full text-left text-sm">
                                     <thead className="bg-slate-50 border-b sticky top-0 z-10">
                                         <tr>
                                             <th className="p-4 font-black uppercase text-[10px] text-slate-400 tracking-widest">Date</th>

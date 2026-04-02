@@ -9,6 +9,7 @@ import { RecapView } from './components/RecapView';
 import { RoundInfo } from './components/RoundInfo';
 import { AdminDashboard } from './components/AdminDashboard';
 import { UnavailabilityModal } from './components/UnavailabilityModal';
+import { ListView } from './components/ListView';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -214,13 +215,26 @@ const exportToICS = (month: number, year: number, choices: Choice[], columns: an
 
     icsContent += "END:VCALENDAR\r\n";
 
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `gardes_${year}_${(month + 1).toString().padStart(2, '0')}.ics`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const filename = `gardes_${year}_${(month + 1).toString().padStart(2, '0')}.ics`;
+    
+    // Détection iOS et navigateur spécifique
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+
+    if (isIOS && isSafari) {
+        // Safari iOS : l'URI de données fonctionne parfaitement pour forcer l'ouverture du Calendrier
+        window.location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icsContent);
+    } else {
+        // Chrome/Firefox sur iOS, Android, et PC : on force le téléchargement du fichier.
+        // Sur Chrome iOS, cela va télécharger le fichier et proposer "Ouvrir dans..." en bas de l'écran.
+        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 };
 
 // --- COMPONENT: Landscape Lock Screen ---
@@ -615,8 +629,8 @@ const App: React.FC = () => {
     })));
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e: React.FormEvent | null, targetMode: ViewMode = ViewMode.APP) => {
+    if (e) e.preventDefault();
     const cleanTri = trigram.trim().toUpperCase();
     if (cleanTri === 'ADM' && password === 'admin') {
       setViewMode(ViewMode.ADMIN);
@@ -625,7 +639,7 @@ const App: React.FC = () => {
     const { data: user } = await supabase.from('users').select('*').eq('trigram', cleanTri).single();
     if (user && (!user.password || user.password === password)) {
       await fetchChoices(cleanTri);
-      setViewMode(ViewMode.APP);
+      setViewMode(targetMode);
     } else {
       setLoginError('Identifiants invalides.');
     }
@@ -701,7 +715,7 @@ const App: React.FC = () => {
     const type: 'w' | 's' | 'd' = (dayOfWeek === 0) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
     
     // Safety check: In APP mode, if user or settings are not loaded yet, default to closed to prevent flashing open
-    if (viewMode === ViewMode.APP && (!currentUser || !shiftGlobalSettings)) return false;
+    if ((viewMode === ViewMode.APP || viewMode === ViewMode.LIST_INPUT) && (!currentUser || !shiftGlobalSettings)) return false;
 
     if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
         const isDoctor = currentUser.role === 'DOCTOR';
@@ -757,7 +771,7 @@ const App: React.FC = () => {
 
   // --- EFFECT: Auto-select lowest available priority when step/category changes ---
   useEffect(() => {
-      if (viewMode !== ViewMode.APP) return;
+      if (viewMode !== ViewMode.APP && viewMode !== ViewMode.LIST_INPUT) return;
       
       // Calculate used priorities for current user and category
       const userChoices = choices.filter(c => 
@@ -784,7 +798,7 @@ const App: React.FC = () => {
 
   // --- EFFECT: Auto-select lowest available priority when a choice is removed ---
   useEffect(() => {
-      if (viewMode !== ViewMode.APP) return;
+      if (viewMode !== ViewMode.APP && viewMode !== ViewMode.LIST_INPUT) return;
       
       const userChoices = choices.filter(c => 
           c.userTrigram === trigram.toUpperCase() && 
@@ -806,7 +820,7 @@ const App: React.FC = () => {
       prevCategoryRef.current = category;
   }, [choices, category, trigram, viewMode]);
 
-  const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false) => {
+  const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false, explicitPriority?: number) => {
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
 
     const cleanTri = trigram.trim().toUpperCase();
@@ -883,16 +897,16 @@ const App: React.FC = () => {
         return; // Cell is blocked by user's unavailability
     }
 
-    let targetGroupIndex = activePriority;
+    let targetGroupIndex = explicitPriority !== undefined ? explicitPriority : activePriority;
     let nextSubRank = 1;
 
-    if (isDoubleClick) {
+    if (isDoubleClick && explicitPriority === undefined) {
         const userPendingChoices = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category);
         const maxGroupIndex = userPendingChoices.length > 0 ? Math.max(...userPendingChoices.map(c => c.groupIndex)) : 0;
         targetGroupIndex = maxGroupIndex + 1;
         setActivePriority(targetGroupIndex);
     } else {
-        const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === activePriority);
+        const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === targetGroupIndex);
         if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
         if (nextSubRank > 27) { alert("Limite atteinte : Max 26 alternatives."); return; }
     }
@@ -1043,14 +1057,17 @@ const App: React.FC = () => {
   if (viewMode === ViewMode.LOGIN) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 text-slate-900">
-        <form onSubmit={handleLogin} className="bg-white p-12 rounded-[60px] shadow-2xl w-full max-w-sm space-y-8 border-t-[12px] border-slate-900">
+        <form onSubmit={(e) => handleLogin(e, ViewMode.APP)} className="bg-white p-12 rounded-[60px] shadow-2xl w-full max-w-sm space-y-8 border-t-[12px] border-slate-900">
           <div className="text-center"><h1 className="text-4xl font-black tracking-tighter uppercase mb-2">SOS 92</h1></div>
           {loginError && <div className="p-3 bg-red-50 text-red-500 rounded-2xl text-[10px] font-bold text-center uppercase">{loginError}</div>}
           <div className="space-y-4">
             <input type="text" placeholder="Trigramme" value={trigram} onChange={e => setTrigram(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black uppercase text-center text-2xl outline-none" maxLength={3} />
             <input type="password" placeholder="Code secret" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black text-center text-2xl outline-none" />
           </div>
-          <button type="submit" className="w-full bg-slate-900 text-white p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Connexion</button>
+          <div className="flex flex-col gap-3">
+            <button type="button" onClick={(e) => handleLogin(e, ViewMode.APP)} className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm">Saisie via Planning</button>
+            <button type="button" onClick={(e) => handleLogin(e, ViewMode.LIST_INPUT)} className="w-full bg-blue-600 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all text-sm">Saisie via Liste</button>
+          </div>
         </form>
       </div>
     );
@@ -1064,7 +1081,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden font-sans text-slate-900 relative">
-      {isPortrait && <LandscapeLockScreen />}
       {isDataSyncing && <div className="absolute top-0 left-0 w-full h-1 bg-blue-600 z-[100] animate-pulse"></div>}
       
       {!accessStatus.allowed && !isConsultationMode && (
@@ -1161,13 +1177,24 @@ const App: React.FC = () => {
         <div className="flex items-center gap-4">
             {currentUser?.role === 'DOCTOR' && (
                 <div className="flex items-center gap-2">
-                    <button 
-                        onClick={() => setIsConsultationMode(!isConsultationMode)}
-                        className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
-                    >
-                        <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
-                        <span className="md:hidden">Planning</span>
-                    </button>
+                    {!isConsultationMode && (
+                        <button 
+                            onClick={() => setViewMode(viewMode === ViewMode.APP ? ViewMode.LIST_INPUT : ViewMode.APP)}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all shadow-sm whitespace-nowrap"
+                        >
+                            <span className="hidden md:inline">{viewMode === ViewMode.APP ? 'Saisie via Liste' : 'Saisie via Planning'}</span>
+                            <span className="md:hidden">{viewMode === ViewMode.APP ? 'Liste' : 'Planning'}</span>
+                        </button>
+                    )}
+                    {(viewMode === ViewMode.APP || isConsultationMode) && (
+                        <button 
+                            onClick={() => setIsConsultationMode(!isConsultationMode)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
+                        >
+                            <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
+                            <span className="md:hidden">Planning</span>
+                        </button>
+                    )}
 
                     {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && (
                         <button 
@@ -1189,19 +1216,34 @@ const App: React.FC = () => {
           </div>
           
           {!isConsultationMode && currentStep > AppStep.NORMAL_SELECTION && (
-             <button onClick={goToPrevStep} className="px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
+             <button onClick={goToPrevStep} className="hidden md:block px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
           )}
 
           {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
-              <button onClick={goToNextStep} className="px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
+              <button onClick={goToNextStep} className="hidden md:block px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
           ) : (
-              <button onClick={handleFinalValidation} className="px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
+              <button onClick={handleFinalValidation} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
           ))}
           <button onClick={() => setViewMode(ViewMode.LOGIN)} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
         </div>
       </header>
 
-      {currentStep !== AppStep.RECAP_ORDERING && !isConsultationMode && (
+      {/* Mobile Bottom Navigation */}
+      {!isConsultationMode && viewMode !== ViewMode.LOGIN && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-[90] shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)] pb-safe">
+            {currentStep > AppStep.NORMAL_SELECTION ? (
+                <button onClick={goToPrevStep} className="flex-1 py-3.5 mr-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase active:bg-slate-200 transition-colors text-center shadow-sm">Précédent</button>
+            ) : <div className="flex-1 mr-2"></div>}
+
+            {currentStep < AppStep.RECAP_ORDERING ? (
+                <button onClick={goToNextStep} className="flex-1 py-3.5 ml-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase active:bg-blue-700 shadow-md text-center transition-colors">Suivant</button>
+            ) : (
+                <button onClick={handleFinalValidation} className="flex-1 py-3.5 ml-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase active:bg-emerald-700 shadow-md transition-colors animate-pulse text-center">Valider</button>
+            )}
+        </div>
+      )}
+
+      {currentStep !== AppStep.RECAP_ORDERING && !isConsultationMode && viewMode !== ViewMode.LIST_INPUT && (
         <div className="bg-slate-100 border-b px-4 py-3 md:px-8 md:py-4 flex flex-col md:flex-row items-center gap-4 md:gap-8 z-20 shrink-0 shadow-inner justify-between sticky top-0 md:static">
             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto no-scrollbar">
                 <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest whitespace-nowrap">Indice Priorité :</span>
@@ -1236,7 +1278,27 @@ const App: React.FC = () => {
 
       <div className="flex-1 overflow-hidden flex flex-col bg-slate-100">
         {currentStep === AppStep.RECAP_ORDERING ? (
-          <RecapView choices={choices.filter(c => c.userTrigram === trigram.toUpperCase())} columns={dynamicColumns} onReorder={setChoices} activeRound={activeRound} />
+          <div className="flex-1 overflow-hidden flex flex-col pb-24 md:pb-0">
+            <RecapView choices={choices.filter(c => c.userTrigram === trigram.toUpperCase())} columns={dynamicColumns} onReorder={setChoices} activeRound={activeRound} />
+          </div>
+        ) : viewMode === ViewMode.LIST_INPUT ? (
+          <div className="flex-1 overflow-auto custom-scrollbar p-4 pb-32">
+              <ListView 
+                  monthsToDisplay={monthsToDisplay}
+                  dynamicColumns={dynamicColumns}
+                  choices={choices}
+                  currentStep={currentStep}
+                  category={category}
+                  trigram={trigram}
+                  globalClosures={globalClosures}
+                  unavailabilities={unavailabilities}
+                  handleCellClick={handleCellClick}
+                  isColOpen={isColOpen}
+                  isBlockedByUnavailability={isBlockedByUnavailability}
+                  columnConfigs={columnConfigs}
+                  activePriority={activePriority}
+              />
+          </div>
         ) : (
           <div className="flex-1 overflow-auto custom-scrollbar p-4 space-y-12 pb-32">
             {monthsToDisplay.map(({ month, year, label }) => {
@@ -1268,8 +1330,8 @@ const App: React.FC = () => {
                   
                   <MonthCounters month={month} year={year} choices={choices} columns={dynamicColumns} userTrigram={trigram.toUpperCase()} />
 
-                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-auto max-h-[75vh] custom-scrollbar">
-                     <table className="w-full border-separate border-spacing-0 table-fixed">
+                  <div className="bg-white rounded-3xl shadow-sm border border-slate-200">
+                     <table className="w-max min-w-full border-separate border-spacing-0 table-fixed">
                         <MatrixHeader columns={dynamicColumns} globalClosures={globalClosures} month={month} year={year} closedColumns={closedColumnsForStep} hoveredCell={hoveredCell} />
                         <tbody>
                           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
