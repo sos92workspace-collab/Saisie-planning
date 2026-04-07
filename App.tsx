@@ -931,8 +931,6 @@ const App: React.FC = () => {
                 return;
             }
         }
-        
-        // For pending choices, we remove the warning as per user request to "enlève les alertes d'incompatibilité"
     }
 
     const newChoice: Choice = {
