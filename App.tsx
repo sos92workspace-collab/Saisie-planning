@@ -51,21 +51,12 @@ const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0):
   const t2 = parseTimeRange(r2);
   if (!t1 || !t2) return false;
   
-  // Handle overnight shifts by splitting them into two ranges if they cross midnight
-  const ranges1 = t1.end <= t1.start ? [{start: t1.start, end: 24 * 60}, {start: 0, end: t1.end}] : [t1];
-  const ranges2 = t2.end <= t2.start ? [{start: t2.start, end: 24 * 60}, {start: 0, end: t2.end}] : [t2];
-
-  for (const rA of ranges1) {
-      for (const rB of ranges2) {
-          const overlapStart = Math.max(rA.start, rB.start);
-          const overlapEnd = Math.min(rA.end, rB.end);
-          
-          if (overlapStart < overlapEnd) {
-              if ((overlapEnd - overlapStart) > maxOverlapMinutes) {
-                  return true;
-              }
-          }
-      }
+  // Calculate overlap in minutes
+  const overlapStart = Math.max(t1.start, t2.start);
+  const overlapEnd = Math.min(t1.end, t2.end);
+  
+  if (overlapStart < overlapEnd) {
+      return (overlapEnd - overlapStart) > maxOverlapMinutes;
   }
   return false;
 };
@@ -766,6 +757,9 @@ const App: React.FC = () => {
   }, [columnConfigs, currentUser, shiftDefinitions, shiftGlobalSettings, choices]);
 
   const isBlockedByUnavailability = useCallback((row: number, colId: number, month: number, year: number) => {
+    const activeRound = rounds.find(r => r.id === currentRoundId) || rounds[0];
+    const maxOverlapMinutes = activeRound?.maxOverlapMinutes || 0;
+
     const constraints = unavailabilities.filter(u => u.day === row && u.month === month && u.year === year);
     if (constraints.length === 0) return false;
     if (constraints.some(u => u.period === 'FULL')) return true;
@@ -774,9 +768,9 @@ const App: React.FC = () => {
     const colTimeRange = columnConfigs.find(c => c.column_id === colId)?.custom_time_range || colDef.timeRange;
     return constraints.some(u => {
         if (PERIOD_MAPPING[u.period]) return PERIOD_MAPPING[u.period].includes(colId);
-        return doRangesOverlap(u.period, colTimeRange);
+        return doRangesOverlap(u.period, colTimeRange, maxOverlapMinutes);
     });
-  }, [unavailabilities, columnConfigs]);
+  }, [unavailabilities, columnConfigs, rounds, currentRoundId]);
 
   // --- EFFECT: Auto-select lowest available priority when step/category changes ---
   useEffect(() => {
