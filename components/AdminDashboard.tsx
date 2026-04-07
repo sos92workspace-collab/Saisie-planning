@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, GuardType, Site, UserRole, ColumnDefinition, ShiftDefinition, ShiftGlobalSettings } from '../types';
-import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from '../constants';
+import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap } from '../constants';
 import { MatrixHeader } from './MatrixHeader';
 import { VersionsPanel } from './VersionsPanel';
 
@@ -1423,6 +1423,27 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
       if (!user) {
           alert("Médecin introuvable !");
           return;
+      }
+
+      const colConfig = columnConfigs.find((c: any) => c.column_id === editingCell.col);
+      const baseColDef = COLUMNS.find(c => c.id === editingCell.col);
+      const finalTimeRange = colConfig?.custom_time_range || baseColDef?.timeRange || '';
+      const maxOverlapMinutes = activeRound?.maxOverlapMinutes || 0;
+
+      const assignedSameDay = choices.filter((c: any) => 
+          c.userTrigram === cleanTri && 
+          c.row === editingCell.row && 
+          c.month === editingCell.month && 
+          c.year === editingCell.year && 
+          c.status === 'ASSIGNED'
+      );
+
+      for (const assignedChoice of assignedSameDay) {
+          const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
+          if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
+              alert(`⚠️ ACTION BLOQUÉE : Le Dr ${cleanTri} a déjà une garde attribuée sur des horaires incompatibles (${existingTimeRange}).`);
+              return;
+          }
       }
 
       const pending = choices.find((c: any) => c.row === editingCell.row && c.col === editingCell.col && c.month === editingCell.month && c.year === editingCell.year && c.userTrigram === cleanTri);

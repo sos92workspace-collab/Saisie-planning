@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { ChevronDown, Calendar } from 'lucide-react';
-import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
+import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 import { StepProgressBar } from './components/StepProgressBar';
@@ -43,22 +43,6 @@ const getDefaultColor = (colorClass: string) => {
   const match = colorClass?.match(/bg-\[#([0-9a-fA-F]{6})\]/);
   if (match) return `#${match[1]}`;
   return '#FFFFFF';
-};
-
-// Vérifie si deux plages se chevauchent
-const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0): boolean => {
-  const t1 = parseTimeRange(r1);
-  const t2 = parseTimeRange(r2);
-  if (!t1 || !t2) return false;
-  
-  // Calculate overlap in minutes
-  const overlapStart = Math.max(t1.start, t2.start);
-  const overlapEnd = Math.min(t1.end, t2.end);
-  
-  if (overlapStart < overlapEnd) {
-      return (overlapEnd - overlapStart) > maxOverlapMinutes;
-  }
-  return false;
 };
 
 const PERIOD_MAPPING: { [key: string]: number[] } = {

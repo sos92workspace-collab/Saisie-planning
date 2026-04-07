@@ -13,7 +13,23 @@ export const parseTimeRange = (range: string): { start: number, end: number } | 
   let start = startHour * 60 + startMin;
   let end = endHour * 60 + endMin;
   
+  if (end <= start) end += 24 * 60;
   return { start, end };
+};
+
+export const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0): boolean => {
+  const t1 = parseTimeRange(r1);
+  const t2 = parseTimeRange(r2);
+  if (!t1 || !t2) return false;
+  
+  // Calculate overlap in minutes
+  const overlapStart = Math.max(t1.start, t2.start);
+  const overlapEnd = Math.min(t1.end, t2.end);
+  
+  if (overlapStart < overlapEnd) {
+      return (overlapEnd - overlapStart) > maxOverlapMinutes;
+  }
+  return false;
 };
 
 export const getEasterDate = (year: number): Date => {
