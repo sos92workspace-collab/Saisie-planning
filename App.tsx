@@ -46,14 +46,17 @@ const getDefaultColor = (colorClass: string) => {
 };
 
 // Vérifie si deux plages se chevauchent
-const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0): boolean => {
+const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0, dayDiff: number = 0): boolean => {
   const t1 = parseTimeRange(r1);
   const t2 = parseTimeRange(r2);
   if (!t1 || !t2) return false;
   
+  const t2Start = t2.start + dayDiff * 24 * 60;
+  const t2End = t2.end + dayDiff * 24 * 60;
+  
   // Calculate overlap in minutes
-  const overlapStart = Math.max(t1.start, t2.start);
-  const overlapEnd = Math.min(t1.end, t2.end);
+  const overlapStart = Math.max(t1.start, t2Start);
+  const overlapEnd = Math.min(t1.end, t2End);
   
   if (overlapStart < overlapEnd) {
       return (overlapEnd - overlapStart) > maxOverlapMinutes;
@@ -404,7 +407,7 @@ const App: React.FC = () => {
         const latestShiftDefinitions = sd || [];
         const latestShiftGlobalSettings = sgs || null;
         const latestAssigned = assigned ? assigned.map(fromDb) : [];
-        const maxOverlapMinutes = rd?.max_overlap_minutes || 0;
+        const maxOverlapMinutes = rd?.maxOverlapMinutes || 0;
 
         const myPendingChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.status === 'PENDING');
         const validChoices: Choice[] = [];
@@ -414,19 +417,22 @@ const App: React.FC = () => {
             let isValid = true;
             
             // Check for overlaps with ALREADY ASSIGNED shifts for the SAME user
-            const myAssignedSameDay = latestAssigned.filter(a => 
-                a.userTrigram === trigram.toUpperCase() && 
-                a.row === choice.row && 
-                a.month === choice.month && 
-                a.year === choice.year
-            );
+            const choiceDate = new Date(choice.year, choice.month, choice.row).getTime();
+            const myAssignedRecent = latestAssigned.filter(a => {
+                if (a.userTrigram !== trigram.toUpperCase()) return false;
+                const assignedDate = new Date(a.year, a.month, a.row).getTime();
+                const dayDiff = Math.round((assignedDate - choiceDate) / (1000 * 60 * 60 * 24));
+                return Math.abs(dayDiff) <= 1;
+            });
 
             const choiceTimeRange = choice.colTimeRange || COLUMNS.find(c => c.id === choice.col)?.timeRange;
             
             if (choiceTimeRange) {
-                for (const assigned of myAssignedSameDay) {
+                for (const assigned of myAssignedRecent) {
                     const assignedTimeRange = assigned.colTimeRange || COLUMNS.find(c => c.id === assigned.col)?.timeRange;
-                    if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange, maxOverlapMinutes)) {
+                    const assignedDate = new Date(assigned.year, assigned.month, assigned.row).getTime();
+                    const dayDiff = Math.round((assignedDate - choiceDate) / (1000 * 60 * 60 * 24));
+                    if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange, maxOverlapMinutes, dayDiff)) {
                         isValid = false;
                         break;
                     }
@@ -922,11 +928,19 @@ const App: React.FC = () => {
 
     if (baseColDef) {
         // Check specifically for overlaps with ALREADY ASSIGNED shifts for the SAME user
-        const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        const choiceDate = new Date(year, month, row).getTime();
+        const assignedRecent = choices.filter(c => {
+            if (c.userTrigram !== cleanTri || c.status !== 'ASSIGNED') return false;
+            const assignedDate = new Date(c.year, c.month, c.row).getTime();
+            const dayDiff = Math.round((assignedDate - choiceDate) / (1000 * 60 * 60 * 24));
+            return Math.abs(dayDiff) <= 1;
+        });
         
-        for (const assignedChoice of assignedSameDay) {
+        for (const assignedChoice of assignedRecent) {
             const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-            if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
+            const assignedDate = new Date(assignedChoice.year, assignedChoice.month, assignedChoice.row).getTime();
+            const dayDiff = Math.round((assignedDate - choiceDate) / (1000 * 60 * 60 * 24));
+            if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes, dayDiff)) {
                 alert(`⚠️ ACTION BLOQUÉE : Une garde vous a déjà été attribuée sur des horaires incompatibles (${existingTimeRange}).`);
                 return;
             }
@@ -987,18 +1001,20 @@ const App: React.FC = () => {
           if (nextSubRank > 27) continue;
 
           if (nextSubRank === 1) {
-              const assignedSameDay = [...currentChoicesState, ...newChoices].filter(c => 
-                  c.userTrigram === user.trigram && 
-                  c.row === row && 
-                  c.month === month && 
-                  c.year === year &&
-                  c.status === 'ASSIGNED'
-              );
+              const choiceDate = new Date(year, month, row).getTime();
+              const assignedRecent = [...currentChoicesState, ...newChoices].filter(c => {
+                  if (c.userTrigram !== user.trigram || c.status !== 'ASSIGNED') return false;
+                  const assignedDate = new Date(c.year, c.month, c.row).getTime();
+                  const dayDiff = Math.round((assignedDate - choiceDate) / (1000 * 60 * 60 * 24));
+                  return Math.abs(dayDiff) <= 1;
+              });
               
               let overlapFound = false;
-              for (const assignedChoice of assignedSameDay) {
+              for (const assignedChoice of assignedRecent) {
                   const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
+                  const assignedDate = new Date(assignedChoice.year, assignedChoice.month, assignedChoice.row).getTime();
+                  const dayDiff = Math.round((assignedDate - choiceDate) / (1000 * 60 * 60 * 24));
+                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes, dayDiff)) {
                       overlapFound = true;
                       break;
                   }
