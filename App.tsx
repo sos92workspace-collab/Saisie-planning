@@ -757,9 +757,6 @@ const App: React.FC = () => {
   }, [columnConfigs, currentUser, shiftDefinitions, shiftGlobalSettings, choices]);
 
   const isBlockedByUnavailability = useCallback((row: number, colId: number, month: number, year: number) => {
-    const activeRound = rounds.find(r => r.id === currentRoundId) || rounds[0];
-    const maxOverlapMinutes = activeRound?.maxOverlapMinutes || 0;
-
     const constraints = unavailabilities.filter(u => u.day === row && u.month === month && u.year === year);
     if (constraints.length === 0) return false;
     if (constraints.some(u => u.period === 'FULL')) return true;
@@ -768,9 +765,9 @@ const App: React.FC = () => {
     const colTimeRange = columnConfigs.find(c => c.column_id === colId)?.custom_time_range || colDef.timeRange;
     return constraints.some(u => {
         if (PERIOD_MAPPING[u.period]) return PERIOD_MAPPING[u.period].includes(colId);
-        return doRangesOverlap(u.period, colTimeRange, maxOverlapMinutes);
+        return doRangesOverlap(u.period, colTimeRange);
     });
-  }, [unavailabilities, columnConfigs, rounds, currentRoundId]);
+  }, [unavailabilities, columnConfigs]);
 
   // --- EFFECT: Auto-select lowest available priority when step/category changes ---
   useEffect(() => {
