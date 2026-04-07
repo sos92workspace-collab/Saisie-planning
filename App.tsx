@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { ChevronDown, Calendar } from 'lucide-react';
-import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap } from './constants';
+import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 import { StepProgressBar } from './components/StepProgressBar';
@@ -43,6 +43,32 @@ const getDefaultColor = (colorClass: string) => {
   const match = colorClass?.match(/bg-\[#([0-9a-fA-F]{6})\]/);
   if (match) return `#${match[1]}`;
   return '#FFFFFF';
+};
+
+// Vérifie si deux plages se chevauchent
+const doRangesOverlap = (r1: string, r2: string, maxOverlapMinutes: number = 0): boolean => {
+  const t1 = parseTimeRange(r1);
+  const t2 = parseTimeRange(r2);
+  if (!t1 || !t2) return false;
+  
+  // Calculate overlap in minutes
+  const overlapStart = Math.max(t1.start, t2.start);
+  const overlapEnd = Math.min(t1.end, t2.end);
+  
+  if (overlapStart < overlapEnd) {
+      return (overlapEnd - overlapStart) > maxOverlapMinutes;
+  }
+  return false;
+};
+
+const PERIOD_MAPPING: { [key: string]: number[] } = {
+  '06-13': [1, 2, 3, 4, 5, 6, 7],
+  '07-13': [8, 9, 10, 11],
+  'MATIN': [12, 13, 14, 15, 16, 17, 18, 19, 20],
+  '13-19': [21, 22, 23, 24, 25],
+  'APREM': [26, 27, 28, 29, 30, 31, 32, 33, 34],
+  'SOIR': [35, 36, 37, 38, 39, 40, 41, 42],
+  'NUIT': [43, 44, 45, 46]
 };
 
 const MonthCounters = ({ month, year, choices, columns, userTrigram }: {
@@ -388,8 +414,9 @@ const App: React.FC = () => {
             let isValid = true;
             
             // Check for overlaps with ALREADY ASSIGNED shifts for the SAME user
-            const myAssigned = latestAssigned.filter(a => 
+            const myAssignedSameDay = latestAssigned.filter(a => 
                 a.userTrigram === trigram.toUpperCase() && 
+                a.row === choice.row && 
                 a.month === choice.month && 
                 a.year === choice.year
             );
@@ -397,9 +424,9 @@ const App: React.FC = () => {
             const choiceTimeRange = choice.colTimeRange || COLUMNS.find(c => c.id === choice.col)?.timeRange;
             
             if (choiceTimeRange) {
-                for (const assigned of myAssigned) {
+                for (const assigned of myAssignedSameDay) {
                     const assignedTimeRange = assigned.colTimeRange || COLUMNS.find(c => c.id === assigned.col)?.timeRange;
-                    if (assignedTimeRange && doRangesOverlap(choice.row, choiceTimeRange, assigned.row, assignedTimeRange, maxOverlapMinutes)) {
+                    if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange, maxOverlapMinutes)) {
                         isValid = false;
                         break;
                     }
@@ -730,31 +757,17 @@ const App: React.FC = () => {
   }, [columnConfigs, currentUser, shiftDefinitions, shiftGlobalSettings, choices]);
 
   const isBlockedByUnavailability = useCallback((row: number, colId: number, month: number, year: number) => {
-    const activeRound = rounds.find(r => r.id === currentRoundId) || rounds[0];
-    const maxOverlapMinutes = activeRound?.maxOverlapMinutes || 0;
-
-    const constraints = unavailabilities.filter(u => u.month === month && u.year === year);
+    const constraints = unavailabilities.filter(u => u.day === row && u.month === month && u.year === year);
     if (constraints.length === 0) return false;
-    
+    if (constraints.some(u => u.period === 'FULL')) return true;
     const colDef = COLUMNS.find(c => c.id === colId);
     if (!colDef) return false;
     const colTimeRange = columnConfigs.find(c => c.column_id === colId)?.custom_time_range || colDef.timeRange;
-    
-    const UNAVAILABILITY_TIMES: { [key: string]: string } = {
-        'MATIN': '08h-13h',
-        'APREM': '13h-19h',
-        'SOIR': '19h-00h',
-        'NUIT': '00h-08h'
-    };
-
     return constraints.some(u => {
-        if (u.period === 'FULL') {
-            return doRangesOverlap(u.day, '00h-24h', row, colTimeRange, maxOverlapMinutes);
-        }
-        const unavTimeRange = UNAVAILABILITY_TIMES[u.period] || u.period;
-        return doRangesOverlap(u.day, unavTimeRange, row, colTimeRange, maxOverlapMinutes);
+        if (PERIOD_MAPPING[u.period]) return PERIOD_MAPPING[u.period].includes(colId);
+        return doRangesOverlap(u.period, colTimeRange);
     });
-  }, [unavailabilities, columnConfigs, rounds, currentRoundId]);
+  }, [unavailabilities, columnConfigs]);
 
   // --- EFFECT: Auto-select lowest available priority when step/category changes ---
   useEffect(() => {
@@ -909,11 +922,11 @@ const App: React.FC = () => {
 
     if (baseColDef) {
         // Check specifically for overlaps with ALREADY ASSIGNED shifts for the SAME user
-        const assigned = choices.filter(c => c.userTrigram === cleanTri && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && c.status === 'ASSIGNED');
         
-        for (const assignedChoice of assigned) {
+        for (const assignedChoice of assignedSameDay) {
             const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-            if (existingTimeRange && doRangesOverlap(row, finalTimeRange, assignedChoice.row, existingTimeRange, maxOverlapMinutes)) {
+            if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
                 alert(`⚠️ ACTION BLOQUÉE : Une garde vous a déjà été attribuée sur des horaires incompatibles (${existingTimeRange}).`);
                 return;
             }
@@ -974,17 +987,18 @@ const App: React.FC = () => {
           if (nextSubRank > 27) continue;
 
           if (nextSubRank === 1) {
-              const assigned = [...currentChoicesState, ...newChoices].filter(c => 
+              const assignedSameDay = [...currentChoicesState, ...newChoices].filter(c => 
                   c.userTrigram === user.trigram && 
+                  c.row === row && 
                   c.month === month && 
                   c.year === year &&
                   c.status === 'ASSIGNED'
               );
               
               let overlapFound = false;
-              for (const assignedChoice of assigned) {
+              for (const assignedChoice of assignedSameDay) {
                   const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-                  if (existingTimeRange && doRangesOverlap(row, finalTimeRange, assignedChoice.row, existingTimeRange, maxOverlapMinutes)) {
+                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
                       overlapFound = true;
                       break;
                   }
