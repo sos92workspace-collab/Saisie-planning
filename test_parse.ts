@@ -1,0 +1,11 @@
+import { parseTimeRange, doRangesOverlap } from './constants';
+console.log(parseTimeRange("08h-12h"));
+console.log(parseTimeRange("13h-19h"));
+console.log(doRangesOverlap(1, "08h-12h", 1, "13h-19h"));
+console.log(parseTimeRange("06h-13h"));
+console.log(parseTimeRange("12h-16h"));
+console.log(doRangesOverlap(1, "06h-13h", 1, "12h-16h"));
+console.log(doRangesOverlap(1, "06h-13h", 1, "12h-16h", 60));
+console.log(doRangesOverlap(1, "20h-08h", 2, "06h-13h"));
+console.log(doRangesOverlap(1, "20h-08h", 2, "08h-13h"));
+console.log(doRangesOverlap(1, "20h-08h", 2, "09h-13h"));

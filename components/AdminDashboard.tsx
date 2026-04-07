@@ -1430,17 +1430,16 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
       const finalTimeRange = colConfig?.custom_time_range || baseColDef?.timeRange || '';
       const maxOverlapMinutes = activeRound?.maxOverlapMinutes || 0;
 
-      const assignedSameDay = choices.filter((c: any) => 
+      const assigned = choices.filter((c: any) => 
           c.userTrigram === cleanTri && 
-          c.row === editingCell.row && 
           c.month === editingCell.month && 
           c.year === editingCell.year && 
           c.status === 'ASSIGNED'
       );
 
-      for (const assignedChoice of assignedSameDay) {
+      for (const assignedChoice of assigned) {
           const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-          if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
+          if (existingTimeRange && doRangesOverlap(editingCell.row, finalTimeRange, assignedChoice.row, existingTimeRange, maxOverlapMinutes)) {
               alert(`⚠️ ACTION BLOQUÉE : Le Dr ${cleanTri} a déjà une garde attribuée sur des horaires incompatibles (${existingTimeRange}).`);
               return;
           }
