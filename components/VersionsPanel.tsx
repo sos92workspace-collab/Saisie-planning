@@ -183,9 +183,7 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ supabase, logActio
 
             for (let day = 1; day <= daysInMonth; day++) {
                 for (const col of dynamicColumns) {
-                    const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-                    const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                    const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                    const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                     
                     if (!isClosed) {
                         totalOpenCells++;
@@ -286,9 +284,7 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ supabase, logActio
                                                 </div>
                                             </td>
                                             {dynamicColumns.map(col => {
-                                                const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-                                                const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                                                const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                                                const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                                                 
                                                 const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
                                                 const isCrosshair = isHoveredRow || isHoveredCol;

@@ -96,9 +96,7 @@ export const ListView: React.FC<ListViewProps> = ({
             if (!open) return false;
 
             // Check global closures
-            const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === selectedMonthObj.month && gc.year === selectedMonthObj.year)));
-            const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === selectedMonthObj.month && gc.year === selectedMonthObj.year);
-            const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+            const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === selectedMonthObj.month && gc.year === selectedMonthObj.year);
             if (isClosed) return false;
 
             // Check if assigned to someone else

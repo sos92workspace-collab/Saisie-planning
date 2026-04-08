@@ -22,7 +22,9 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
             Date
         </th>
         {columns.map((col) => {
-          const isColClosedGlobal = globalClosures.some(gc => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
+          const daysInMonth = month !== undefined && year !== undefined ? new Date(year, month + 1, 0).getDate() : 31;
+          const closedDaysCount = globalClosures.filter(gc => gc.col_id === col.id && gc.month === month && gc.year === year && gc.row !== null).length;
+          const isColClosedGlobal = closedDaysCount === daysInMonth && daysInMonth > 0;
           const isColClosedForStep = closedColumns.includes(col.id);
           const isColClosed = isColClosedGlobal || isColClosedForStep;
           const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;

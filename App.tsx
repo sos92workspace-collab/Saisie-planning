@@ -38,6 +38,22 @@ const fromDb = (db: any): Choice => ({
   colTimeRange: db.col_time_range
 });
 
+const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: any) => any = (q) => q) => {
+  let allData: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    let query = supabaseClient.from(table).select('*');
+    query = queryModifier(query);
+    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    allData.push(...data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return allData;
+};
+
 // Helper pour extraire la couleur hexadécimale depuis une classe Tailwind bg-[#...]
 const getDefaultColor = (colorClass: string) => {
   const match = colorClass?.match(/bg-\[#([0-9a-fA-F]{6})\]/);
@@ -389,12 +405,12 @@ const App: React.FC = () => {
             return;
         }
 
-        const { data: gc } = await supabase.from('global_closures').select('*');
+        const gc = await fetchAll(supabase, 'global_closures');
         const { data: cfg } = await supabase.from('column_configs').select('*').eq('round_id', currentRoundId);
         const { data: sd } = await supabase.from('shift_definitions').select('*');
         const { data: sgs } = await supabase.from('shift_global_settings').select('*').eq('id', 1).single();
         const { data: unav } = await supabase.from('unavailabilities').select('*').eq('user_trigram', trigram.toUpperCase());
-        const { data: assigned } = await supabase.from('choices').select('*').eq('status', 'ASSIGNED').eq('round_id', currentRoundId);
+        const assigned = await fetchAll(supabase, 'choices', q => q.eq('status', 'ASSIGNED').eq('round_id', currentRoundId));
         
         const latestGlobalClosures = gc ? gc.map((g: any) => ({ ...g, month: g.month !== null ? g.month - 1 : null })) : [];
         const latestUnavailabilities = unav ? unav.map((u: any) => ({
@@ -602,7 +618,7 @@ const App: React.FC = () => {
         const { data: ud } = await supabase.from('users').select('*');
         if (ud) setUsers(ud);
         
-        const { data: gc } = await supabase.from('global_closures').select('*');
+        const gc = await fetchAll(supabase, 'global_closures');
         if (gc) setGlobalClosures(gc.map((g: any) => ({ ...g, month: g.month !== null ? g.month - 1 : null })));
       } catch (e) {
         console.error("Erreur init:", e);
@@ -617,9 +633,7 @@ const App: React.FC = () => {
   const fetchChoices = useCallback(async (tri: string) => {
     // MODIFICATION ICI: On récupère les choix de l'utilisateur (PENDING/ASSIGNED) ET TOUS les choix ASSIGNED des autres
     // La syntaxe .or() avec une virgule agit comme un OU
-    const { data } = await supabase.from('choices').select('*')
-      .neq('status', 'ARCHIVED')
-      .or(`user_trigram.eq.${tri.toUpperCase()},status.eq.ASSIGNED`);
+    const data = await fetchAll(supabase, 'choices', q => q.neq('status', 'ARCHIVED').or(`user_trigram.eq.${tri.toUpperCase()},status.eq.ASSIGNED`));
       
     if (data) setChoices(data.map(fromDb));
     
@@ -884,9 +898,7 @@ const App: React.FC = () => {
     }
 
     // Block if cell is closed (either by global closure or round config)
-    const isColClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-    const isCellClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
-    const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+    const isClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
     const open = isColOpen(colId, currentStep, row, month, year) && !isClosed;
     
     if (!open) {
@@ -1352,9 +1364,7 @@ const App: React.FC = () => {
                                     </div>
                                 </td>
                                 {dynamicColumns.map(col => {
-                                  const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-                                  const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                                  const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                                  const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                                   
                                   const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
                                   const isCrosshair = isHoveredRow || isHoveredCol;

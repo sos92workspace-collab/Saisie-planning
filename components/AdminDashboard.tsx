@@ -26,6 +26,22 @@ const generateId = () => {
   return Math.random().toString(36).substring(2, 11);
 };
 
+const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: any) => any = (q) => q) => {
+  let allData: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    let query = supabaseClient.from(table).select('*');
+    query = queryModifier(query);
+    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    allData.push(...data);
+    if (data.length < pageSize) break;
+    page++;
+  }
+  return allData;
+};
+
 const generateAutoVersionName = async (supabase: any, activeRound: any) => {
     const startM = activeRound?.monthStart ?? 0;
     const startY = activeRound?.yearStart ?? 2025;
@@ -108,7 +124,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           maxOverlapMinutes: r.max_overlap_minutes ?? 0,
         })));
       }
-      const { data: cd } = await supabase.from('choices').select('*').neq('status', 'ARCHIVED');
+      const cd = await fetchAll(supabase, 'choices', q => q.neq('status', 'ARCHIVED'));
       if (cd) setAllChoices(cd.map((db: any) => ({
         id: db.id, row: db.row, col: db.col, month: db.month - 1, year: db.year,
         groupIndex: db.group_index, subRank: db.sub_rank, category: db.category,
@@ -128,7 +144,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
       if (sd) setShiftDefinitions(sd);
       const { data: sgs } = await supabase.from('shift_global_settings').select('*').eq('id', 1).single();
       if (sgs) setShiftGlobalSettings(sgs);
-      const { data: gc } = await supabase.from('global_closures').select('*');
+      const gc = await fetchAll(supabase, 'global_closures');
       if (gc) setGlobalClosures(gc.map((g: any) => ({ ...g, month: g.month !== null ? g.month - 1 : null })));
     } catch (e) {
       console.error(e);
@@ -211,8 +227,20 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
         category: cols[12], group_index: Number(cols[13]), sub_rank: Number(cols[14]), status: cols[15]
       };
     }).filter(x => x && x.id);
-    const { error } = await supabase.from('choices').upsert(upserts);
-    if (error) alert("Erreur import: " + error.message);
+    
+    let hasError = false;
+    let errorMessage = "";
+    for (let i = 0; i < upserts.length; i += 500) {
+        const chunk = upserts.slice(i, i + 500);
+        const { error } = await supabase.from('choices').upsert(chunk);
+        if (error) {
+            hasError = true;
+            errorMessage = error.message;
+            break;
+        }
+    }
+
+    if (hasError) alert("Erreur import: " + errorMessage);
     else { alert("Import réussi !"); refreshData(); }
   };
 
@@ -1388,9 +1416,8 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
           return;
       }
 
-      const isColClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-      const isCellClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
-      if (isColClosed ? !isCellClosed : isCellClosed) {
+      const isClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
+      if (isClosed) {
           alert("Cette case est fermée.");
           return;
       }
@@ -1487,13 +1514,27 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
 
   const handleColumnClick = async (colId: number, month: number, year: number) => {
       if (!isEditClosuresMode) return;
-      const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === null && (gc.month === month && gc.year === year || gc.month === null));
-      if (existing) {
-          await supabase.from('global_closures').delete().eq('id', existing.id);
-          setGlobalClosures((prev: any[]) => prev.filter(gc => gc.id !== existing.id));
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const closedDays = globalClosures.filter((gc: any) => gc.col_id === colId && gc.month === month && gc.year === year && gc.row !== null);
+
+      if (closedDays.length === daysInMonth) {
+          // All days are closed -> Open them all (delete all)
+          const idsToDelete = closedDays.map(gc => gc.id);
+          await supabase.from('global_closures').delete().in('id', idsToDelete);
+          setGlobalClosures((prev: any[]) => prev.filter(gc => !idsToDelete.includes(gc.id)));
       } else {
-          const { data, error } = await supabase.from('global_closures').insert({ col_id: colId, row: null, month: month + 1, year }).select();
-          if (data && !error) setGlobalClosures((prev: any[]) => [...prev, { ...data[0], month: data[0].month - 1 }]);
+          // Not all days are closed -> Close the missing ones
+          const missingDays = [];
+          for (let d = 1; d <= daysInMonth; d++) {
+              if (!closedDays.some(gc => gc.row === d)) {
+                  missingDays.push({ col_id: colId, row: d, month: month + 1, year });
+              }
+          }
+          const { data, error } = await supabase.from('global_closures').insert(missingDays).select();
+          if (data && !error) {
+              const formattedData = data.map((d: any) => ({ ...d, month: d.month - 1 }));
+              setGlobalClosures((prev: any[]) => [...prev, ...formattedData]);
+          }
       }
   };
 
@@ -1616,9 +1657,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
 
             for (let day = 1; day <= daysInMonth; day++) {
                 for (const col of dynamicColumns) {
-                    const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-                    const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                    const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                    const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                     
                     if (!isClosed) {
                         totalOpenCells++;
@@ -1719,9 +1758,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 </div>
                                             </td>
                                             {dynamicColumns.map(col => {
-                                                const isColClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === null && (gc.month === null || (gc.month === month && gc.year === year)));
-                                                const isCellClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
-                                                const isClosed = isColClosed ? !isCellClosed : isCellClosed;
+                                                const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
                                                 
                                                 const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
                                                 const isCrosshair = isHoveredRow || isHoveredCol;
@@ -1818,7 +1855,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     useEffect(() => {
         if (subTab === 'history') {
             const fetchLogs = async () => {
-                const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false });
+                const { data } = await supabase.from('logs').select('*').order('created_at', { ascending: false }).limit(1000);
                 if (data) setLogs(data);
             };
             fetchLogs();
@@ -1905,12 +1942,15 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 }).filter(x => x && x.id && x.user_trigram);
             } else if (importType === '4D') {
                 upserts = rows.map(line => {
-                    let cols = line.split('\t').map(c => c.trim());
+                    let cols = line.split('\t').map(c => c.replace(/^"|"$/g, '').trim());
                     if (cols.length < 8) {
-                        cols = line.split(';').map(c => c.trim());
+                        cols = line.split(';').map(c => c.replace(/^"|"$/g, '').trim());
                     }
                     if (cols.length < 8) {
-                        cols = line.split(',').map(c => c.trim());
+                        // Handle commas inside quotes
+                        const regex = /(".*?"|[^",]+)(?=\s*,|\s*$)/g;
+                        const matches = line.match(regex) || [];
+                        cols = matches.map(m => m.replace(/^"|"$/g, '').trim());
                     }
                     
                     if (cols.length < 8) return null;
@@ -1973,10 +2013,21 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 }
             }
 
-            const { error } = await supabase.from('choices').upsert(upserts);
-            if (error) {
-                console.error(error);
-                alert("Erreur import: " + error.message);
+            let hasError = false;
+            let errorMessage = "";
+            for (let i = 0; i < upserts.length; i += 500) {
+                const chunk = upserts.slice(i, i + 500);
+                const { error } = await supabase.from('choices').upsert(chunk);
+                if (error) {
+                    hasError = true;
+                    errorMessage = error.message;
+                    break;
+                }
+            }
+
+            if (hasError) {
+                console.error(errorMessage);
+                alert("Erreur import: " + errorMessage);
             } else {
                 alert("Import réussi !");
                 window.location.reload();
