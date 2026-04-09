@@ -1,6 +1,26 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Choice, ColumnDefinition, ChoiceCategory, Round } from '../types';
-import { ArrowUp, ArrowDown, CornerDownRight, CornerUpLeft, Trash2 } from 'lucide-react';
+import { ArrowUp, ArrowDown, CornerDownRight, CornerUpLeft, Trash2, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+  DragMoveEvent,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Props {
   choices: Choice[];
@@ -9,36 +29,7 @@ interface Props {
   activeRound?: Round;
 }
 
-interface GroupedChoice {
-  id: number;
-  items: Choice[];
-}
-
 export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, activeRound }) => {
-
-  // Grouping logic
-  const getGrouped = (category: ChoiceCategory): GroupedChoice[] => {
-    const filtered = choices.filter(c => c.category === category && c.status === 'PENDING');
-    const groups: { [key: number]: Choice[] } = {};
-    
-    filtered.forEach(c => {
-      if (!groups[c.groupIndex]) groups[c.groupIndex] = [];
-      groups[c.groupIndex].push(c);
-    });
-
-    return Object.keys(groups)
-      .map(Number)
-      .sort((a, b) => a - b)
-      .map(groupId => ({
-        id: groupId,
-        items: groups[groupId].sort((a, b) => a.subRank - b.subRank)
-      }));
-  };
-
-  const normalGroups = useMemo(() => getGrouped('normal'), [choices]);
-  const badBonusGroups = useMemo(() => getGrouped('bad_bonus'), [choices]);
-  const goodBonusGroups = useMemo(() => getGrouped('good_bonus'), [choices]);
-
   // --- LOGIC: Cleanup Group Indices ---
   // Ensures group indices are strictly sequential (1, 2, 3...) without gaps or decimals
   const cleanupGroupIndices = (currentChoices: Choice[]) => {
@@ -56,30 +47,6 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
         });
     });
     return finalChoices;
-  };
-
-  // --- LOGIC: Move Group Up/Down ---
-  const handleMoveGroupUp = (category: ChoiceCategory, groupIndex: number) => {
-    if (groupIndex <= 1) return;
-    const newChoices = choices.map(c => {
-        if (c.status !== 'PENDING' || c.category !== category) return c;
-        if (c.groupIndex === groupIndex) return { ...c, groupIndex: groupIndex - 1 };
-        if (c.groupIndex === groupIndex - 1) return { ...c, groupIndex: groupIndex };
-        return c;
-    });
-    onReorder(cleanupGroupIndices(newChoices));
-  };
-
-  const handleMoveGroupDown = (category: ChoiceCategory, groupIndex: number) => {
-    const maxGroup = Math.max(...choices.filter(c => c.status === 'PENDING' && c.category === category).map(c => c.groupIndex));
-    if (groupIndex >= maxGroup) return;
-    const newChoices = choices.map(c => {
-        if (c.status !== 'PENDING' || c.category !== category) return c;
-        if (c.groupIndex === groupIndex) return { ...c, groupIndex: groupIndex + 1 };
-        if (c.groupIndex === groupIndex + 1) return { ...c, groupIndex: groupIndex };
-        return c;
-    });
-    onReorder(cleanupGroupIndices(newChoices));
   };
 
   // --- LOGIC: Promote / Demote ---
@@ -131,112 +98,265 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
   };
 
   // --- RENDER HELPERS ---
-  const renderGroupList = (groups: GroupedChoice[], category: ChoiceCategory, title: string, colorTheme: 'blue' | 'orange' | 'indigo') => {
-    const themeColors = {
-        blue: { border: 'border-blue-600', text: 'text-blue-800', bg: 'bg-blue-600', light: 'bg-blue-50' },
-        orange: { border: 'border-orange-500', text: 'text-orange-800', bg: 'bg-orange-500', light: 'bg-orange-50' },
-        indigo: { border: 'border-indigo-700', text: 'text-indigo-800', bg: 'bg-indigo-700', light: 'bg-indigo-50' }
-    }[colorTheme];
+  const SortableChoiceItem = ({ item, isHidden, isDragOverlay, forceAlternative, themeColors, colDef, onRemove, onMakeMain, onMakeAlt, dragDeltaX = 0 }: any) => {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({ id: item.id });
 
-    const maxGroup = groups.length > 0 ? Math.max(...groups.map(g => g.id)) : 0;
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      ...(isHidden && !isDragOverlay ? { height: 0, padding: 0, margin: 0, overflow: 'hidden', border: 'none', opacity: 0 } : {}),
+    };
+
+    const isAlt = forceAlternative !== undefined ? forceAlternative : item.subRank > 1;
+    const displaySubRank = isAlt ? (item.subRank > 1 ? item.subRank : 2) : 1;
+
+    if (isDragging && !isDragOverlay) {
+        let projectedIsAlt = isAlt;
+        if (dragDeltaX > 30) projectedIsAlt = true;
+        else if (dragDeltaX < -30) projectedIsAlt = false;
+
+        return (
+          <div ref={setNodeRef} style={style} className={`shrink-0 flex items-center justify-between p-3 border-2 border-dashed transition-all duration-200 ${projectedIsAlt ? 'ml-12 border-amber-400 bg-amber-50 rounded-l-xl' : 'ml-0 border-blue-400 bg-blue-50 rounded-xl'}`}>
+             <div className="h-8 w-full flex items-center px-2 gap-3">
+                {projectedIsAlt ? (
+                    <>
+                        <CornerDownRight className="text-amber-500" size={20} strokeWidth={3} />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-amber-600">
+                            Déposer comme alternative
+                        </span>
+                    </>
+                ) : (
+                    <>
+                        <div className="w-5 h-5 rounded flex items-center justify-center bg-blue-500 text-white font-black text-[10px] shadow-sm">P</div>
+                        <span className="text-[11px] font-black uppercase tracking-widest text-blue-600">
+                            Déposer comme priorité principale
+                        </span>
+                    </>
+                )}
+             </div>
+          </div>
+        );
+    }
+
+    const overlayClass = isDragOverlay ? (isAlt ? 'ring-2 ring-amber-400 shadow-amber-200/50 bg-amber-50/30' : 'ring-2 ring-blue-400 shadow-blue-200/50') : '';
 
     return (
-        <div className="flex-1 flex flex-col w-full md:min-w-[320px] min-h-[400px] md:min-h-0 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden text-slate-900 last:border-r-0 last:border-b-0">
-          <div className={`p-4 border-b-2 shadow-sm sticky top-0 bg-white z-30 ${themeColors.border} flex justify-between items-center`}>
-            <h2 className={`text-[10px] font-black uppercase tracking-tight ${themeColors.text}`}>
-              {title}
-            </h2>
-            <span className="text-[9px] font-bold bg-slate-100 px-2 py-1 rounded-full text-slate-500">{groups.length} Groupes</span>
+      <div ref={setNodeRef} style={style} className={`shrink-0 flex items-center justify-between p-3 border-b border-slate-50 last:border-0 transition-all duration-200 bg-white hover:bg-slate-50/80 ${isAlt ? 'pl-12 bg-slate-50/50' : ''} ${overlayClass}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-slate-400 hover:text-slate-600">
+            <GripVertical size={16} />
           </div>
-    
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar">
-            {groups.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 opacity-40">
-                  <div className="w-12 h-12 bg-slate-200 rounded-full mb-3 flex items-center justify-center text-2xl">∅</div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Aucun choix</span>
-              </div>
-            ) : (
-              groups.map((group) => (
-                <div key={group.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all hover:shadow-md">
-                  {/* Group Header */}
-                  <div className={`px-3 py-2 border-b border-slate-100 flex justify-between items-center ${themeColors.light}`}>
-                      <span className={`text-xs font-black uppercase tracking-wider ${themeColors.text}`}>
-                          Priorité {group.id}
-                      </span>
-                      <div className="flex items-center gap-1">
-                          <button 
-                              onClick={() => handleMoveGroupUp(category, group.id)}
-                              disabled={group.id === 1}
-                              className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors bg-white rounded shadow-sm border border-slate-200 hover:border-slate-300"
-                              title="Monter cette priorité"
-                          >
-                              <ArrowUp size={14} strokeWidth={2.5} />
-                          </button>
-                          <button 
-                              onClick={() => handleMoveGroupDown(category, group.id)}
-                              disabled={group.id === maxGroup}
-                              className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors bg-white rounded shadow-sm border border-slate-200 hover:border-slate-300"
-                              title="Descendre cette priorité"
-                          >
-                              <ArrowDown size={14} strokeWidth={2.5} />
-                          </button>
-                      </div>
-                  </div>
-
-                  {/* Items */}
-                  <div className="flex flex-col">
-                      {group.items.map(item => {
-                          const colDef = columns.find(c => c.id === item.col);
-                          const isAlternative = item.subRank > 1;
-
-                          return (
-                              <div key={item.id} className={`flex items-center justify-between p-3 border-b border-slate-50 last:border-0 transition-colors hover:bg-slate-50/80 ${isAlternative ? 'bg-slate-50/50 pl-8' : ''}`}>
-                                  <div className="flex items-center gap-3 min-w-0">
-                                      <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${!isAlternative ? themeColors.bg : 'bg-slate-400'}`}>
-                                          {item.subRank === 1 ? item.groupIndex : `${item.groupIndex}.${String.fromCharCode(95 + item.subRank)}`}
-                                      </div>
-                                      <div className="flex flex-col min-w-0">
-                                          <span className="font-bold text-slate-700 text-xs uppercase truncate">
-                                              {colDef?.label ? `${colDef.label} - colonne ${item.col}` : `Colonne ${item.col}`}
-                                          </span>
-                                          <span className="text-[10px] text-slate-400 font-medium">
-                                              {new Date(item.year, item.month, item.row).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
-                                          </span>
-                                      </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-1 shrink-0 opacity-60 hover:opacity-100 transition-opacity">
-                                      {isAlternative && (
-                                          <button onClick={() => handleMakeMain(item)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Détacher en tant que nouvelle priorité principale">
-                                              <CornerUpLeft size={16} strokeWidth={2.5} />
-                                          </button>
-                                      )}
-                                      {!isAlternative && item.groupIndex > 1 && (
-                                          <button onClick={() => handleMakeAlternative(item)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Fusionner comme alternative de la priorité précédente">
-                                              <CornerDownRight size={16} strokeWidth={2.5} />
-                                          </button>
-                                      )}
-                                      <button onClick={() => handleRemoveChoice(item.row, item.col)} className="p-1.5 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Supprimer ce vœu">
-                                          <Trash2 size={16} strokeWidth={2.5} />
-                                      </button>
-                                  </div>
-                              </div>
-                          );
-                      })}
-                  </div>
-                </div>
-              ))
-            )}
+          <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${!isAlt ? themeColors.bg : 'bg-slate-400'}`}>
+            {!isAlt ? item.groupIndex : `${item.groupIndex}.${String.fromCharCode(95 + displaySubRank)}`}
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-slate-700 text-xs uppercase truncate">
+              {colDef?.label ? `${colDef.label} - colonne ${item.col}` : `Colonne ${item.col}`}
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">
+              {new Date(item.year, item.month, item.row).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
           </div>
         </div>
-      );
-  }
+        {!isDragOverlay && (
+          <div className="flex items-center gap-1 shrink-0 opacity-60 hover:opacity-100 transition-opacity">
+            {isAlt && (
+                <button onClick={() => onMakeMain(item)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Détacher en tant que nouvelle priorité principale">
+                    <CornerUpLeft size={16} strokeWidth={2.5} />
+                </button>
+            )}
+            {!isAlt && item.groupIndex > 1 && (
+                <button onClick={() => onMakeAlt(item)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Fusionner comme alternative de la priorité précédente">
+                    <CornerDownRight size={16} strokeWidth={2.5} />
+                </button>
+            )}
+            <button onClick={() => onRemove(item.row, item.col)} className="p-1.5 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Supprimer ce vœu">
+              <Trash2 size={16} strokeWidth={2.5} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const CategoryList = ({ category, title, colorTheme }: { category: ChoiceCategory, title: string, colorTheme: 'blue' | 'orange' | 'indigo' }) => {
+    const themeColors = {
+      blue: { border: 'border-blue-600', text: 'text-blue-800', bg: 'bg-blue-600', light: 'bg-blue-50' },
+      orange: { border: 'border-orange-500', text: 'text-orange-800', bg: 'bg-orange-500', light: 'bg-orange-50' },
+      indigo: { border: 'border-indigo-700', text: 'text-indigo-800', bg: 'bg-indigo-700', light: 'bg-indigo-50' }
+    }[colorTheme];
+
+    const flatChoices = useMemo(() => {
+      return choices
+        .filter(c => c.category === category && c.status === 'PENDING')
+        .sort((a, b) => a.groupIndex !== b.groupIndex ? a.groupIndex - b.groupIndex : a.subRank - b.subRank);
+    }, [choices, category]);
+
+    const [activeId, setActiveId] = useState<number | null>(null);
+    const [dragDeltaX, setDragDeltaX] = useState(0);
+
+    const sensors = useSensors(
+      useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+      useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    );
+
+    const handleDragStart = (event: DragStartEvent) => {
+      setActiveId(event.active.id as number);
+      setDragDeltaX(0);
+    };
+
+    const handleDragMove = (event: DragMoveEvent) => {
+      setDragDeltaX(event.delta.x);
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+      setActiveId(null);
+      setDragDeltaX(0);
+      const { active, over, delta } = event;
+      if (!over) return;
+
+      const activeItem = flatChoices.find(c => c.id === active.id);
+      const overItem = flatChoices.find(c => c.id === over.id);
+      if (!activeItem || !overItem) return;
+
+      const oldIndex = flatChoices.findIndex(c => c.id === active.id);
+      const newIndex = flatChoices.findIndex(c => c.id === over.id);
+
+      let newFlatChoices = [...flatChoices];
+
+      const isDraggingMain = activeItem.subRank === 1;
+      const draggedGroupItems = isDraggingMain 
+          ? flatChoices.filter(c => c.groupIndex === activeItem.groupIndex)
+          : [activeItem];
+
+      newFlatChoices = newFlatChoices.filter(c => !draggedGroupItems.find(d => d.id === c.id));
+
+      let insertIndex = newFlatChoices.findIndex(c => c.id === overItem.id);
+      if (insertIndex === -1) {
+          insertIndex = flatChoices.findIndex(c => c.id === activeItem.id);
+      } else if (oldIndex < newIndex) {
+          insertIndex += 1;
+      }
+
+      newFlatChoices.splice(insertIndex, 0, ...draggedGroupItems);
+
+      let isAlternative = activeItem.subRank > 1;
+      if (delta.x > 30) isAlternative = true;
+      else if (delta.x < -30) isAlternative = false;
+
+      let currentGroupIndex = 0;
+      let currentSubRank = 1;
+
+      const updatedCatChoices = newFlatChoices.map((item, index) => {
+        let itemIsAlt = item.subRank > 1;
+        
+        if (item.id === activeItem.id) {
+            itemIsAlt = isAlternative;
+        } else if (isDraggingMain && draggedGroupItems.find(d => d.id === item.id)) {
+            itemIsAlt = true; 
+        }
+
+        if (index === 0) itemIsAlt = false;
+
+        if (!itemIsAlt) {
+          currentGroupIndex += 1;
+          currentSubRank = 1;
+        } else {
+          currentSubRank += 1;
+        }
+
+        return {
+          ...item,
+          groupIndex: currentGroupIndex,
+          subRank: currentSubRank
+        };
+      });
+
+      const finalChoices = choices.map(c => {
+        if (c.category === category && c.status === 'PENDING') {
+          return updatedCatChoices.find(uc => uc.id === c.id) || c;
+        }
+        return c;
+      });
+
+      onReorder(finalChoices);
+    };
+
+    const activeItem = flatChoices.find(c => c.id === activeId);
+    const draggedGroupItems = activeItem?.subRank === 1 
+        ? flatChoices.filter(c => c.groupIndex === activeItem.groupIndex)
+        : (activeItem ? [activeItem] : []);
+
+    return (
+      <div className="flex-1 flex flex-col w-full md:min-w-[320px] min-h-[400px] md:min-h-0 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 overflow-hidden text-slate-900 last:border-r-0 last:border-b-0">
+        <div className={`p-4 border-b-2 shadow-sm sticky top-0 bg-white z-30 ${themeColors.border} flex justify-between items-center`}>
+          <h2 className={`text-[10px] font-black uppercase tracking-tight ${themeColors.text}`}>
+            {title}
+          </h2>
+          <span className="text-[9px] font-bold bg-slate-100 px-2 py-1 rounded-full text-slate-500">{new Set(flatChoices.map(c => c.groupIndex)).size} Groupes</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 custom-scrollbar">
+          {flatChoices.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 opacity-40">
+                <div className="w-12 h-12 bg-slate-200 rounded-full mb-3 flex items-center justify-center text-2xl">∅</div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Aucun choix</span>
+            </div>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragMove={handleDragMove} onDragEnd={handleDragEnd}>
+              <SortableContext items={flatChoices.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col shrink-0">
+                  {flatChoices.map(item => (
+                    <SortableChoiceItem 
+                      key={item.id} 
+                      item={item} 
+                      isHidden={draggedGroupItems.some(d => d.id === item.id && d.id !== activeId)}
+                      themeColors={themeColors}
+                      colDef={columns.find(c => c.id === item.col)}
+                      onRemove={handleRemoveChoice}
+                      onMakeMain={handleMakeMain}
+                      onMakeAlt={handleMakeAlternative}
+                      dragDeltaX={activeId === item.id ? dragDeltaX : 0}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+              <DragOverlay dropAnimation={defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.4' } } })}>
+                {activeId ? (
+                  <div className={`shadow-2xl rounded-xl overflow-hidden border-2 transition-colors duration-200 ${dragDeltaX > 30 ? 'border-amber-400' : (dragDeltaX < -30 ? 'border-blue-400' : 'border-slate-300')} bg-white`}>
+                    {draggedGroupItems.map((item, index) => {
+                       const isAlt = index === 0 ? (dragDeltaX > 30 ? true : (dragDeltaX < -30 ? false : item.subRank > 1)) : true;
+                       return <SortableChoiceItem 
+                          key={item.id} 
+                          item={item} 
+                          isDragOverlay 
+                          forceAlternative={isAlt}
+                          themeColors={themeColors}
+                          colDef={columns.find(c => c.id === item.col)}
+                       />
+                    })}
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden bg-slate-100">
-      {(activeRound?.step_normal_active ?? true) && renderGroupList(normalGroups, 'normal', 'Étape 1', 'orange')}
-      {(activeRound?.step_good_bonus_active ?? true) && renderGroupList(goodBonusGroups, 'good_bonus', 'Étape 2', 'blue')}
-      {(activeRound?.step_bad_bonus_active ?? true) && renderGroupList(badBonusGroups, 'bad_bonus', 'Étape 3 - Garde au choix', 'indigo')}
+      {(activeRound?.step_normal_active ?? true) && <CategoryList category="normal" title="Étape 1" colorTheme="orange" allChoices={choices} columns={columns} onReorder={onReorder} cleanupGroupIndices={cleanupGroupIndices} handleRemoveChoice={handleRemoveChoice} handleMakeMain={handleMakeMain} handleMakeAlternative={handleMakeAlternative} />}
+      {(activeRound?.step_good_bonus_active ?? true) && <CategoryList category="good_bonus" title="Étape 2" colorTheme="blue" allChoices={choices} columns={columns} onReorder={onReorder} cleanupGroupIndices={cleanupGroupIndices} handleRemoveChoice={handleRemoveChoice} handleMakeMain={handleMakeMain} handleMakeAlternative={handleMakeAlternative} />}
+      {(activeRound?.step_bad_bonus_active ?? true) && <CategoryList category="bad_bonus" title="Étape 3 - Garde au choix" colorTheme="indigo" allChoices={choices} columns={columns} onReorder={onReorder} cleanupGroupIndices={cleanupGroupIndices} handleRemoveChoice={handleRemoveChoice} handleMakeMain={handleMakeMain} handleMakeAlternative={handleMakeAlternative} />}
     </div>
   );
 };

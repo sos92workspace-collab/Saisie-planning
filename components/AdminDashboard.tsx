@@ -166,7 +166,10 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           logAction('VIDER_BASE', { mode: 'PENDING', target: pendingTarget });
       } else {
           // RESET MODE: Automatically create a version first
-          const assignedChoices = allChoices.filter((c: any) => c.status === 'ASSIGNED');
+          const rawAssignedChoices = allChoices.filter((c: any) => c.status === 'ASSIGNED');
+          const assignedChoices = rawAssignedChoices.filter((a: any, index: number, self: any[]) => 
+              index === self.findIndex((t: any) => t.row === a.row && t.col === a.col && t.userTrigram === a.userTrigram && t.month === a.month && t.year === a.year)
+          );
           if (assignedChoices.length > 0) {
             const versionName = await generateAutoVersionName(supabase, activeRound);
             
@@ -1539,7 +1542,11 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
   };
 
   const handleCreateVersion = async () => {
-    const assignedChoices = choices.filter((c: any) => c.status === 'ASSIGNED');
+    const rawAssignedChoices = choices.filter((c: any) => c.status === 'ASSIGNED');
+    const assignedChoices = rawAssignedChoices.filter((a: any, index: number, self: any[]) => 
+        index === self.findIndex((t: any) => t.row === a.row && t.col === a.col && t.userTrigram === a.userTrigram && t.month === a.month && t.year === a.year)
+    );
+
     if (assignedChoices.length === 0) {
       alert("Aucune garde n'est actuellement attribuée.");
       return;
@@ -1673,7 +1680,11 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
             const fillPercentage = totalOpenCells > 0 ? Math.round((occupiedCells / totalOpenCells) * 100) : 0;
 
             const activeUsersWithCounts = users.map((u: any) => {
-                const count = choices.filter((c: any) => c.userTrigram === u.trigram && c.status === 'ASSIGNED' && c.month === month && c.year === year).length;
+                const userChoices = choices.filter((c: any) => c.userTrigram === u.trigram && c.status === 'ASSIGNED' && c.month === month && c.year === year);
+                const uniqueChoices = userChoices.filter((a: any, index: number, self: any[]) => 
+                    index === self.findIndex((t: any) => t.row === a.row && t.col === a.col)
+                );
+                const count = uniqueChoices.length;
                 return { trigram: u.trigram, count, role: u.role };
             }).filter((u: any) => u.count > 0).sort((a: any, b: any) => a.trigram.localeCompare(b.trigram));
 
@@ -1806,7 +1817,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                                 <line x1="100" y1="0" x2="0" y2="100" stroke="currentColor" strokeWidth="4" />
                                                             </svg>
                                                         )}
-                                                        {!isClosed && assigned && <span className="text-[6px] font-black text-slate-900 block leading-tight drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
+                                                        {!isClosed && assigned && <span className="text-[14px] md:text-[11px] font-black text-slate-900 block leading-none tracking-tighter drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
                                                     </td>
                                                 );
                                             })}
@@ -2078,6 +2089,16 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         if (filter !== 'ALL') {
             dataToExport = choices.filter((c: any) => c.status === filter);
         }
+        
+        // Deduplicate ASSIGNED choices
+        if (filter === 'ASSIGNED' || filter === 'ALL') {
+            const assigned = dataToExport.filter((c: any) => c.status === 'ASSIGNED');
+            const uniqueAssigned = assigned.filter((a: any, index: number, self: any[]) => 
+                index === self.findIndex((t: any) => t.row === a.row && t.col === a.col && t.userTrigram === a.userTrigram && t.month === a.month && t.year === a.year)
+            );
+            const nonAssigned = dataToExport.filter((c: any) => c.status !== 'ASSIGNED');
+            dataToExport = [...nonAssigned, ...uniqueAssigned];
+        }
 
         const header = "ID,Trigramme,Rôle,Tour,Date Soumission,Année,Mois,Jour,Colonne ID,Libellé Colonne,Type Garde,Horaire,Catégorie,Priorité,Sous-rang,Statut";
         const rows = dataToExport.map((c: any) => {
@@ -2112,13 +2133,18 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             }
         }
 
-        const dataToExport = choices.filter((c: any) => {
+        let dataToExport = choices.filter((c: any) => {
             if (c.status !== 'ASSIGNED') return false;
             if (validMonths.length > 0) {
                 return validMonths.some(vm => vm.month === c.month && vm.year === c.year);
             }
             return true;
         });
+
+        // Deduplicate ASSIGNED choices
+        dataToExport = dataToExport.filter((a: any, index: number, self: any[]) => 
+            index === self.findIndex((t: any) => t.row === a.row && t.col === a.col && t.userTrigram === a.userTrigram && t.month === a.month && t.year === a.year)
+        );
         
         let period = '';
         if (activeRound) {
@@ -2258,6 +2284,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         return <span className="ml-1 text-blue-600">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
     };
 
+    const uniqueAssignedCount = choices.filter((c: any) => c.status === 'ASSIGNED').filter((a: any, index: number, self: any[]) => 
+        index === self.findIndex((t: any) => t.row === a.row && t.col === a.col && t.userTrigram === a.userTrigram && t.month === a.month && t.year === a.year)
+    ).length;
+
     return (
         <div className="flex flex-col h-full bg-slate-50 relative">
             {/* Export Modal */}
@@ -2280,7 +2310,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                             </button>
                             <button onClick={() => generateCSV('ASSIGNED')} className="w-full py-4 px-6 bg-white border-2 border-green-100 hover:border-green-300 text-green-700 rounded-2xl flex items-center justify-between group transition-all">
                                 <span className="font-black text-xs uppercase tracking-widest">Validées</span>
-                                <span className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-1 rounded group-hover:bg-green-100">{choices.filter((c:any) => c.status === 'ASSIGNED').length}</span>
+                                <span className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-1 rounded group-hover:bg-green-100">{uniqueAssignedCount}</span>
                             </button>
                             <button onClick={() => generateCSV('ALL')} className="w-full py-4 px-6 bg-slate-900 text-white rounded-2xl flex items-center justify-between group hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
                                 <span className="font-black text-xs uppercase tracking-widest">Tout Exporter</span>
@@ -2288,7 +2318,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                             </button>
                             <button onClick={generate4DExport} className="w-full py-4 px-6 bg-indigo-600 text-white rounded-2xl flex items-center justify-between group hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2">
                                 <span className="font-black text-xs uppercase tracking-widest">Exporter 4D</span>
-                                <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded">{choices.filter((c:any) => c.status === 'ASSIGNED').length}</span>
+                                <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded">{uniqueAssignedCount}</span>
                             </button>
                         </div>
                         <div className="p-4 bg-slate-50 border-t flex justify-center">

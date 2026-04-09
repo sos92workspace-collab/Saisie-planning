@@ -102,11 +102,15 @@ const MonthCounters = ({ month, year, choices, columns, userTrigram }: {
         'Visite': { total: 0, semaine: 0, samediAprem: 0, dimancheJf: 0 },
     };
 
-    const myAssigned = choices.filter(c => 
+    const rawMyAssigned = choices.filter(c => 
         c.month === month && 
         c.year === year && 
         c.userTrigram === userTrigram && 
         c.status === 'ASSIGNED'
+    );
+
+    const myAssigned = rawMyAssigned.filter((a, index, self) => 
+        index === self.findIndex((t) => t.row === a.row && t.col === a.col)
     );
 
     myAssigned.forEach(choice => {
@@ -174,11 +178,15 @@ const MonthCounters = ({ month, year, choices, columns, userTrigram }: {
 };
 
 const exportToICS = (month: number, year: number, choices: Choice[], columns: any[], userTrigram: string) => {
-    const myAssigned = choices.filter(c => 
+    const rawMyAssigned = choices.filter(c => 
         c.month === month && 
         c.year === year && 
         c.userTrigram === userTrigram && 
         c.status === 'ASSIGNED'
+    );
+
+    const myAssigned = rawMyAssigned.filter((a, index, self) => 
+        index === self.findIndex((t) => t.row === a.row && t.col === a.col)
     );
 
     if (myAssigned.length === 0) {
@@ -1373,7 +1381,10 @@ const App: React.FC = () => {
                                   const isBlocked = isBlockedByUnavailability(day, col.id, month, year);
                                   
                                   // Récupérer une garde validée (ASSIGNED) sur cette case
-                                  const assignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
+                                  const rawAssignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
+                                  const assignedList = rawAssignedList.filter((a, index, self) => 
+                                      index === self.findIndex((t) => t.userTrigram === a.userTrigram)
+                                  );
                                   
                                   // Mes vœux en attente
                                   const myPendingChoices = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.userTrigram === trigram.toUpperCase() && ch.status === 'PENDING');
@@ -1524,7 +1535,7 @@ const App: React.FC = () => {
                                       {(isAssignedToMe || isAssignedToOther) && (
                                           <div className="flex flex-col items-center justify-center gap-[1px]">
                                               {assignedList.map((a, i) => (
-                                                  <span key={i} className="text-[12px] md:text-[10px] font-black drop-shadow-sm tracking-wide block leading-tight text-slate-900">
+                                                  <span key={i} className="text-[14px] md:text-[11px] font-black drop-shadow-sm tracking-tighter block leading-none text-slate-900">
                                                       {a.userTrigram}
                                                   </span>
                                               ))}
