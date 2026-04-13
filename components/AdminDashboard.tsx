@@ -1584,6 +1584,14 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                 <p className="text-xs font-bold text-slate-400 mt-1">Gérez les attributions ou fermez des cases pour tous les tours.</p>
             </div>
             <div className="flex gap-3">
+                <a 
+                    href="https://traitement-planning-avec-lecture-bd-log-tours-com-947006681133.us-west1.run.app"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white border border-purple-100 flex items-center"
+                >
+                    Traitement des choix
+                </a>
                 <button 
                     onClick={handleCreateVersion}
                     className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"

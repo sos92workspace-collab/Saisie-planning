@@ -654,14 +654,15 @@ const App: React.FC = () => {
   const handleLogin = async (e: React.FormEvent | null, targetMode: ViewMode = ViewMode.APP) => {
     if (e) e.preventDefault();
     const cleanTri = trigram.trim().toUpperCase();
-    if (cleanTri === 'ADM' && password === 'admin') {
-      setViewMode(ViewMode.ADMIN);
-      return;
-    }
+    
     const { data: user } = await supabase.from('users').select('*').eq('trigram', cleanTri).single();
     if (user && (!user.password || user.password === password)) {
       await fetchChoices(cleanTri);
-      setViewMode(targetMode);
+      if (user.role === 'ADMIN') {
+        setViewMode(ViewMode.ADMIN);
+      } else {
+        setViewMode(targetMode);
+      }
     } else {
       setLoginError('Identifiants invalides.');
     }
