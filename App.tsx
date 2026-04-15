@@ -743,13 +743,13 @@ const App: React.FC = () => {
     if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
         const isDoctor = currentUser.role === 'DOCTOR';
         const isTargetActive = isDoctor ? 
-            (currentStep === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_doctor_normal_active :
-             currentStep === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_good_active :
-             currentStep === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false)
+            (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_doctor_normal_active :
+             step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_good_active :
+             step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false)
             : 
-            (currentStep === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_substitute_normal_active :
-             currentStep === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_good_active :
-             currentStep === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_bad_active : false);
+            (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_substitute_normal_active :
+             step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_good_active :
+             step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_bad_active : false);
         
         if (isTargetActive && shiftDefinitions.length > 0) {
             const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
@@ -784,7 +784,7 @@ const App: React.FC = () => {
         return cfg.open_good_d;
     }
     return true;
-  }, [columnConfigs, currentUser, shiftDefinitions, shiftGlobalSettings, choices]);
+  }, [columnConfigs, currentUser, shiftDefinitions, shiftGlobalSettings, choices, viewMode]);
 
   const isBlockedByUnavailability = useCallback((row: number, colId: number, month: number, year: number) => {
     const constraints = unavailabilities.filter(u => u.day === row && u.month === month && u.year === year);
