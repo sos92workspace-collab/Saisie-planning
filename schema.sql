@@ -17,7 +17,13 @@ create table if not exists shift_global_settings (
   target_substitute_active boolean default false,
   target_substitute_max integer default 0,
   target_doctor_active boolean default false,
-  target_doctor_max integer default 0
+  target_doctor_max integer default 0,
+  target_substitute_normal_active boolean default false,
+  target_substitute_good_active boolean default false,
+  target_substitute_bad_active boolean default false,
+  target_doctor_normal_active boolean default false,
+  target_doctor_good_active boolean default false,
+  target_doctor_bad_active boolean default false
 );
 
 create table if not exists logs (

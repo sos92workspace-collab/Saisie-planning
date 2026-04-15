@@ -742,7 +742,14 @@ const App: React.FC = () => {
 
     if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
         const isDoctor = currentUser.role === 'DOCTOR';
-        const isTargetActive = isDoctor ? shiftGlobalSettings.target_doctor_active : shiftGlobalSettings.target_substitute_active;
+        const isTargetActive = isDoctor ? 
+            (currentStep === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_doctor_normal_active :
+             currentStep === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_good_active :
+             currentStep === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false)
+            : 
+            (currentStep === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_substitute_normal_active :
+             currentStep === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_good_active :
+             currentStep === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_bad_active : false);
         
         if (isTargetActive && shiftDefinitions.length > 0) {
             const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);

@@ -151,4 +151,10 @@ export interface ShiftGlobalSettings {
   target_substitute_max: number;
   target_doctor_active: boolean;
   target_doctor_max: number;
+  target_substitute_normal_active: boolean;
+  target_substitute_good_active: boolean;
+  target_substitute_bad_active: boolean;
+  target_doctor_normal_active: boolean;
+  target_doctor_good_active: boolean;
+  target_doctor_bad_active: boolean;
 }

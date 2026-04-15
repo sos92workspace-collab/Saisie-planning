@@ -513,41 +513,75 @@ const ShiftsPanel = ({ shiftDefinitions, shiftGlobalSettings, supabase, refreshD
             <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">Paramètres Globaux des Gardes</h3>
           </div>
           <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex-1 flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={shiftGlobalSettings?.target_substitute_active || false} onChange={async (e) => {
-                  await supabase.from('shift_global_settings').update({ target_substitute_active: e.target.checked }).eq('id', 1);
-                  refreshData();
-                }} className="w-5 h-5 rounded border-slate-300 text-orange-500 focus:ring-orange-500" />
+            <div className="flex-1 flex flex-col gap-4 bg-slate-50 p-4 rounded-2xl border">
+              <div className="flex items-center justify-between">
                 <span className="text-xs font-black uppercase text-orange-600">Remplaçant</span>
-              </label>
-              {shiftGlobalSettings?.target_substitute_active && (
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase text-slate-400">Max par jour</span>
                   <input type="number" value={shiftGlobalSettings?.target_substitute_max || 0} onChange={async (e) => {
                     await supabase.from('shift_global_settings').update({ target_substitute_max: Number(e.target.value) }).eq('id', 1);
                     refreshData();
                   }} className="w-20 p-2 border rounded-xl text-sm font-bold text-center bg-white" min="0" />
                 </div>
-              )}
+              </div>
+              <div className="flex flex-wrap gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shiftGlobalSettings?.target_substitute_normal_active || false} onChange={async (e) => {
+                    await supabase.from('shift_global_settings').update({ target_substitute_normal_active: e.target.checked }).eq('id', 1);
+                    refreshData();
+                  }} className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500" />
+                  <span className="text-[10px] font-bold uppercase text-slate-600">Garde Cible</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shiftGlobalSettings?.target_substitute_good_active || false} onChange={async (e) => {
+                    await supabase.from('shift_global_settings').update({ target_substitute_good_active: e.target.checked }).eq('id', 1);
+                    refreshData();
+                  }} className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500" />
+                  <span className="text-[10px] font-bold uppercase text-slate-600">Bonne Garde</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shiftGlobalSettings?.target_substitute_bad_active || false} onChange={async (e) => {
+                    await supabase.from('shift_global_settings').update({ target_substitute_bad_active: e.target.checked }).eq('id', 1);
+                    refreshData();
+                  }} className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500" />
+                  <span className="text-[10px] font-bold uppercase text-slate-600">Garde Normale</span>
+                </label>
+              </div>
             </div>
-            <div className="flex-1 flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={shiftGlobalSettings?.target_doctor_active || false} onChange={async (e) => {
-                  await supabase.from('shift_global_settings').update({ target_doctor_active: e.target.checked }).eq('id', 1);
-                  refreshData();
-                }} className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+            <div className="flex-1 flex flex-col gap-4 bg-slate-50 p-4 rounded-2xl border">
+              <div className="flex items-center justify-between">
                 <span className="text-xs font-black uppercase text-blue-600">Médecin</span>
-              </label>
-              {shiftGlobalSettings?.target_doctor_active && (
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black uppercase text-slate-400">Max par jour</span>
                   <input type="number" value={shiftGlobalSettings?.target_doctor_max || 0} onChange={async (e) => {
                     await supabase.from('shift_global_settings').update({ target_doctor_max: Number(e.target.value) }).eq('id', 1);
                     refreshData();
                   }} className="w-20 p-2 border rounded-xl text-sm font-bold text-center bg-white" min="0" />
                 </div>
-              )}
+              </div>
+              <div className="flex flex-wrap gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shiftGlobalSettings?.target_doctor_normal_active || false} onChange={async (e) => {
+                    await supabase.from('shift_global_settings').update({ target_doctor_normal_active: e.target.checked }).eq('id', 1);
+                    refreshData();
+                  }} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                  <span className="text-[10px] font-bold uppercase text-slate-600">Garde Cible</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shiftGlobalSettings?.target_doctor_good_active || false} onChange={async (e) => {
+                    await supabase.from('shift_global_settings').update({ target_doctor_good_active: e.target.checked }).eq('id', 1);
+                    refreshData();
+                  }} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                  <span className="text-[10px] font-bold uppercase text-slate-600">Bonne Garde</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={shiftGlobalSettings?.target_doctor_bad_active || false} onChange={async (e) => {
+                    await supabase.from('shift_global_settings').update({ target_doctor_bad_active: e.target.checked }).eq('id', 1);
+                    refreshData();
+                  }} className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                  <span className="text-[10px] font-bold uppercase text-slate-600">Garde Normale</span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
