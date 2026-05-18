@@ -1937,6 +1937,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     const [importTargetMonth, setImportTargetMonth] = useState<string>('ALL');
     const [show4DExportModal, setShow4DExportModal] = useState(false);
     const [selected4DMonthYear, setSelected4DMonthYear] = useState<string>('ALL');
+    const [isCompareDragging, setIsCompareDragging] = useState(false);
+    const [showCompareModal, setShowCompareModal] = useState(false);
+    const [compareData, setCompareData] = useState<any[] | null>(null);
+    const [compareMonthYear, setCompareMonthYear] = useState<string>('ALL');
 
     useEffect(() => {
         if (subTab === 'history') {
@@ -1958,6 +1962,77 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         });
     }, [logs, logFilter]);
     
+    // Compare File Logic
+    const handleCompareDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsCompareDragging(true);
+    };
+    const handleCompareDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsCompareDragging(false);
+    };
+    const handleCompareDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsCompareDragging(false);
+        const file = e.dataTransfer.files[0];
+        if (file) processCompareFile(file);
+    };
+    const handleCompareFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) processCompareFile(file);
+        if (e.target) e.target.value = '';
+    };
+    
+    const processCompareFile = (file: File) => {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            const text = evt.target?.result as string;
+            const lines = text.split('\n').filter(l => l.trim());
+            let rows = lines;
+            const firstLine = lines[0]?.toLowerCase() || '';
+            if (firstLine.includes('trigram') || firstLine.includes('id') || firstLine.includes('date') || firstLine.includes('med')) {
+                rows = lines.slice(1);
+            }
+            if (rows.length === 0) return;
+
+            const imported = rows.map(line => {
+                let cols = line.split('\t').map(c => c.replace(/^"|"$/g, '').trim());
+                if (cols.length < 8) cols = line.split(';').map(c => c.replace(/^"|"$/g, '').trim());
+                if (cols.length < 8) {
+                    const regex = /(".*?"|[^",]+)(?=\s*,|\s*$)/g;
+                    const matches = line.match(regex) || [];
+                    cols = matches.map(m => m.replace(/^"|"$/g, '').trim());
+                }
+                if (cols.length < 8) return null;
+                const trigram = cols[0];
+                if (trigram === 'ZZZ' || trigram === 'YYY' || trigram === 'XXX') return null;
+                const dateParts = cols[1].split('/');
+                if (dateParts.length !== 3) return null;
+                const day = Number(dateParts[0]);
+                const month = Number(dateParts[1]) - 1; // JS months are 0-indexed
+                const year = Number(dateParts[2]);
+                const colId = Number(cols[7]);
+                if (isNaN(colId)) return null;
+
+                return { trigram, day, month, year, colId };
+            }).filter(x => x !== null);
+
+            setCompareData(imported);
+            
+            // Set default month to the first available in the imported data
+            const availableYMs = Array.from(new Set(imported.map((x: any) => `${x.year}-${x.month}`))).sort();
+            if (availableYMs.length > 0) {
+                setCompareMonthYear(availableYMs[0]);
+            } else {
+                setCompareMonthYear('ALL');
+            }
+            
+            setShowCompareModal(true);
+        };
+        reader.readAsText(file);
+    };
+
     // Process File Logic (Shared between Input and Drag&Drop)
     const processFileImport = (file: File, importType: 'CLASSIC' | '4D' = 'CLASSIC', targetMonthYear: string = 'ALL') => {
         if (!file) return;
@@ -2711,7 +2786,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 )}
 
                 {subTab === 'data' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 h-full">
                         {/* EXPORT SECTION */}
                         <div className="bg-white p-8 rounded-[40px] border shadow-sm flex flex-col justify-center items-center text-center space-y-6">
                             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 mb-2">
@@ -2719,7 +2794,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                             </div>
                             <div>
                                 <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Exporter les Données</h3>
-                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Téléchargez l'intégralité de la base de choix au format CSV pour Excel ou JSON pour sauvegarde.</p>
+                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Téléchargez l'intégralité de la base de choix au format CSV pour Excel.</p>
                             </div>
                             <div className="w-full max-w-md">
                                 <button onClick={() => setShowExportModal(true)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg shadow-blue-900/20">
@@ -2763,6 +2838,38 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                     </div>
                                 </label>
                                 <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-wide text-center">Format requis : CSV</p>
+                            </div>
+                        </div>
+
+                        {/* COMPARE SECTION */}
+                        <div 
+                            className={`bg-white p-8 rounded-[40px] border-2 shadow-sm flex flex-col justify-center items-center text-center space-y-6 relative overflow-hidden transition-all duration-300 ${isCompareDragging ? 'border-amber-500 bg-amber-50 scale-[1.02]' : 'border-transparent'}`}
+                            onDragOver={handleCompareDragOver}
+                            onDragLeave={handleCompareDragLeave}
+                            onDrop={handleCompareDrop}
+                        >
+                            <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                                <svg width="200" height="200" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 22h20L12 2zm0 3.8l7.5 14.2H4.5L12 5.8zm-1 5.2v5h2v-5h-2zm0 7v2h2v-2h-2z"/></svg>
+                            </div>
+                            
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-2 relative z-10 transition-colors ${isCompareDragging ? 'bg-amber-200 text-amber-700' : 'bg-amber-50 text-amber-600'}`}>
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                            </div>
+                            <div className="relative z-10 pointer-events-none">
+                                <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">
+                                    {isCompareDragging ? "Déposez le fichier 4D ici !" : "Comparer 4D"}
+                                </h3>
+                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Importez un planning 4D pour visualiser les écarts avec la base actuelle (sans rien écraser).</p>
+                            </div>
+                            
+                            <div className="relative z-10 w-full max-w-md flex flex-col gap-3">
+                                <label className="cursor-pointer group">
+                                    <input type="file" accept=".csv" onChange={handleCompareFileUpload} className="hidden" />
+                                    <div className={`py-4 rounded-2xl font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-3 ${isCompareDragging ? 'bg-white text-amber-600 shadow-amber-200' : 'bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/30'}`}>
+                                        <span>Sélectionner Fichier</span>
+                                    </div>
+                                </label>
+                                <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-wide text-center">Format requis : 4D (CSV/TXT)</p>
                             </div>
                         </div>
                     </div>
@@ -2836,6 +2943,138 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     </div>
                 </div>
             )}
+            {showCompareModal && compareData && (() => {
+                const availableYMs = Array.from(new Set([
+                    ...compareData.map((c: any) => `${c.year}-${c.month}`),
+                    ...choices.filter((c: any) => c.status === 'ASSIGNED').map((c: any) => `${c.year}-${c.month - 1}`)
+                ])).sort();
+
+                const targetYM = compareMonthYear;
+                const [tYearStr, tMonthStr] = targetYM.split('-');
+                const tYear = Number(tYearStr) || 2025;
+                const tMonth = Number(tMonthStr) || 0;
+                
+                const ourAssigned = choices.filter((c: any) => c.status === 'ASSIGNED' && c.year === tYear && (c.month - 1) === tMonth);
+                const imported = compareData.filter((c: any) => c.year === tYear && c.month === tMonth);
+
+                const daysInMonth = new Date(tYear, tMonth + 1, 0).getDate();
+                const days = Array.from({length: daysInMonth}, (_, i) => i + 1);
+                
+                const allColIds = Array.from(new Set([
+                    ...ourAssigned.map((c: any) => c.col),
+                    ...imported.map((c: any) => c.colId)
+                ])).sort((a,b) => a - b);
+
+                return (
+                    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+                        <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 shrink-0">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Comparaison 4D</h3>
+                                    <div className="flex flex-wrap gap-3 mt-2">
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-300 block"></span> En trop (Notre base)</div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-red-100 border border-red-300 block"></span> Manquant (4D pur)</div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-orange-100 border border-orange-300 block"></span> Différent</div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300 block"></span> OK</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 w-full md:w-auto">
+                                    <select 
+                                        value={compareMonthYear}
+                                        onChange={(e) => setCompareMonthYear(e.target.value)}
+                                        className="bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all flex-1 md:flex-none"
+                                    >
+                                        {availableYMs.map(ym => {
+                                            const [y, m] = ym.split('-');
+                                            const date = new Date(parseInt(y, 10), parseInt(m, 10), 1);
+                                            const label = date.toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+                                            return <option key={ym} value={ym}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>;
+                                        })}
+                                    </select>
+                                    <button onClick={() => setShowCompareModal(false)} className="w-11 h-11 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 shadow-sm transition-all shrink-0">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-slate-100/50">
+                                <div className="border border-slate-200 bg-white rounded-2xl overflow-hidden shadow-sm inline-block min-w-full">
+                                    <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-10 w-max min-w-full">
+                                        <div className="w-[80px] p-3 font-black text-[10px] uppercase tracking-widest text-slate-500 border-r border-slate-200 text-center flex items-center justify-center shrink-0 sticky left-0 bg-slate-50 z-20">Jour</div>
+                                        {allColIds.map(colId => {
+                                            const colDef = COLUMNS.find(c => c.id === colId);
+                                            return (
+                                                <div key={colId} className="w-[100px] p-2 border-r border-slate-200 last:border-0 text-center flex flex-col shrink-0 justify-center">
+                                                    <div className="font-black text-slate-800 text-xs">C{colId}</div>
+                                                    <div className="text-[9px] font-bold text-slate-400 uppercase truncate mt-0.5" title={colDef?.label || ''}>{colDef?.label || ''}</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex flex-col w-max min-w-full">
+                                        {days.map(day => {
+                                            const date = new Date(tYear, tMonth, day);
+                                            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+                                            return (
+                                                <div key={day} className={`flex border-b border-slate-100 last:border-0 hover:bg-black/[0.02] transition-colors ${isWeekend ? 'bg-slate-50/50' : 'bg-white'}`}>
+                                                    <div className={`w-[80px] p-2 border-r border-slate-200 flex flex-col items-center justify-center text-center shrink-0 sticky left-0 z-10 ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
+                                                        <span className="font-black text-slate-900 text-sm">{day}</span>
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
+                                                    </div>
+                                                    {allColIds.map(colId => {
+                                                        const inOurs = ourAssigned.find((c: any) => c.row === day && c.col === colId);
+                                                        const inImport = imported.find((c: any) => c.day === day && c.colId === colId);
+                                                        
+                                                        let state = 'EMPTY';
+                                                        let textContent: React.ReactNode = null;
+                                                        
+                                                        if (inOurs && !inImport) {
+                                                            state = 'EXTRA';
+                                                            textContent = <span className="text-xs font-black text-blue-700" title="Dans notre base uniquement">{inOurs.userTrigram}</span>;
+                                                        } else if (!inOurs && inImport) {
+                                                            state = 'MISSING';
+                                                            textContent = <span className="text-xs font-black text-red-700" title="Manquant dans notre base">{inImport.trigram}</span>;
+                                                        } else if (inOurs && inImport) {
+                                                            if (inOurs.userTrigram === inImport.trigram) {
+                                                                state = 'MATCH';
+                                                                textContent = <span className="text-xs font-black text-emerald-700 opacity-50" title="Correspondance OK">{inOurs.userTrigram}</span>;
+                                                            } else {
+                                                                state = 'MISMATCH';
+                                                                textContent = (
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className="text-[9px] font-bold text-slate-400 line-through" title="Notre base">{inOurs.userTrigram}</span>
+                                                                        <span className="text-xs font-black text-orange-700" title="Fichier 4D">{inImport.trigram}</span>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                        }
+
+                                                        const cellClasses = state === 'EXTRA' ? 'bg-blue-50 border-blue-200' :
+                                                                            state === 'MISSING' ? 'bg-red-50 border-red-200 shadow-inner' :
+                                                                            state === 'MISMATCH' ? 'bg-orange-50 border-orange-200 shadow-inner' :
+                                                                            state === 'MATCH' ? 'bg-emerald-50 border-emerald-100' : 'border-transparent';
+
+                                                        return (
+                                                            <div key={colId} className="w-[100px] p-1.5 border-r border-slate-100 last:border-0 flex items-center justify-center shrink-0">
+                                                                {state !== 'EMPTY' && (
+                                                                    <div className={`w-full h-full min-h-[40px] rounded-xl border flex flex-col items-center justify-center p-1 relative overflow-hidden ${cellClasses}`}>
+                                                                        {textContent}
+                                                                        {state !== 'MATCH' && <div className={`absolute top-0 right-0 w-8 h-8 -mr-4 -mt-4 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };
