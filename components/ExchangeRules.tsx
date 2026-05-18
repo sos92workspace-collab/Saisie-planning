@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { COLUMNS } from '../constants';
+import { COLUMNS, isPublicHoliday } from '../constants';
 import { ColumnDefinition } from '../types';
 import { Save, AlertCircle, Check, MousePointerSquareDashed } from 'lucide-react';
 
 export type ExchangePeriod = 'SEMAINE' | 'SAMEDI' | 'DIMANCHE' | 'GLOBAL';
 export type TargetPeriod = 'SEMAINE' | 'SAMEDI' | 'DIMANCHE';
+
+const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined) => {
+  if (day == null || month == null || year == null || col == null) return '';
+  const d = new Date(year, month, day);
+  const dayName = d.toLocaleDateString('fr-FR', { weekday: 'short' }).substring(0, 3).replace('.', '');
+  const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const jf = isPublicHoliday(d) ? ' - JF' : '';
+  return `C${col} : ${colLabel || ''} - ${dayName.toUpperCase()} ${dateStr}${jf}`;
+};
 
 export interface ExchangeMode {
   col_id: number;
@@ -323,7 +332,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg">
                         <div className="text-[9px] font-black text-orange-500 uppercase mb-1">Cède</div>
                         <div className="font-bold text-slate-900 text-sm">
-                          {req.requester_choice?.row}/{req.requester_choice?.month + 1}/{req.requester_choice?.year} - {req.requester_choice?.colLabel}
+                          {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel)}
                         </div>
                       </div>
 
@@ -334,7 +343,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
                         <div className="text-[9px] font-black text-blue-500 uppercase mb-1">Récupère</div>
                         <div className="font-bold text-slate-900 text-sm">
-                          {req.target_row}/{req.target_month + 1}/{req.target_year} - {req.target_col_label}
+                          {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label)}
                         </div>
                       </div>
                     </div>
@@ -360,15 +369,17 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                   const date = new Date(req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${req.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400 font-mono text-xs">{date}</span>
-                        <span className="font-bold text-slate-700">Demande initiée par {req.requester_trigram}</span>
-                        <span className="text-slate-500">
-                          ({req.requester_choice?.row}/{req.requester_choice?.month + 1} ➔ {req.target_row}/{req.target_month + 1})
-                        </span>
+                      <div className="flex items-start gap-4">
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-bold text-slate-700">Demande initiée par {req.requester_trigram}</span>
+                          <span className="text-slate-500 text-xs">
+                          Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label)}]
+                          </span>
+                        </div>
                       </div>
                       {req.status !== 'PENDING' && (
-                        <div className="flex items-center gap-2 ml-4 pl-4 border-l-2 border-slate-200">
+                        <div className="flex items-center gap-2 ml-[136px] pl-4 border-l-2 border-slate-200">
                           <span className={`font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                             {req.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
                           </span>
@@ -503,21 +514,21 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       const { error } = await supabase.from('exchange_rule_versions').insert([{ name, is_active: false, rules_data: dump }]);
                       if (error) throw error;
                       fetchVersions();
-                      alert("Snapshot enregistré avec succès !");
+                      alert("Version enregistrée avec succès !");
                     } catch (err) {
                       console.error(err);
                       if (err instanceof Error) {
-                        alert("Erreur lors de la sauvegarde du snapshot : " + err.message);
+                        alert("Erreur lors de la sauvegarde de la version : " + err.message);
                       } else if (err && typeof err === 'object' && 'message' in err) {
-                        alert("Erreur lors de la sauvegarde du snapshot : " + err.message);
+                        alert("Erreur lors de la sauvegarde de la version : " + err.message);
                       } else {
-                        alert("Erreur lors de la sauvegarde du snapshot.");
+                        alert("Erreur lors de la sauvegarde de la version.");
                       }
                     }
                   }}
                   className="px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs font-black uppercase rounded-lg shadow-sm"
                 >
-                  Enregistrer un snapshot
+                  Enregistrer une version
                 </button>
               )}
             </div>

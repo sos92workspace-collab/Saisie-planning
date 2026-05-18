@@ -1,6 +1,9 @@
 -- SCRIPT COMPLET POUR LA FONCTIONNALITÉ D'ÉCHANGE DE GARDE ET SES VERSIONS
 -- À exécuter dans le "SQL Editor" de votre tableau de bord Supabase.
 
+-- ATTENTION: Cette ligne supprime la table existante pour retirer la colonne problématique `set_id`.
+DROP TABLE IF EXISTS exchange_rules;
+
 -- 1. Table pour stocker les modes globaux par colonne (ex. Global ou Individuel)
 CREATE TABLE IF NOT EXISTS exchange_modes (
     col_id INTEGER PRIMARY KEY,
@@ -8,7 +11,7 @@ CREATE TABLE IF NOT EXISTS exchange_modes (
 );
 
 -- 2. Table pour stocker les règles actives spécifiques (ex. Samedi Nuit vers Dimanche Matin)
-CREATE TABLE IF NOT EXISTS exchange_rules (
+CREATE TABLE exchange_rules (
     id SERIAL PRIMARY KEY,
     source_col_id INTEGER NOT NULL,
     source_period TEXT NOT NULL,
