@@ -2964,10 +2964,23 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     ...ourAssigned.map((c: any) => c.col),
                     ...imported.map((c: any) => c.colId)
                 ])).sort((a,b) => a - b);
+                
+                const dynamicColumns = allColIds.map(id => COLUMNS.find(c => c.id === id)).filter((c): c is ColumnDefinition => c !== undefined);
+
+                const activeUsers = Array.from(new Set([...ourAssigned.map((c:any) => c.userTrigram), ...imported.map((c:any) => c.trigram)])).sort();
+                const usersWithCounts = activeUsers.map(trigram => {
+                    const user = users.find((u: any) => u.trigram === trigram);
+                    const ourCount = ourAssigned.filter((c:any) => c.userTrigram === trigram).length;
+                    const importCount = imported.filter((c:any) => c.trigram === trigram).length;
+                    return { trigram, ourCount, importCount, role: user?.role || 'UNKNOWN' };
+                });
+                
+                const doctors = usersWithCounts.filter(u => u.role === 'DOCTOR' || u.role === 'UNKNOWN');
+                const substitutes = usersWithCounts.filter(u => u.role === 'SUBSTITUTE');
 
                 return (
                     <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-                        <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-7xl max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 shrink-0">
                                 <div>
                                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Comparaison 4D</h3>
@@ -2996,79 +3009,117 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                     </button>
                                 </div>
                             </div>
-
-                            <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-slate-100/50">
-                                <div className="border border-slate-200 bg-white rounded-2xl overflow-hidden shadow-sm inline-block min-w-full">
-                                    <div className="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-10 w-max min-w-full">
-                                        <div className="w-[80px] p-3 font-black text-[10px] uppercase tracking-widest text-slate-500 border-r border-slate-200 text-center flex items-center justify-center shrink-0 sticky left-0 bg-slate-50 z-20">Jour</div>
-                                        {allColIds.map(colId => {
-                                            const colDef = COLUMNS.find(c => c.id === colId);
-                                            return (
-                                                <div key={colId} className="w-[100px] p-2 border-r border-slate-200 last:border-0 text-center flex flex-col shrink-0 justify-center">
-                                                    <div className="font-black text-slate-800 text-xs">C{colId}</div>
-                                                    <div className="text-[9px] font-bold text-slate-400 uppercase truncate mt-0.5" title={colDef?.label || ''}>{colDef?.label || ''}</div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="flex flex-col w-max min-w-full">
-                                        {days.map(day => {
-                                            const date = new Date(tYear, tMonth, day);
-                                            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                                            return (
-                                                <div key={day} className={`flex border-b border-slate-100 last:border-0 hover:bg-black/[0.02] transition-colors ${isWeekend ? 'bg-slate-50/50' : 'bg-white'}`}>
-                                                    <div className={`w-[80px] p-2 border-r border-slate-200 flex flex-col items-center justify-center text-center shrink-0 sticky left-0 z-10 ${isWeekend ? 'bg-slate-50' : 'bg-white'}`}>
-                                                        <span className="font-black text-slate-900 text-sm">{day}</span>
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{date.toLocaleDateString('fr-FR', { weekday: 'short' })}</span>
-                                                    </div>
-                                                    {allColIds.map(colId => {
-                                                        const inOurs = ourAssigned.find((c: any) => c.row === day && c.col === colId);
-                                                        const inImport = imported.find((c: any) => c.day === day && c.colId === colId);
-                                                        
-                                                        let state = 'EMPTY';
-                                                        let textContent: React.ReactNode = null;
-                                                        
-                                                        if (inOurs && !inImport) {
-                                                            state = 'EXTRA';
-                                                            textContent = <span className="text-xs font-black text-blue-700" title="Dans notre base uniquement">{inOurs.userTrigram}</span>;
-                                                        } else if (!inOurs && inImport) {
-                                                            state = 'MISSING';
-                                                            textContent = <span className="text-xs font-black text-red-700" title="Manquant dans notre base">{inImport.trigram}</span>;
-                                                        } else if (inOurs && inImport) {
-                                                            if (inOurs.userTrigram === inImport.trigram) {
-                                                                state = 'MATCH';
-                                                                textContent = <span className="text-xs font-black text-emerald-700 opacity-50" title="Correspondance OK">{inOurs.userTrigram}</span>;
-                                                            } else {
-                                                                state = 'MISMATCH';
-                                                                textContent = (
-                                                                    <div className="flex flex-col items-center">
-                                                                        <span className="text-[9px] font-bold text-slate-400 line-through" title="Notre base">{inOurs.userTrigram}</span>
-                                                                        <span className="text-xs font-black text-orange-700" title="Fichier 4D">{inImport.trigram}</span>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                        }
-
-                                                        const cellClasses = state === 'EXTRA' ? 'bg-blue-50 border-blue-200' :
-                                                                            state === 'MISSING' ? 'bg-red-50 border-red-200 shadow-inner' :
-                                                                            state === 'MISMATCH' ? 'bg-orange-50 border-orange-200 shadow-inner' :
-                                                                            state === 'MATCH' ? 'bg-emerald-50 border-emerald-100' : 'border-transparent';
-
+                            
+                            <div className="shrink-0 p-4 border-b border-slate-100 bg-white space-y-4 max-h-[30vh] overflow-y-auto custom-scrollbar">
+                                {(doctors.length > 0 || substitutes.length > 0) && (
+                                    <div className="flex flex-col gap-3">
+                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Compteurs (Notre Base / 4D)</div>
+                                        
+                                        {doctors.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Titulaires</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {doctors.map(uc => {
+                                                        const isDiff = uc.ourCount !== uc.importCount;
                                                         return (
-                                                            <div key={colId} className="w-[100px] p-1.5 border-r border-slate-100 last:border-0 flex items-center justify-center shrink-0">
-                                                                {state !== 'EMPTY' && (
-                                                                    <div className={`w-full h-full min-h-[40px] rounded-xl border flex flex-col items-center justify-center p-1 relative overflow-hidden ${cellClasses}`}>
-                                                                        {textContent}
-                                                                        {state !== 'MATCH' && <div className={`absolute top-0 right-0 w-8 h-8 -mr-4 -mt-4 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}
-                                                                    </div>
-                                                                )}
+                                                            <div key={uc.trigram} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 ${isDiff ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                                                <span>{uc.trigram}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded-md text-white ${isDiff ? 'bg-orange-500' : 'bg-slate-400'}`}>{uc.ourCount} / {uc.importCount}</span>
                                                             </div>
                                                         );
                                                     })}
                                                 </div>
-                                            );
-                                        })}
+                                            </div>
+                                        )}
+
+                                        {substitutes.length > 0 && (
+                                            <div className="space-y-2">
+                                                <div className="text-[9px] font-bold text-orange-600 uppercase tracking-widest">Remplaçants</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {substitutes.map(uc => {
+                                                        const isDiff = uc.ourCount !== uc.importCount;
+                                                        return (
+                                                            <div key={uc.trigram} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 ${isDiff ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                                                <span>{uc.trigram}</span>
+                                                                <span className={`px-1.5 py-0.5 rounded-md text-white ${isDiff ? 'bg-orange-500' : 'bg-slate-400'}`}>{uc.ourCount} / {uc.importCount}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
+                                )}
+                            </div>
+
+                            <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-slate-50">
+                                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 inline-block min-w-full">
+                                    <table className="w-max min-w-full border-separate border-spacing-0 table-fixed">
+                                        <MatrixHeader columns={dynamicColumns} month={tMonth} year={tYear} />
+                                        <tbody>
+                                            {days.map(day => {
+                                                const date = new Date(tYear, tMonth, day);
+                                                const isSunday = date.getDay() === 0;
+                                                const isHoliday = isPublicHoliday(date);
+                                                const isOffDay = isSunday || isHoliday;
+                                                const dayName = date.toLocaleDateString('fr-FR', { weekday: 'short' }).substring(0, 3).replace('.', '');
+                                                const rowHeaderBg = isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900';
+
+                                                return (
+                                                    <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                                        <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-5 font-black ${rowHeaderBg}`}>
+                                                            <div className="flex items-center justify-center gap-0.5">
+                                                                <span className="text-[7px] font-normal opacity-70">{dayName}</span>
+                                                                <span className="text-[7px]">{day}</span>
+                                                            </div>
+                                                        </td>
+                                                        {dynamicColumns.map(col => {
+                                                            const inOurs = ourAssigned.find((c: any) => c.row === day && c.col === col.id);
+                                                            const inImport = imported.find((c: any) => c.day === day && c.colId === col.id);
+                                                            
+                                                            let state = 'EMPTY';
+                                                            let textContent: React.ReactNode = null;
+                                                            
+                                                            if (inOurs && !inImport) {
+                                                                state = 'EXTRA';
+                                                                textContent = <span className="text-[14px] md:text-[11px] font-black text-blue-700 drop-shadow-sm">{inOurs.userTrigram}</span>;
+                                                            } else if (!inOurs && inImport) {
+                                                                state = 'MISSING';
+                                                                textContent = <span className="text-[14px] md:text-[11px] font-black text-red-700 drop-shadow-sm">{inImport.trigram}</span>;
+                                                            } else if (inOurs && inImport) {
+                                                                if (inOurs.userTrigram === inImport.trigram) {
+                                                                    state = 'MATCH';
+                                                                    textContent = <span className="text-[14px] md:text-[11px] font-black text-emerald-700 opacity-60 drop-shadow-sm">{inOurs.userTrigram}</span>;
+                                                                } else {
+                                                                    state = 'MISMATCH';
+                                                                    textContent = (
+                                                                        <div className="flex flex-col items-center leading-none">
+                                                                            <span className="text-[7px] font-bold text-slate-500 line-through">{inOurs.userTrigram}</span>
+                                                                            <span className="text-[11px] md:text-[9px] font-black text-orange-700">{inImport.trigram}</span>
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                            }
+
+                                                            const cellClasses = state === 'EXTRA' ? 'bg-blue-100 border-blue-200' :
+                                                                                state === 'MISSING' ? 'bg-red-100 border-red-200' :
+                                                                                state === 'MISMATCH' ? 'bg-orange-100 border-orange-200' :
+                                                                                state === 'MATCH' ? 'bg-emerald-50 border-emerald-100' : 'bg-white opacity-50';
+
+                                                            return (
+                                                                <td key={col.id} className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] align-middle overflow-hidden bg-white`}>
+                                                                    <div className={`absolute inset-0 flex items-center justify-center ${cellClasses}`}>
+                                                                        {textContent}
+                                                                        {state !== 'MATCH' && state !== 'EMPTY' && <div className={`absolute top-0 right-0 w-4 h-4 -mr-2 -mt-2 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}
+                                                                    </div>
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
