@@ -85,7 +85,8 @@ export enum AdminTab {
   SHIFTS = 'GARDES',
   PLANNING = 'PLANNING',
   WISHES = 'CHOIX MÉDECIN',
-  VERSIONS = 'VERSIONS'
+  VERSIONS = 'VERSIONS',
+  EXCHANGES = 'ÉCHANGES'
 }
 
 export interface Round {
@@ -107,6 +108,7 @@ export interface Round {
   instructions_good_bonus: string;
   maxOverlapMinutes?: number;
   allow_choice_reproduction: boolean;
+  allow_exchanges: boolean;
 }
 
 export interface ColumnConfig {
@@ -157,4 +159,15 @@ export interface ShiftGlobalSettings {
   target_doctor_normal_active: boolean;
   target_doctor_good_active: boolean;
   target_doctor_bad_active: boolean;
+}
+
+export interface ExchangeRequest {
+  id: string;
+  round_id: number;
+  requester_trigram: string;
+  requester_choice_id: string;
+  target_trigram: string;
+  target_choice_id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  created_at: string;
 }

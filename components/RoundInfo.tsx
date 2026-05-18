@@ -92,15 +92,33 @@ export const RoundInfo: React.FC<Props> = ({ round, stepInstruction }) => {
                             <polyline points="22 4 12 14.01 9 11.01"></polyline>
                         </svg>
                     </div>
-                    <h3 className="text-xs font-black uppercase text-emerald-400 tracking-widest">Étape en cours</h3>
+                    <h3 className="text-xs font-black uppercase text-emerald-400 tracking-widest">Règles & Équations (Toutes étapes)</h3>
                 </div>
-                <div className="bg-emerald-900/10 p-5 rounded-2xl border border-emerald-500/20 text-emerald-100 text-sm leading-relaxed whitespace-pre-wrap shadow-inner relative overflow-hidden">
+                <div className="bg-emerald-900/10 p-5 rounded-2xl border border-emerald-500/20 text-emerald-100 text-sm leading-relaxed whitespace-pre-wrap shadow-inner relative overflow-hidden flex flex-col gap-4">
                     <div className="absolute top-0 right-0 p-2 opacity-10">
                         <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" className="text-emerald-500">
                             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
                         </svg>
                     </div>
-                    {stepInstruction || "Aucune consigne spécifique pour cette étape."}
+                    
+                    {round.step_normal_active && (
+                       <div>
+                           <strong className="text-emerald-300">Étape 1 (Gardes Cibles) :</strong>
+                           <p className="mt-1 opacity-90">{round.instructions_normal || "Aucune consigne"}</p>
+                       </div>
+                    )}
+                    {round.step_good_bonus_active && (
+                       <div>
+                           <strong className="text-emerald-300">Étape 2 (Bonnes Gardes) :</strong>
+                           <p className="mt-1 opacity-90">{round.instructions_good_bonus || "Aucune consigne"}</p>
+                       </div>
+                    )}
+                    {round.step_bad_bonus_active && (
+                       <div>
+                           <strong className="text-emerald-300">Étape 3 (Gardes au Choix / Normales) :</strong>
+                           <p className="mt-1 opacity-90">{round.instructions_bad_bonus || "Aucune consigne"}</p>
+                       </div>
+                    )}
                 </div>
             </div>
         </div>

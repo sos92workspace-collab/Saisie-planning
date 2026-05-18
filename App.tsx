@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronDown, Calendar } from 'lucide-react';
+import { ChevronDown, Calendar, Bot } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
@@ -10,6 +10,8 @@ import { RoundInfo } from './components/RoundInfo';
 import { AdminDashboard } from './components/AdminDashboard';
 import { UnavailabilityModal } from './components/UnavailabilityModal';
 import { ListView } from './components/ListView';
+import { ChatAssistant } from './components/ChatAssistant';
+import { DoctorProfileWizard } from './components/DoctorProfileWizard';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -305,6 +307,23 @@ const App: React.FC = () => {
   const [reproductionStep, setReproductionStep] = useState<AppStep | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
   const [isConsultationMode, setIsConsultationMode] = useState(false);
+  const [doctorProfile, setDoctorProfile] = useState<any>(() => {
+     try {
+        return JSON.parse(localStorage.getItem('doctor_profile_TES') || 'null');
+     } catch (e) {
+        return null;
+     }
+  });
+
+  // Exchange state
+  const [exchangeMode, setExchangeMode] = useState<'INACTIVE' | 'SELECT_OWN' | 'SELECT_TARGET'>('INACTIVE');
+  const [selectedOwnChoice, setSelectedOwnChoice] = useState<Choice | null>(null);
+  const [possibleTargetChoices, setPossibleTargetChoices] = useState<Choice[]>([]);
+  const [selectedTargetChoice, setSelectedTargetChoice] = useState<Choice | null>(null);
+  const [showExchangeConfirmModal, setShowExchangeConfirmModal] = useState(false);
+  const [exchangeRules, setExchangeRules] = useState<any[]>([]);
+  const [exchangeModes, setExchangeModes] = useState<Record<number, string>>({});
+
   const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
 
   useEffect(() => {
@@ -649,6 +668,17 @@ const App: React.FC = () => {
     if (unav) setUnavailabilities(unav.map((u: any) => ({
         id: u.id, userTrigram: u.user_trigram, day: u.day, month: u.month - 1, year: u.year, period: u.period
     })));
+
+    // Load exchange rules
+    const { data: rulesData } = await supabase.from('exchange_rules').select('*');
+    if (rulesData) setExchangeRules(rulesData);
+    
+    const { data: modesData } = await supabase.from('exchange_modes').select('*');
+    if (modesData) {
+      const modesMap: Record<number, string> = {};
+      modesData.forEach((m: any) => modesMap[m.col_id] = m.mode);
+      setExchangeModes(modesMap);
+    }
   }, []);
 
   const handleLogin = async (e: React.FormEvent | null, targetMode: ViewMode = ViewMode.APP) => {
@@ -735,7 +765,7 @@ const App: React.FC = () => {
     if (!cfg) return true;
     const date = new Date(year, month, day);
     const dayOfWeek = date.getDay(); 
-    const type: 'w' | 's' | 'd' = (dayOfWeek === 0) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
+    const type: 'w' | 's' | 'd' = (dayOfWeek === 0 || isPublicHoliday(date)) ? 'd' : (dayOfWeek === 6) ? 's' : 'w';
     
     // Safety check: In APP mode, if user or settings are not loaded yet, default to closed to prevent flashing open
     if ((viewMode === ViewMode.APP || viewMode === ViewMode.LIST_INPUT) && (!currentUser || !shiftGlobalSettings)) return false;
@@ -850,7 +880,186 @@ const App: React.FC = () => {
       prevCategoryRef.current = category;
   }, [choices, category, trigram, viewMode]);
 
+
+
+  const handleAIChoices = useCallback(async (suggestions: any[]) => {
+      const newChoices: Choice[] = [];
+      const user = users.find(u => u.trigram === trigram.toUpperCase());
+      if (!user) return;
+
+      const currentRound = rounds.find(r => r.id === currentRoundId);
+      const maxOverlapMinutes = currentRound?.maxOverlapMinutes || 0;
+
+      for (const s of suggestions) {
+          const month = s.month !== undefined ? s.month : (monthsToDisplay[0]?.month || 0);
+          const year = s.year !== undefined ? s.year : (monthsToDisplay[0]?.year || new Date().getFullYear());
+          const row = s.day;
+          const colId = s.columnId;
+          const assignedCategory = s.category || category; // Fallback ou fourni par IA
+          
+          const colConfig = columnConfigs.find(c => c.column_id === colId);
+          const baseColDef = COLUMNS.find(c => c.id === colId);
+          if(!baseColDef) continue;
+          
+          const finalLabel = colConfig?.custom_label || baseColDef.label;
+          const finalType = colConfig?.custom_type || baseColDef.type;
+          const finalTimeRange = colConfig?.custom_time_range || baseColDef.timeRange;
+
+          const targetPriority = s.priority || activePriority;
+
+          // Check if we need to assign a subRank to this priority group
+          const existingInGroup = [...choices, ...newChoices].filter(c => 
+              c.status === 'PENDING' &&
+              c.userTrigram === user.trigram && 
+              c.category === assignedCategory && 
+              c.groupIndex === targetPriority
+          );
+          
+          let nextSubRank = 1;
+          if (existingInGroup.length > 0) {
+              nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
+          }
+
+          if (nextSubRank > 27) continue;
+
+          if (nextSubRank === 1) {
+              const assignedSameDay = [...choices, ...newChoices].filter(c => 
+                  c.userTrigram === user.trigram && 
+                  c.row === row && 
+                  c.month === month && 
+                  c.year === year &&
+                  c.status === 'ASSIGNED'
+              );
+              
+              let overlapFound = false;
+              for (const assignedChoice of assignedSameDay) {
+                  const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
+                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
+                      overlapFound = true;
+                      break;
+                  }
+              }
+              if (overlapFound) continue; 
+          }
+
+          const choice: Choice = {
+              id: generateId(),
+              row, col: colId, month, year,
+              groupIndex: targetPriority, 
+              subRank: nextSubRank, 
+              category: assignedCategory,
+              userTrigram: user.trigram, userRole: user.role,
+              status: 'PENDING', submittedAt: new Date().toISOString(), roundId: currentRoundId,
+              colLabel: finalLabel,
+              colType: finalType,
+              colTimeRange: finalTimeRange
+          };
+          newChoices.push(choice);
+      }
+      
+      if (newChoices.length > 0) {
+          setChoices(prev => [...prev, ...newChoices]);
+      }
+  }, [users, trigram, activePriority, category, currentRoundId, columnConfigs, monthsToDisplay, choices]);
+
+  const dynamicColumns = useMemo(() => {
+    return COLUMNS.map(col => {
+      const cfg = columnConfigs.find(c => c.column_id === col.id);
+      return {
+        ...col,
+        label: cfg?.custom_label || col.label,
+        headerLabel: cfg?.custom_header_label || col.headerLabel,
+        type: (cfg?.custom_type as any) || col.type,
+        site: (cfg?.custom_site as any) || col.site,
+        timeRange: cfg?.custom_time_range || col.timeRange,
+        customColor: cfg?.custom_color || getDefaultColor(col.colorClass) || '#FFFFFF'
+      };
+    });
+  }, [columnConfigs]);
+
+  const computePossibleTargets = useCallback((ownChoice: Choice) => {
+    // 1. Determine period of ownChoice
+    const d = new Date(ownChoice.year, ownChoice.month, ownChoice.row);
+    const dayOfWeek = d.getDay();
+    const isHoliday = isPublicHoliday(d);
+    let sourcePeriod: 'SEMAINE' | 'SAMEDI' | 'DIMANCHE' = 'SEMAINE';
+    if (dayOfWeek === 0 || isHoliday) sourcePeriod = 'DIMANCHE';
+    else if (dayOfWeek === 6) sourcePeriod = 'SAMEDI';
+
+    // 2. Find matching rules
+    const mode = exchangeModes[ownChoice.col] || 'GLOBAL';
+    const activePeriod = mode === 'GLOBAL' ? 'GLOBAL' : sourcePeriod;
+    
+    const validRules = exchangeRules.filter(r => 
+      r.source_col_id === ownChoice.col && 
+      r.source_period === activePeriod
+    );
+
+    // 3. Find all EMPTY cells that match the rules and are not closed
+    const possibleTargets: any[] = [];
+
+    monthsToDisplay.forEach(({ month, year }) => {
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const targetDate = new Date(year, month, day);
+        const targetDayOfWeek = targetDate.getDay();
+        const targetIsHoliday = isPublicHoliday(targetDate);
+        let targetPeriod: 'SEMAINE' | 'SAMEDI' | 'DIMANCHE' = 'SEMAINE';
+        if (targetDayOfWeek === 0 || targetIsHoliday) targetPeriod = 'DIMANCHE';
+        else if (targetDayOfWeek === 6) targetPeriod = 'SAMEDI';
+
+        dynamicColumns.forEach(col => {
+          // Check if rule exists for this target col and period
+          const isValidRule = validRules.some(r => r.target_col_id === col.id && r.target_period === targetPeriod);
+          if (!isValidRule) return;
+
+          // Check if cell is globally closed or closed by config
+          const isClosed = globalClosures.some((gc: any) => gc.col_id === col.id && gc.row === day && gc.month === month && gc.year === year);
+          const open = isColOpen(col.id, currentStep, day, month, year) && !isClosed;
+          if (!open) return;
+
+          // Check if cell is already assigned to ANYONE
+          const isAssigned = choices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year && c.status === 'ASSIGNED');
+          if (isAssigned) return;
+
+          possibleTargets.push({
+            id: `empty-${day}-${month}-${year}-${col.id}`,
+            row: day,
+            col: col.id,
+            month,
+            year,
+            colLabel: col.label
+          });
+        });
+      }
+    });
+
+    setPossibleTargetChoices(possibleTargets);
+  }, [choices, exchangeRules, exchangeModes, trigram, currentRoundId, globalClosures, monthsToDisplay, dynamicColumns, isColOpen, currentStep]);
+
   const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false, explicitPriority?: number) => {
+    if (exchangeMode !== 'INACTIVE') {
+        const clickedAssigned = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+
+        if (exchangeMode === 'SELECT_OWN') {
+            if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
+                setSelectedOwnChoice(clickedAssigned);
+                setExchangeMode('SELECT_TARGET');
+                computePossibleTargets(clickedAssigned);
+            }
+        } else if (exchangeMode === 'SELECT_TARGET') {
+            if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
+                setSelectedOwnChoice(clickedAssigned);
+                computePossibleTargets(clickedAssigned);
+            } else if (possibleTargetChoices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year)) {
+                const target = possibleTargetChoices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year);
+                setSelectedTargetChoice(target);
+                setShowExchangeConfirmModal(true);
+            }
+        }
+        return;
+    }
+
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
 
     const cleanTri = trigram.trim().toUpperCase();
@@ -970,102 +1179,36 @@ const App: React.FC = () => {
     };
     
     setChoices(prev => [...prev, newChoice]);
-  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures]);
+  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets]);
 
-  const handleAIChoices = useCallback(async (suggestions: any[]) => {
-      const newChoices: Choice[] = [];
-      const user = users.find(u => u.trigram === trigram.toUpperCase());
-      if (!user) return;
-
-      const currentRound = rounds.find(r => r.id === currentRoundId);
-      const maxOverlapMinutes = currentRound?.maxOverlapMinutes || 0;
-
-      const currentChoicesState = choices; 
-
-      for (const s of suggestions) {
-          const month = s.month !== undefined ? s.month : (monthsToDisplay[0]?.month || 0);
-          const year = s.year !== undefined ? s.year : (monthsToDisplay[0]?.year || new Date().getFullYear());
-          const row = s.day;
-          const colId = s.columnId;
-          
-          const colConfig = columnConfigs.find(c => c.column_id === colId);
-          const baseColDef = COLUMNS.find(c => c.id === colId);
-          if(!baseColDef) continue;
-          
-          const finalLabel = colConfig?.custom_label || baseColDef.label;
-          const finalType = colConfig?.custom_type || baseColDef.type;
-          const finalTimeRange = colConfig?.custom_time_range || baseColDef.timeRange;
-
-          const targetPriority = s.priority || activePriority;
-
-          const existingInGroup = [...currentChoicesState, ...newChoices].filter(c => 
-              c.status === 'PENDING' &&
-              c.userTrigram === user.trigram && 
-              c.category === category && 
-              c.groupIndex === targetPriority
-          );
-          
-          let nextSubRank = 1;
-          if (existingInGroup.length > 0) {
-              nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
-          }
-
-          if (nextSubRank > 27) continue;
-
-          if (nextSubRank === 1) {
-              const assignedSameDay = [...currentChoicesState, ...newChoices].filter(c => 
-                  c.userTrigram === user.trigram && 
-                  c.row === row && 
-                  c.month === month && 
-                  c.year === year &&
-                  c.status === 'ASSIGNED'
-              );
-              
-              let overlapFound = false;
-              for (const assignedChoice of assignedSameDay) {
-                  const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
-                  if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
-                      overlapFound = true;
-                      break;
-                  }
-              }
-              if (overlapFound) continue; 
-          }
-
-          const choice: Choice = {
-              id: generateId(),
-              row, col: colId, month, year,
-              groupIndex: targetPriority, 
-              subRank: nextSubRank, 
-              category,
-              userTrigram: user.trigram, userRole: user.role,
-              status: 'PENDING', submittedAt: new Date().toISOString(), roundId: currentRoundId,
-              colLabel: finalLabel,
-              colType: finalType,
-              colTimeRange: finalTimeRange
-          };
-          newChoices.push(choice);
-      }
+  const handleExchangeConfirm = async () => {
+    if (!selectedOwnChoice || !selectedTargetChoice) return;
+    
+    try {
+      const { error } = await supabase.from('exchange_requests').insert({
+        round_id: currentRoundId,
+        requester_trigram: trigram.toUpperCase(),
+        requester_choice_id: selectedOwnChoice.id,
+        target_row: selectedTargetChoice.row,
+        target_col: selectedTargetChoice.col,
+        target_month: selectedTargetChoice.month,
+        target_year: selectedTargetChoice.year,
+        target_col_label: selectedTargetChoice.colLabel,
+        status: 'PENDING'
+      });
       
-      if (newChoices.length > 0) {
-          setChoices(prev => [...prev, ...newChoices]);
-      }
-  }, [users, trigram, activePriority, category, currentRoundId, columnConfigs, isColOpen, isBlockedByUnavailability, monthsToDisplay, currentStep, choices]);
-
-  const dynamicColumns = useMemo(() => {
-    return COLUMNS.map(col => {
-      const cfg = columnConfigs.find(c => c.column_id === col.id);
-      return {
-        ...col,
-        label: cfg?.custom_label || col.label,
-        headerLabel: cfg?.custom_header_label || col.headerLabel,
-        type: (cfg?.custom_type as any) || col.type,
-        site: (cfg?.custom_site as any) || col.site,
-        timeRange: cfg?.custom_time_range || col.timeRange,
-        customColor: cfg?.custom_color || getDefaultColor(col.colorClass) || '#FFFFFF'
-      };
-    });
-  }, [columnConfigs]);
+      if (error) throw error;
+      
+      alert("Votre demande d'échange a été envoyée à l'administrateur.");
+      setExchangeMode('INACTIVE');
+      setSelectedOwnChoice(null);
+      setSelectedTargetChoice(null);
+      setShowExchangeConfirmModal(false);
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de l'envoi de la demande d'échange.");
+    }
+  };
 
   if (isInitialLoading && viewMode === ViewMode.LOGIN) {
     return (
@@ -1117,6 +1260,53 @@ const App: React.FC = () => {
                 <div className="flex flex-col gap-3">
                     <button onClick={() => setIsConsultationMode(true)} className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-900/20">Consulter le planning attribué</button>
                     <button onClick={() => setViewMode(ViewMode.LOGIN)} className="px-8 py-4 bg-white/10 text-white border border-white/20 rounded-2xl font-black uppercase tracking-widest hover:bg-white/20 transition-all">Retourner à l'accueil</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showExchangeConfirmModal && selectedOwnChoice && selectedTargetChoice && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6">
+                <h3 className="text-xl font-black uppercase text-slate-900 mb-4">Confirmer l'échange</h3>
+                <p className="text-sm text-slate-600 mb-6">
+                    Vous êtes sur le point de proposer un échange :
+                </p>
+                <div className="space-y-4 mb-8">
+                    <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl">
+                        <div className="text-[10px] font-black text-orange-500 uppercase mb-1">Vous cédez :</div>
+                        <div className="font-bold text-slate-900">
+                            {selectedOwnChoice.row}/{selectedOwnChoice.month + 1}/{selectedOwnChoice.year} - {selectedOwnChoice.colLabel}
+                        </div>
+                    </div>
+                    <div className="flex justify-center">
+                        <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                        </div>
+                    </div>
+                    <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                        <div className="text-[10px] font-black text-blue-500 uppercase mb-1">Vous récupérez :</div>
+                        <div className="font-bold text-slate-900">
+                            {selectedTargetChoice.row}/{selectedTargetChoice.month + 1}/{selectedTargetChoice.year} - {selectedTargetChoice.colLabel}
+                        </div>
+                    </div>
+                </div>
+                <div className="flex gap-3">
+                    <button 
+                        onClick={() => {
+                            setShowExchangeConfirmModal(false);
+                            setSelectedTargetChoice(null);
+                        }} 
+                        className="flex-1 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-xl transition-colors"
+                    >
+                        Annuler
+                    </button>
+                    <button 
+                        onClick={handleExchangeConfirm} 
+                        className="flex-1 py-3 bg-blue-600 text-white text-sm font-black uppercase rounded-xl hover:bg-blue-700 shadow-lg transition-colors"
+                    >
+                        Confirmer
+                    </button>
                 </div>
             </div>
         </div>
@@ -1201,7 +1391,7 @@ const App: React.FC = () => {
             )}
         </div>
         <div className="flex items-center gap-4">
-            {currentUser?.role === 'DOCTOR' && (
+            {currentUser?.role !== 'ADMIN' && (
                 <div className="flex items-center gap-2">
                     {!isConsultationMode && (
                         <button 
@@ -1214,11 +1404,32 @@ const App: React.FC = () => {
                     )}
                     {(viewMode === ViewMode.APP || isConsultationMode) && (
                         <button 
-                            onClick={() => setIsConsultationMode(!isConsultationMode)}
+                            onClick={() => {
+                                setIsConsultationMode(!isConsultationMode);
+                                if (exchangeMode !== 'INACTIVE') setExchangeMode('INACTIVE');
+                            }}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
                         >
                             <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
                             <span className="md:hidden">Planning</span>
+                        </button>
+                    )}
+
+                    {activeRound?.allow_exchanges && isConsultationMode && (
+                        <button 
+                            onClick={() => {
+                                if (exchangeMode === 'INACTIVE') {
+                                    setExchangeMode('SELECT_OWN');
+                                    setSelectedOwnChoice(null);
+                                    setPossibleTargetChoices([]);
+                                } else {
+                                    setExchangeMode('INACTIVE');
+                                }
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${exchangeMode !== 'INACTIVE' ? 'bg-orange-500 text-white border-orange-600 hover:bg-orange-600' : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-500 hover:text-white'}`}
+                        >
+                            <span className="hidden md:inline">{exchangeMode !== 'INACTIVE' ? 'Annuler l\'échange' : 'Échanger des gardes'}</span>
+                            <span className="md:hidden">Échanger</span>
                         </button>
                     )}
 
@@ -1253,6 +1464,56 @@ const App: React.FC = () => {
           <button onClick={() => setViewMode(ViewMode.LOGIN)} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
         </div>
       </header>
+
+      {/* Exchange Banner */}
+      {exchangeMode !== 'INACTIVE' && (
+          <div className="bg-slate-900 text-white p-4 flex flex-col md:flex-row items-center justify-center gap-4 shadow-lg z-40 shrink-0">
+              {exchangeMode === 'SELECT_OWN' && (
+                  <div className="font-bold flex items-center gap-3 text-sm">
+                      <span className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse shadow-[0_0_10px_rgba(250,204,21,0.5)]"></span>
+                      Sélectionnez l'une de vos gardes (en jaune) à échanger
+                  </div>
+              )}
+              {exchangeMode === 'SELECT_TARGET' && selectedOwnChoice && (
+                  <>
+                      <div className="flex items-center gap-3 bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
+                          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center font-black shadow-inner text-white">
+                              {selectedOwnChoice.row}
+                          </div>
+                          <div className="pr-2">
+                              <div className="text-[10px] text-slate-400 font-black uppercase">Vous cédez</div>
+                              <div className="font-bold text-sm text-white">{selectedOwnChoice.colLabel}</div>
+                          </div>
+                      </div>
+                      
+                      <div className="text-slate-500 hidden md:block">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/30 border-dashed">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                          </div>
+                          <div className="pr-2">
+                              <div className="text-[10px] text-blue-400 font-black uppercase">Vous récupérez</div>
+                              <div className="font-bold text-sm text-blue-300">Sélectionnez une garde bleue</div>
+                          </div>
+                      </div>
+                      
+                      <button 
+                          onClick={() => {
+                              setExchangeMode('SELECT_OWN');
+                              setSelectedOwnChoice(null);
+                              setPossibleTargetChoices([]);
+                          }}
+                          className="ml-auto px-4 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors text-white"
+                      >
+                          Annuler
+                      </button>
+                  </>
+              )}
+          </div>
+      )}
 
       {/* Mobile Bottom Navigation */}
       {!isConsultationMode && viewMode !== ViewMode.LOGIN && (
@@ -1346,6 +1607,18 @@ const App: React.FC = () => {
                     <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
                     <div className="h-px bg-slate-200 flex-1"></div>
                     <button 
+                        onClick={() => {
+                           window.dispatchEvent(new CustomEvent('trigger-ai-proposal'));
+                        }}
+                        className={`flex items-center gap-2 ${trigram.toUpperCase() === 'TES' ? 'px-4' : 'px-3'} py-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl hover:bg-indigo-200 transition-colors text-sm font-black shadow-sm`}
+                        title="Générer planning IA"
+                    >
+                        <Bot className="w-4 h-4" />
+                        {trigram.toUpperCase() === 'TES' && (
+                            <span className="hidden sm:inline">Générer planning complet IA</span>
+                        )}
+                    </button>
+                    <button 
                         onClick={() => exportToICS(month, year, choices, dynamicColumns, trigram.toUpperCase())}
                         className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors text-sm font-bold shadow-sm"
                     >
@@ -1410,7 +1683,31 @@ const App: React.FC = () => {
                                   const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14 * 60);
                                   const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                   
-                                  if (isConsultationMode) {
+                                  if (exchangeMode !== 'INACTIVE') {
+                                      const isOwnSelected = selectedOwnChoice?.row === day && selectedOwnChoice?.col === col.id && selectedOwnChoice?.month === month && selectedOwnChoice?.year === year;
+                                      const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
+                                      const isPossibleTarget = possibleTargetChoices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year);
+                                      
+                                      if (isOwnSelected) {
+                                          bgColor = '#f97316'; // orange-500
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#ea580c] cursor-pointer";
+                                      } else if (isTargetSelected) {
+                                          bgColor = '#22c55e'; // green-500
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#16a34a] cursor-pointer";
+                                      } else if (isPossibleTarget) {
+                                          bgColor = '#3b82f6'; // blue-500
+                                          cellStyles += " opacity-100 z-10 scale-[1.02] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#2563eb] cursor-pointer hover:bg-blue-600";
+                                      } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe) {
+                                          bgColor = '#fde047'; // Yellow 300
+                                          cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all";
+                                      } else if (assignedList.length > 0) {
+                                          bgColor = col.customColor || '#FFFFFF';
+                                          cellStyles += " opacity-30 text-slate-900";
+                                      } else {
+                                          bgColor = '#f8fafc';
+                                          cellStyles += " opacity-20";
+                                      }
+                                  } else if (isConsultationMode) {
                                       if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";
@@ -1476,7 +1773,7 @@ const App: React.FC = () => {
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
-                                          if (isConsultationMode || assignedList.length > 0) return;
+                                          if (exchangeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
                                           const cellKey = `${day}-${col.id}`;
                                           const existingTimeout = clickTimeoutsRef.current.get(cellKey);
                                           if (existingTimeout) {
@@ -1578,6 +1875,36 @@ const App: React.FC = () => {
             <span className="whitespace-nowrap">{hoveredCell.colLabel}</span>
         </div>
       )}
+
+      {viewMode === ViewMode.APP && (
+        <ChatAssistant 
+          supabase={supabase}
+          trigram={trigram}
+          currentRoundId={currentRoundId}
+          activeRoundTitle={rounds.find(r => r.id === currentRoundId)?.title || ''}
+          activeRound={rounds.find(r => r.id === currentRoundId)}
+          globalClosures={globalClosures}
+          columns={dynamicColumns}
+          month={monthsToDisplay[0]?.month ?? 0}
+          year={monthsToDisplay[0]?.year ?? new Date().getFullYear()}
+          days={monthsToDisplay.length > 0 ? Array.from({ length: new Date(monthsToDisplay[0].year, monthsToDisplay[0].month + 1, 0).getDate() }, (_, i) => ({
+            day: i + 1,
+            weekday: new Date(monthsToDisplay[0].year, monthsToDisplay[0].month, i + 1).toLocaleDateString('fr-FR', { weekday: 'long' }),
+            isSunday: new Date(monthsToDisplay[0].year, monthsToDisplay[0].month, i + 1).getDay() === 0
+          })) : []}
+          activePriority={activePriority}
+          monthLabel={monthsToDisplay.length > 0 ? `${new Date(monthsToDisplay[0].year, monthsToDisplay[0].month).toLocaleString('fr-FR', { month: 'long' })} ${monthsToDisplay[0].year}` : ''}
+          currentStep={currentStep}
+          columnConfigs={columnConfigs}
+          choices={choices}
+          currentCategory={category}
+          onAddChoices={handleAIChoices}
+          doctorProfile={doctorProfile ? JSON.stringify(doctorProfile, null, 2) : ''}
+          isBlockedByUnavailability={isBlockedByUnavailability}
+          isColOpen={isColOpen}
+        />
+      )}
+
     </div>
   );
 };

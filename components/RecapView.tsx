@@ -354,9 +354,9 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
 
   return (
     <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden bg-slate-100">
-      {(activeRound?.step_normal_active ?? true) && <CategoryList category="normal" title="Étape 1" colorTheme="orange" allChoices={choices} columns={columns} onReorder={onReorder} cleanupGroupIndices={cleanupGroupIndices} handleRemoveChoice={handleRemoveChoice} handleMakeMain={handleMakeMain} handleMakeAlternative={handleMakeAlternative} />}
-      {(activeRound?.step_good_bonus_active ?? true) && <CategoryList category="good_bonus" title="Étape 2" colorTheme="blue" allChoices={choices} columns={columns} onReorder={onReorder} cleanupGroupIndices={cleanupGroupIndices} handleRemoveChoice={handleRemoveChoice} handleMakeMain={handleMakeMain} handleMakeAlternative={handleMakeAlternative} />}
-      {(activeRound?.step_bad_bonus_active ?? true) && <CategoryList category="bad_bonus" title="Étape 3 - Garde au choix" colorTheme="indigo" allChoices={choices} columns={columns} onReorder={onReorder} cleanupGroupIndices={cleanupGroupIndices} handleRemoveChoice={handleRemoveChoice} handleMakeMain={handleMakeMain} handleMakeAlternative={handleMakeAlternative} />}
+      {(activeRound?.step_normal_active ?? true) && <CategoryList category="normal" title="Étape 1" colorTheme="orange" />}
+      {(activeRound?.step_good_bonus_active ?? true) && <CategoryList category="good_bonus" title="Étape 2" colorTheme="blue" />}
+      {(activeRound?.step_bad_bonus_active ?? true) && <CategoryList category="bad_bonus" title="Étape 3 - Garde au choix" colorTheme="indigo" />}
     </div>
   );
 };

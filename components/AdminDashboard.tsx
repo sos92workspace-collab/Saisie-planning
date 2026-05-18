@@ -3,6 +3,7 @@ import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, Guard
 import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap } from '../constants';
 import { MatrixHeader } from './MatrixHeader';
 import { VersionsPanel } from './VersionsPanel';
+import { ExchangeRules } from './ExchangeRules';
 
 interface Props {
   users: UserProfile[];
@@ -298,7 +299,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Versions', icon: '💾' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Échanges', icon: '🔄' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -349,7 +350,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Versions', icon: '💾' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Échanges', icon: '🔄' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -407,6 +408,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
+          {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} />}
         </div>
       </main>
     </div>
@@ -790,6 +792,23 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
     }
   };
 
+  const isExchangesAllowed = allRounds.every(r => r.allow_exchanges);
+
+  const toggleExchanges = async () => {
+    if (isUpdating) return;
+    const newState = !isExchangesAllowed;
+    setIsUpdating(true);
+    try {
+        await supabase.from('rounds').update({ allow_exchanges: newState }).neq('id', 0);
+        await refreshRounds();
+        logAction('AUTORISATION_ECHANGES', { etat: newState ? 'AUTORISÉ' : 'INTERDIT' });
+    } catch (e) {
+        console.error("Erreur autorisation échanges:", e);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
   const updateCol = async (colId: number, field: string, value: any) => {
     setColumnConfigs((prev: any[]) => {
       const next = [...(prev || [])];
@@ -1020,6 +1039,18 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                          <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isGloballyLocked ? 'translate-x-6' : ''}`}></div>
                      </div>
                      <span className={`text-xs font-bold ${isGloballyLocked ? 'text-red-600' : 'text-slate-400'}`}>{isGloballyLocked ? 'VERROUILLÉ' : 'DÉVERROUILLÉ'}</span>
+                 </label>
+             </div>
+
+             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
+
+             <div className="flex flex-col">
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Autoriser les échanges</label>
+                 <label className="flex items-center gap-3 cursor-pointer">
+                     <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isExchangesAllowed ? 'bg-green-500' : 'bg-slate-200'}`} onClick={toggleExchanges}>
+                         <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isExchangesAllowed ? 'translate-x-6' : ''}`}></div>
+                     </div>
+                     <span className={`text-xs font-bold ${isExchangesAllowed ? 'text-green-600' : 'text-slate-400'}`}>{isExchangesAllowed ? 'AUTORISÉ' : 'INTERDIT'}</span>
                  </label>
              </div>
          </div>
@@ -1904,6 +1935,8 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importType, setImportType] = useState<'CLASSIC' | '4D'>('CLASSIC');
     const [importTargetMonth, setImportTargetMonth] = useState<string>('ALL');
+    const [show4DExportModal, setShow4DExportModal] = useState(false);
+    const [selected4DMonthYear, setSelected4DMonthYear] = useState<string>('ALL');
 
     useEffect(() => {
         if (subTab === 'history') {
@@ -2159,9 +2192,17 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         setShowExportModal(false);
     };
 
-    const generate4DExport = () => {
+    const generate4DExport = (targetMonthYear: string = 'ALL') => {
         let validMonths: {month: number, year: number}[] = [];
-        if (activeRound) {
+        
+        if (targetMonthYear !== 'ALL') {
+            const parts = targetMonthYear.split('-');
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            if (!isNaN(y) && !isNaN(m)) {
+                validMonths.push({ month: m, year: y });
+            }
+        } else if (activeRound) {
             const startM = activeRound.monthStart ?? 0;
             const startY = activeRound.yearStart ?? 2025;
             for (let i = 0; i < (activeRound.numMonths || 1); i++) {
@@ -2177,6 +2218,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
 
         let dataToExport = choices.filter((c: any) => {
             if (c.status !== 'ASSIGNED') return false;
+            // Si on a explicitement filtré par validMonths
             if (validMonths.length > 0) {
                 return validMonths.some(vm => vm.month === c.month && vm.year === c.year);
             }
@@ -2189,7 +2231,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         );
         
         let period = '';
-        if (activeRound) {
+        if (targetMonthYear !== 'ALL') {
+            const parts = targetMonthYear.split('-');
+            period = `${parts[0]}${String(parseInt(parts[1], 10) + 1).padStart(2, '0')}`;
+        } else if (activeRound) {
             const year = activeRound.yearStart ?? 2025;
             const month = String((activeRound.monthStart ?? 0) + 1).padStart(2, '0');
             period = `${year}${month}`;
@@ -2358,7 +2403,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                 <span className="font-black text-xs uppercase tracking-widest">Tout Exporter</span>
                                 <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded">{choices.length}</span>
                             </button>
-                            <button onClick={generate4DExport} className="w-full py-4 px-6 bg-indigo-600 text-white rounded-2xl flex items-center justify-between group hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2">
+                            <button onClick={() => { setShowExportModal(false); setShow4DExportModal(true); }} className="w-full py-4 px-6 bg-indigo-600 text-white rounded-2xl flex items-center justify-between group hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 mt-2">
                                 <span className="font-black text-xs uppercase tracking-widest">Exporter 4D</span>
                                 <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-1 rounded">{uniqueAssignedCount}</span>
                             </button>
@@ -2369,6 +2414,61 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                     </div>
                 </div>
             )}
+
+            {/* 4D Export Settings Modal */}
+            {show4DExportModal && (() => {
+                const availableYMs = Array.from(new Set(
+                    choices.filter((c: any) => c.status === 'ASSIGNED')
+                           .map((c: any) => `${c.year}-${c.month}`)
+                )).sort();
+
+                return (
+                    <div className="fixed inset-0 z-[160] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="bg-indigo-50 p-6 border-b border-indigo-100 flex items-center gap-4">
+                                <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 shrink-0">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Exporter 4D</h3>
+                                    <p className="text-xs text-indigo-500 font-bold uppercase tracking-wide">Sélectionnez la période</p>
+                                </div>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Période cible</label>
+                                    <select 
+                                        value={selected4DMonthYear}
+                                        onChange={(e) => setSelected4DMonthYear(e.target.value)}
+                                        className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                    >
+                                        <option value="ALL">TOUTES LES DONNÉES DU TOUR ACTIF</option>
+                                        {availableYMs.map(ym => {
+                                            const [y, m] = ym.split('-');
+                                            const date = new Date(parseInt(y, 10), parseInt(m, 10), 1);
+                                            const label = date.toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+                                            return <option key={ym} value={ym}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>;
+                                        })}
+                                    </select>
+                                </div>
+                                
+                                <button 
+                                    onClick={() => {
+                                        generate4DExport(selected4DMonthYear);
+                                        setShow4DExportModal(false);
+                                    }} 
+                                    className="w-full py-4 px-6 bg-indigo-600 text-white rounded-2xl flex items-center justify-center group hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                                >
+                                    <span className="font-black text-xs uppercase tracking-widest">Confirmer l'exportation</span>
+                                </button>
+                            </div>
+                            <div className="p-4 bg-slate-50 border-t flex justify-center">
+                                <button onClick={() => setShow4DExportModal(false)} className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase tracking-widest transition-colors">Annuler</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Sub-Header */}
             <div className="p-4 md:p-6 bg-white border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">

@@ -1,7 +1,8 @@
 {
-  "name": "Planning version de travail avec notion garde ",
-  "description": "avant version responsive.",
+  "name": "Planning SOS92 Saisie Médecin (Version actuelle) ",
+  "description": "Version actuelle",
   "requestFramePermissions": [
     "microphone"
-  ]
+  ],
+  "majorCapabilities": []
 }
