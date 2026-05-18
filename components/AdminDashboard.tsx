@@ -406,7 +406,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
             />
           )}
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
-          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} />}
+          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} />}
         </div>
@@ -1921,7 +1921,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
   );
 };
 
-const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction }: any) => {
+const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction, users }: any) => {
     const [subTab, setSubTab] = useState<'journal' | 'data' | 'history'>('journal');
     const [showExportModal, setShowExportModal] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'REFUSED'>('ALL');
@@ -2495,7 +2495,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 const availableYMs = Array.from(new Set(
                     choices.filter((c: any) => c.status === 'ASSIGNED')
                            .map((c: any) => `${c.year}-${c.month}`)
-                )).sort();
+                )).sort() as Array<string>;
 
                 return (
                     <div className="fixed inset-0 z-[160] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
