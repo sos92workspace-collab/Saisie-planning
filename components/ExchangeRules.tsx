@@ -6,23 +6,12 @@ import { Save, AlertCircle, Check, MousePointerSquareDashed } from 'lucide-react
 export type ExchangePeriod = 'SEMAINE' | 'SAMEDI' | 'DIMANCHE' | 'GLOBAL';
 export type TargetPeriod = 'SEMAINE' | 'SAMEDI' | 'DIMANCHE';
 
-export interface ExchangeRuleSet {
-  id: string;
-  name: string;
-  is_active: boolean;
-  created_at: string;
-}
-
 export interface ExchangeMode {
-  id?: string;
-  set_id: string;
   col_id: number;
   mode: 'GLOBAL' | 'INDIVIDUAL';
 }
 
 export interface ExchangeRule {
-  id?: string;
-  set_id: string;
   source_col_id: number;
   source_period: ExchangePeriod;
   target_col_id: number;
@@ -34,9 +23,6 @@ interface ExchangeRulesProps {
 }
 
 export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
-  const [ruleSets, setRuleSets] = useState<ExchangeRuleSet[]>([]);
-  const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
-  
   const [modes, setModes] = useState<Record<number, 'GLOBAL' | 'INDIVIDUAL'>>({});
   const [rules, setRules] = useState<ExchangeRule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,45 +37,29 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS'>('RULES'); // Defaulted to RULES
+  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS'>('REQUESTS');
   const [requests, setRequests] = useState<any[]>([]);
 
-  const fetchRuleSets = async () => {
-    setLoading(true);
+  // Versioning state
+  const [exchangeVersions, setExchangeVersions] = useState<any[]>([]);
+  const selectedVersionIdRef = useRef<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+
+  const fetchVersions = async () => {
     try {
-      const { data, error } = await supabase.from('exchange_rule_sets').select('*').order('created_at', { ascending: true });
-      if (error) {
-        // Fallback for missing table
-        console.warn("exchange_rule_sets table might be missing.", error);
-        setError("La table exchange_rule_sets est introuvable. Veuillez exécuter le script SQL fourni.");
-        return;
-      }
-      setRuleSets(data || []);
-      if (data && data.length > 0) {
-        if (!selectedSetId || !data.find(s => s.id === selectedSetId)) {
-          const activeSet = data.find(s => s.is_active);
-          setSelectedSetId(activeSet ? activeSet.id : data[0].id);
-        }
-      } else {
-        setSelectedSetId(null);
-        setModes({});
-        setRules([]);
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Erreur de chargement des règles d'équivalence.");
-    } finally {
-      setLoading(false);
-    }
+      const { data, error } = await supabase.from('exchange_rule_versions').select('*').order('created_at', { ascending: false });
+      if (data) setExchangeVersions(data);
+    } catch (e) { console.error(e); }
   };
 
-  const fetchRulesForSet = async (setId: string) => {
+  const fetchRules = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const { data: modesData, error: modesError } = await supabase.from('exchange_modes').select('*').eq('set_id', setId);
+      const { data: modesData, error: modesError } = await supabase.from('exchange_modes').select('*');
       if (modesError) throw modesError;
       
-      const { data: rulesData, error: rulesError } = await supabase.from('exchange_rules').select('*').eq('set_id', setId);
+      const { data: rulesData, error: rulesError } = await supabase.from('exchange_rules').select('*');
       if (rulesError) throw rulesError;
 
       const modesMap: Record<number, 'GLOBAL' | 'INDIVIDUAL'> = {};
@@ -102,74 +72,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       setRules(rulesData || []);
     } catch (err: any) {
       console.error(err);
+      setError("Erreur lors du chargement des règles. Avez-vous exécuté le script SQL pour créer les tables ?");
     } finally {
       setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchRuleSets();
-    fetchRequests();
-  }, []);
-
-  useEffect(() => {
-    if (selectedSetId) {
-      fetchRulesForSet(selectedSetId);
-    }
-  }, [selectedSetId]);
-
-  const handleCreateSet = async () => {
-    const name = prompt("Nom de la nouvelle règle d'équivalence ?");
-    if (!name?.trim()) return;
-    try {
-      const { data, error } = await supabase.from('exchange_rule_sets').insert([{ name: name.trim() }]).select();
-      if (error) throw error;
-      if (data && data.length > 0) {
-        await fetchRuleSets();
-        setSelectedSetId(data[0].id);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la création.");
-    }
-  };
-
-  const handleDeleteSet = async (setId: string) => {
-    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette règle d'équivalence ?")) return;
-    try {
-      const { error } = await supabase.from('exchange_rule_sets').delete().eq('id', setId);
-      if (error) throw error;
-      await fetchRuleSets();
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la suppression.");
-    }
-  };
-
-  const handleActivateSet = async (setId: string) => {
-    try {
-      const allIds = ruleSets.map(r => r.id);
-      if (allIds.length > 0) {
-        await supabase.from('exchange_rule_sets').update({ is_active: false }).in('id', allIds);
-      }
-      await supabase.from('exchange_rule_sets').update({ is_active: true }).eq('id', setId);
-      await fetchRuleSets();
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de l'activation.");
-    }
-  };
-
-  const handleRenameSet = async (setId: string, currentName: string) => {
-    const name = prompt("Nouveau nom :", currentName);
-    if (!name?.trim() || name === currentName) return;
-    try {
-      const { error } = await supabase.from('exchange_rule_sets').update({ name: name.trim() }).eq('id', setId);
-      if (error) throw error;
-      await fetchRuleSets();
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors du renommage.");
     }
   };
 
@@ -190,6 +95,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    fetchRules();
+    fetchRequests();
+    fetchVersions();
+  }, []);
 
   const handleRequestAction = async (requestId: string, action: 'APPROVED' | 'REJECTED') => {
     try {
@@ -222,7 +133,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   };
 
   const handleModeChange = async (colId: number, mode: 'GLOBAL' | 'INDIVIDUAL') => {
-    if (!selectedSetId) return;
+    // If multiple selected and this col is selected, apply to all selected
     const colsToUpdate = selectedCols.has(colId) ? [...selectedCols] : [colId];
     
     const newModes = { ...modes };
@@ -230,8 +141,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     setModes(newModes);
 
     try {
-      const upserts = colsToUpdate.map(c => ({ set_id: selectedSetId, col_id: c, mode }));
-      await supabase.from('exchange_modes').upsert(upserts, { onConflict: 'set_id,col_id' });
+      if (selectedVersionIdRef.current) {
+        const dump = { modes: newModes, rules };
+        await supabase.from('exchange_rule_versions').update({ rules_data: dump }).eq('id', selectedVersionIdRef.current);
+      } else {
+        const upserts = colsToUpdate.map(c => ({ col_id: c, mode }));
+        await supabase.from('exchange_modes').upsert(upserts);
+      }
     } catch (err) {
       console.error(err);
       alert("Erreur lors de la sauvegarde du mode.");
@@ -239,7 +155,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   };
 
   const openModal = (colId: number, period: ExchangePeriod) => {
-    if (!selectedSetId) return;
     const colsToEdit = selectedCols.has(colId) ? Array.from(selectedCols) : [colId];
     setModalSourceCols(colsToEdit);
     setModalSourcePeriod(period);
@@ -255,24 +170,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   };
 
   const saveModal = async () => {
-    if (!selectedSetId) return;
     try {
-      // 1. Delete existing rules for the selected source columns and period
-      for (const colId of modalSourceCols) {
-        await supabase.from('exchange_rules')
-          .delete()
-          .eq('set_id', selectedSetId)
-          .eq('source_col_id', colId)
-          .eq('source_period', modalSourcePeriod);
-      }
-
-      // 2. Insert new rules
+      const updatedRules = rules.filter(r => !(modalSourceCols.includes(r.source_col_id) && r.source_period === modalSourcePeriod));
       const newRulesToInsert: any[] = [];
       modalSourceCols.forEach(colId => {
         modalSelections.forEach(sel => {
           const [targetColIdStr, targetPeriod] = sel.split('-');
           newRulesToInsert.push({
-            set_id: selectedSetId,
             source_col_id: colId,
             source_period: modalSourcePeriod,
             target_col_id: parseInt(targetColIdStr, 10),
@@ -281,12 +185,32 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         });
       });
 
-      if (newRulesToInsert.length > 0) {
-        await supabase.from('exchange_rules').insert(newRulesToInsert);
+      const finalRules = [...updatedRules, ...newRulesToInsert];
+      setRules(finalRules);
+
+      if (selectedVersionIdRef.current) {
+        const dump = { modes, rules: finalRules };
+        await supabase.from('exchange_rule_versions').update({ rules_data: dump }).eq('id', selectedVersionIdRef.current);
+      } else {
+        // 1. Delete existing rules for the selected source columns and period
+        for (const colId of modalSourceCols) {
+          await supabase.from('exchange_rules')
+            .delete()
+            .eq('source_col_id', colId)
+            .eq('source_period', modalSourcePeriod);
+        }
+
+        // 2. Insert new rules
+        if (newRulesToInsert.length > 0) {
+          await supabase.from('exchange_rules').insert(newRulesToInsert);
+        }
       }
 
       setModalOpen(false);
-      fetchRulesForSet(selectedSetId); // Refresh
+      // We don't fetchRules() here to avoid replacing version edit buffer, or we do it safely:
+      if (!selectedVersionIdRef.current) {
+        fetchRules(); // Refresh only if live
+      }
     } catch (err) {
       console.error(err);
       alert("Erreur lors de la sauvegarde des règles.");
@@ -441,45 +365,115 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-          <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-200 shrink-0 gap-4">
-             <div className="flex flex-wrap items-center gap-2 flex-1">
-               {ruleSets.map(set => (
-                  <button key={set.id} onClick={() => setSelectedSetId(set.id)} className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap border transition-all ${selectedSetId === set.id ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-                    {set.name} {set.is_active && <span className="ml-2 text-[10px] bg-green-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">Actif</span>}
+        <div className="flex-1 flex flex-col gap-4">
+          
+          {/* VERSION MANAGER */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-black uppercase text-slate-500">Version du paramétrage :</span>
+              <select 
+                className="bg-slate-50 border border-slate-200 text-slate-900 text-sm font-bold rounded-lg px-4 py-2 outline-none focus:ring-2 ring-blue-500 cursor-pointer"
+                value={selectedVersionId || 'active'}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'active') {
+                    setSelectedVersionId(null);
+                    selectedVersionIdRef.current = null;
+                    fetchRules(); // Reload from live
+                  } else {
+                    const version = exchangeVersions.find(v => v.id === val);
+                    if (version) {
+                      setSelectedVersionId(val);
+                      selectedVersionIdRef.current = val;
+                      // In memory update of the grid preview
+                      const parsed = version.rules_data || { modes: {}, rules: [] };
+                      setModes(parsed.modes || {});
+                      setRules(parsed.rules || []);
+                    }
+                  }
+                }}
+              >
+                <option value="active">🟢 Configuration en ligne (Active)</option>
+                {exchangeVersions.length > 0 && (
+                  <optgroup label="Versions sauvegardées">
+                    {exchangeVersions.map(v => (
+                      <option key={v.id} value={v.id}>{v.name} ({new Date(v.created_at).toLocaleDateString('fr-FR')})</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              {selectedVersionId ? (
+                <>
+                  <button 
+                    onClick={async () => {
+                      if(!window.confirm("Remplacer la configuration en ligne par cette version ?")) return;
+                      const v = exchangeVersions.find(ver => ver.id === selectedVersionId);
+                      if (!v) return;
+                      const parsed = v.rules_data || { modes: {}, rules: [] };
+                      
+                      try {
+                        // 1. Clear active
+                        await supabase.from('exchange_modes').delete().not('col_id', 'is', null);
+                        await supabase.from('exchange_rules').delete().not('source_col_id', 'is', null);
+                        
+                        // 2. Insert new
+                        const modeUpserts = Object.keys(parsed.modes).map(k => ({ col_id: parseInt(k, 10), mode: parsed.modes[k] }));
+                        if (modeUpserts.length > 0) await supabase.from('exchange_modes').insert(modeUpserts);
+                        if (parsed.rules && parsed.rules.length > 0) await supabase.from('exchange_rules').insert(parsed.rules);
+                        
+                        alert("Configuration en ligne mise à jour !");
+                        setSelectedVersionId(null);
+                        selectedVersionIdRef.current = null;
+                        fetchRules();
+                      } catch (err) {
+                        console.error(err);
+                        alert("Erreur lors de l'application de la version.");
+                      }
+                    }}
+                    className="px-4 py-2 bg-emerald-500 text-white text-xs font-black uppercase rounded-lg hover:bg-emerald-600 shadow-sm"
+                  >
+                    Définir comme Active
                   </button>
-               ))}
-               <button onClick={handleCreateSet} className="px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap bg-slate-100 text-slate-600 hover:bg-slate-200 border border-transparent transition-all">
-                 + Nouvelle Règle
-               </button>
-             </div>
-             {selectedSetId && (
-                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                  {!ruleSets.find(s => s.id === selectedSetId)?.is_active && (
-                    <button onClick={() => handleActivateSet(selectedSetId)} className="px-3 py-1.5 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">
-                      Définir comme Actif
-                    </button>
-                  )}
-                  <button onClick={() => handleRenameSet(selectedSetId, ruleSets.find(s => s.id === selectedSetId)?.name || '')} className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold uppercase transition-colors">
-                    Renommer
-                  </button>
-                  <button onClick={() => handleDeleteSet(selectedSetId)} className="px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-lg text-xs font-bold uppercase transition-colors">
+                  <button 
+                    onClick={async () => {
+                      if(!window.confirm("Supprimer cette version ?")) return;
+                      await supabase.from('exchange_rule_versions').delete().eq('id', selectedVersionId);
+                      setSelectedVersionId(null);
+                      selectedVersionIdRef.current = null;
+                      fetchVersions();
+                      fetchRules();
+                    }}
+                    className="px-4 py-2 bg-red-50 text-red-600 hover:text-white hover:bg-red-600 text-xs font-black uppercase rounded-lg"
+                  >
                     Supprimer
                   </button>
-                </div>
-             )}
+                </>
+              ) : (
+                <button 
+                  onClick={async () => {
+                    const name = window.prompt("Nom de la version :");
+                    if (!name) return;
+                    const dump = { modes, rules };
+                    await supabase.from('exchange_rule_versions').insert([{ name, is_active: false, rules_data: dump }]);
+                    fetchVersions();
+                  }}
+                  className="px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs font-black uppercase rounded-lg shadow-sm"
+                >
+                  Enregistrer un snapshot
+                </button>
+              )}
+            </div>
           </div>
-          
-          <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm relative">
-            {!selectedSetId ? (
-              <div className="absolute inset-0 flex items-center justify-center text-slate-500 font-bold p-8 text-center flex-col gap-4">
-                <div className="bg-slate-50 p-4 rounded-full border border-slate-100">
-                  <AlertCircle size={32} className="text-slate-400" />
-                </div>
-                <p>Aucun paramétrage sélectionné.<br/><span className="text-sm font-medium">Veuillez créer ou sélectionner un jeu de règles ci-dessus.</span></p>
+
+          <div className={`overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm ${selectedVersionId ? 'ring-4 ring-amber-100 border-amber-300' : ''}`}>
+            {selectedVersionId && (
+              <div className="bg-amber-50 px-4 py-2 text-amber-700 text-xs font-bold flex items-center justify-center border-b border-amber-200 sticky left-0 z-40">
+                Vous consultez/modifiez une version sauvegardée. Appliquez-la pour la rendre active.
               </div>
-            ) : (
-            <table className="w-full text-left border-collapse">
+            )}
+          <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
             <tr>
               <th className="p-3 border-b border-r border-slate-200 bg-slate-100 min-w-[150px] sticky left-0 z-30">
@@ -607,7 +601,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             </tr>
           </tbody>
         </table>
-            )}
       </div>
       </div>
       )}
