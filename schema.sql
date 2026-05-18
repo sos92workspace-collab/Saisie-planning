@@ -14,13 +14,32 @@ create table if not exists shift_definitions (
 
 create table if not exists exchange_rule_sets (
   id uuid default gen_random_uuid() primary key,
-  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   name text not null,
-  modes jsonb not null,
-  rules jsonb not null
+  is_active boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Note: In Supabase, if exchange_modes and exchange_rules exist, they need to be updated.
+-- If someone runs this file from scratch, this defines the new schema.
+create table if not exists exchange_modes (
+  id uuid default gen_random_uuid() primary key,
+  set_id uuid references exchange_rule_sets(id) on delete cascade not null,
+  col_id integer not null,
+  mode text not null,
+  unique(set_id, col_id)
+);
+
+create table if not exists exchange_rules (
+  id uuid default gen_random_uuid() primary key,
+  set_id uuid references exchange_rule_sets(id) on delete cascade not null,
+  source_col_id integer not null,
+  source_period text not null,
+  target_col_id integer not null,
+  target_period text not null
 );
 
 create table if not exists shift_global_settings (
+  id integer primary key default 1,
   target_substitute_active boolean default false,
   target_substitute_max integer default 0,
   target_doctor_active boolean default false,

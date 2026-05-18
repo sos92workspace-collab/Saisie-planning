@@ -669,15 +669,30 @@ const App: React.FC = () => {
         id: u.id, userTrigram: u.user_trigram, day: u.day, month: u.month - 1, year: u.year, period: u.period
     })));
 
-    // Load exchange rules
-    const { data: rulesData } = await supabase.from('exchange_rules').select('*');
-    if (rulesData) setExchangeRules(rulesData);
+    // Load active exchange rule set
+    const { data: activeSetData, error: activeSetError } = await supabase.from('exchange_rule_sets').select('*').eq('is_active', true).limit(1);
     
-    const { data: modesData } = await supabase.from('exchange_modes').select('*');
-    if (modesData) {
-      const modesMap: Record<number, string> = {};
-      modesData.forEach((m: any) => modesMap[m.col_id] = m.mode);
-      setExchangeModes(modesMap);
+    if (activeSetError) {
+      if (!activeSetError.message.includes('relation "exchange_rule_sets" does not exist')) {
+        console.error(activeSetError);
+      }
+    }
+
+    if (activeSetData && activeSetData.length > 0) {
+      const activeSetId = activeSetData[0].id;
+      // Load exchange rules
+      const { data: rulesData } = await supabase.from('exchange_rules').select('*').eq('set_id', activeSetId);
+      if (rulesData) setExchangeRules(rulesData);
+      
+      const { data: modesData } = await supabase.from('exchange_modes').select('*').eq('set_id', activeSetId);
+      if (modesData) {
+        const modesMap: Record<number, string> = {};
+        modesData.forEach((m: any) => modesMap[m.col_id] = m.mode);
+        setExchangeModes(modesMap);
+      }
+    } else {
+      setExchangeRules([]);
+      setExchangeModes({});
     }
   }, []);
 
