@@ -18,16 +18,32 @@ export interface ExchangeRule {
   target_period: TargetPeriod;
 }
 
+interface ExchangeRuleSet {
+  id: string;
+  created_at: string;
+  name: string;
+  modes: Record<number, 'GLOBAL' | 'INDIVIDUAL'>;
+  rules: ExchangeRule[];
+}
+
 interface ExchangeRulesProps {
   supabase: any;
 }
 
 export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
+  // Global / active state loaded from DB to initialize
+  const [activeModes, setActiveModes] = useState<Record<number, 'GLOBAL' | 'INDIVIDUAL'>>({});
+  const [activeRules, setActiveRules] = useState<ExchangeRule[]>([]);
+
+  // Editor states
   const [modes, setModes] = useState<Record<number, 'GLOBAL' | 'INDIVIDUAL'>>({});
   const [rules, setRules] = useState<ExchangeRule[]>([]);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCols, setSelectedCols] = useState<Set<number>>(new Set());
+
   
   const [modalOpen, setModalOpen] = useState(false);
   const [modalSourcePeriod, setModalSourcePeriod] = useState<ExchangePeriod>('GLOBAL');
@@ -37,12 +53,46 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'PROFILES'>('REQUESTS');
   const [requests, setRequests] = useState<any[]>([]);
+  const [ruleSets, setRuleSets] = useState<ExchangeRuleSet[]>([]);
+  const [showSqlHelp, setShowSqlHelp] = useState(false);
 
-  const fetchRules = async () => {
+  const [saveProfileModalOpen, setSaveProfileModalOpen] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
+
+  const getActiveProfileId = () => {
+      const sortedCurrentRules = [...activeRules].sort((a, b) => {
+          if (a.source_col_id !== b.source_col_id) return a.source_col_id - b.source_col_id;
+          if (a.source_period !== b.source_period) return a.source_period.localeCompare(b.source_period);
+          if (a.target_col_id !== b.target_col_id) return a.target_col_id - b.target_col_id;
+          return a.target_period.localeCompare(b.target_period);
+      });
+      const currentRulesStr = JSON.stringify(sortedCurrentRules);
+      const currentModesStr = JSON.stringify(activeModes);
+
+      for (const rs of ruleSets) {
+          const sortedRsRules = [...(rs.rules || [])].sort((a: any, b: any) => {
+              if (a.source_col_id !== b.source_col_id) return a.source_col_id - b.source_col_id;
+              if (a.source_period !== b.source_period) return a.source_period.localeCompare(b.source_period);
+              if (a.target_col_id !== b.target_col_id) return a.target_col_id - b.target_col_id;
+              return a.target_period.localeCompare(b.target_period);
+          });
+          const rsRulesStr = JSON.stringify(sortedRsRules);
+          const rsModesStr = JSON.stringify(rs.modes || {});
+          
+          if (currentRulesStr === rsRulesStr && currentModesStr === rsModesStr) {
+              return rs.id;
+          }
+      }
+      return null;
+  };
+  const activeProfileId = getActiveProfileId();
+
+  const fetchRulesAndProfiles = async (loadIntoEditor: boolean = false) => {
     setLoading(true);
     setError(null);
+    setShowSqlHelp(false);
     try {
       const { data: modesData, error: modesError } = await supabase.from('exchange_modes').select('*');
       if (modesError) throw modesError;
@@ -50,17 +100,35 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       const { data: rulesData, error: rulesError } = await supabase.from('exchange_rules').select('*');
       if (rulesError) throw rulesError;
 
+      const { data: ruleSetsData, error: ruleSetsError } = await supabase.from('exchange_rule_sets').select('*').order('created_at', { ascending: false });
+      if (ruleSetsError) {
+        if (ruleSetsError.message.includes('relation "exchange_rule_sets" does not exist')) {
+            setShowSqlHelp(true);
+        } else {
+            throw ruleSetsError;
+        }
+      } else {
+          setRuleSets(ruleSetsData || []);
+      }
+
       const modesMap: Record<number, 'GLOBAL' | 'INDIVIDUAL'> = {};
       if (modesData) {
         modesData.forEach((m: any) => {
           modesMap[m.col_id] = m.mode;
         });
       }
-      setModes(modesMap);
-      setRules(rulesData || []);
+      
+      setActiveModes(modesMap);
+      setActiveRules(rulesData || []);
+      
+      if (loadIntoEditor) {
+          setModes(modesMap);
+          setRules(rulesData || []);
+          setEditingProfileId(null);
+      }
     } catch (err: any) {
       console.error(err);
-      setError("Erreur lors du chargement des règles. Avez-vous exécuté le script SQL pour créer les tables ?");
+      setError("Erreur lors du chargement des règles ou profils.");
     } finally {
       setLoading(false);
     }
@@ -85,7 +153,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   };
 
   useEffect(() => {
-    fetchRules();
+    fetchRulesAndProfiles(true);
     fetchRequests();
   }, []);
 
@@ -95,7 +163,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       if (!req) return;
 
       if (action === 'APPROVED') {
-        // Update the requester's choice to the new coordinates
         await supabase.from('choices').update({ 
             row: req.target_row,
             col: req.target_col,
@@ -119,21 +186,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     setSelectedCols(newSet);
   };
 
-  const handleModeChange = async (colId: number, mode: 'GLOBAL' | 'INDIVIDUAL') => {
-    // If multiple selected and this col is selected, apply to all selected
+  const handleModeChange = (colId: number, mode: 'GLOBAL' | 'INDIVIDUAL') => {
     const colsToUpdate = selectedCols.has(colId) ? [...selectedCols] : [colId];
-    
     const newModes = { ...modes };
     colsToUpdate.forEach((c: number) => newModes[c] = mode);
     setModes(newModes);
-
-    try {
-      const upserts = colsToUpdate.map(c => ({ col_id: c, mode }));
-      await supabase.from('exchange_modes').upsert(upserts);
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la sauvegarde du mode.");
-    }
   };
 
   const openModal = (colId: number, period: ExchangePeriod) => {
@@ -141,7 +198,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     setModalSourceCols(colsToEdit);
     setModalSourcePeriod(period);
     
-    // Load existing selections for the FIRST column in the selection (to initialize the modal)
     const existingRules = rules.filter(r => r.source_col_id === colsToEdit[0] && r.source_period === period);
     const initialSelections = new Set<string>();
     existingRules.forEach(r => {
@@ -151,40 +207,26 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     setModalOpen(true);
   };
 
-  const saveModal = async () => {
-    try {
-      // 1. Delete existing rules for the selected source columns and period
-      for (const colId of modalSourceCols) {
-        await supabase.from('exchange_rules')
-          .delete()
-          .eq('source_col_id', colId)
-          .eq('source_period', modalSourcePeriod);
-      }
-
-      // 2. Insert new rules
-      const newRulesToInsert: any[] = [];
-      modalSourceCols.forEach(colId => {
-        modalSelections.forEach(sel => {
-          const [targetColIdStr, targetPeriod] = sel.split('-');
-          newRulesToInsert.push({
-            source_col_id: colId,
-            source_period: modalSourcePeriod,
-            target_col_id: parseInt(targetColIdStr, 10),
-            target_period: targetPeriod
-          });
+  const saveModal = () => {
+    // 1. Remove rules from React state that match sourceCols and sourcePeriod
+    const existingFiltered = rules.filter(r => !(modalSourceCols.includes(r.source_col_id) && r.source_period === modalSourcePeriod));
+    
+    // 2. Add new selected rules
+    const newRulesToInsert: any[] = [];
+    modalSourceCols.forEach(colId => {
+      modalSelections.forEach(sel => {
+        const [targetColIdStr, targetPeriod] = sel.split('-');
+        newRulesToInsert.push({
+          source_col_id: colId,
+          source_period: modalSourcePeriod,
+          target_col_id: parseInt(targetColIdStr, 10),
+          target_period: targetPeriod as TargetPeriod
         });
       });
+    });
 
-      if (newRulesToInsert.length > 0) {
-        await supabase.from('exchange_rules').insert(newRulesToInsert);
-      }
-
-      setModalOpen(false);
-      fetchRules(); // Refresh
-    } catch (err) {
-      console.error(err);
-      alert("Erreur lors de la sauvegarde des règles.");
-    }
+    setRules([...existingFiltered, ...newRulesToInsert]);
+    setModalOpen(false);
   };
 
   const handleCellMouseDown = (colId: number, period: TargetPeriod) => {
@@ -219,6 +261,131 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     return rules.some(r => r.source_col_id === colId && r.source_period === period);
   };
 
+  const saveCurrentAsProfile = async () => {
+    if (!newProfileName.trim() && !editingProfileId) {
+        alert("Veuillez entrer un nom pour le profil.");
+        return;
+    }
+    
+    setLoading(true);
+    try {
+        if (editingProfileId) {
+            const { error } = await supabase.from('exchange_rule_sets')
+                .update({ modes, rules })
+                .eq('id', editingProfileId);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase.from('exchange_rule_sets').insert({
+                name: newProfileName.trim(),
+                modes,
+                rules
+            });
+            if (error) throw error;
+        }
+        setSaveProfileModalOpen(false);
+        setNewProfileName("");
+        fetchRulesAndProfiles(false);
+        alert("Profil sauvegardé avec succès.");
+    } catch (err: any) {
+        console.error(err);
+        alert("Erreur lors de la sauvegarde du profil : " + err.message);
+        setLoading(false);
+    }
+  };
+
+  const activateProfile = async (profileId: string) => {
+    const profile = ruleSets.find(rs => rs.id === profileId);
+    if (!profile) return;
+    if (!window.confirm(`Activer le profil "${profile.name}" ? Cela écrasera les règles actuellement actives pour TOUT l'applicatif.`)) return;
+    
+    setLoading(true);
+    try {
+        await supabase.from('exchange_modes').delete().not('col_id', 'is', null);
+        await supabase.from('exchange_rules').delete().not('source_col_id', 'is', null);
+
+        const newModes = profile.modes || {};
+        const modeUpserts = [];
+        for (const [col_id, mode] of Object.entries(newModes)) {
+            modeUpserts.push({ col_id: parseInt(col_id, 10), mode });
+        }
+        if (modeUpserts.length > 0) {
+            await supabase.from('exchange_modes').insert(modeUpserts);
+        }
+
+        const newRules = profile.rules || [];
+        if (newRules.length > 0) {
+            const rulesToInsert = newRules.map((r: any) => ({
+                source_col_id: r.source_col_id,
+                source_period: r.source_period,
+                target_col_id: r.target_col_id,
+                target_period: r.target_period
+            }));
+            await supabase.from('exchange_rules').insert(rulesToInsert);
+        }
+
+        alert(`Profil "${profile.name}" activé avec succès.`);
+        fetchRulesAndProfiles(editingProfileId === null);
+    } catch (err: any) {
+        console.error(err);
+        alert("Erreur lors de l'activation du profil : " + err.message);
+        setLoading(false);
+    }
+  };
+
+  const viewProfile = (profileId: string) => {
+      const profile = ruleSets.find(rs => rs.id === profileId);
+      if (profile) {
+          setEditingProfileId(profile.id);
+          setModes(profile.modes || {});
+          setRules(profile.rules || []);
+          setActiveTab('RULES');
+      }
+  };
+
+  const createNewProfile = () => {
+      setEditingProfileId(null);
+      setModes(activeModes);
+      setRules(activeRules);
+      setActiveTab('RULES');
+  };
+
+  const deleteProfile = async (profileId: string) => {
+    if (!window.confirm("Supprimer ce profil ?")) return;
+    try {
+        await supabase.from('exchange_rule_sets').delete().eq('id', profileId);
+        fetchRulesAndProfiles();
+    } catch(err) {
+        console.error(err);
+    }
+  };
+
+  if (showSqlHelp) {
+    return (
+      <div className="p-8 max-w-4xl mx-auto h-full overflow-auto text-left">
+        <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
+          <h2 className="text-xl font-black text-slate-900">Configuration Requise</h2>
+          <p className="text-slate-600">
+            Pour utiliser plusieurs profils de règles d'échange, vous devez créer la table <strong>exchange_rule_sets</strong> dans votre base de données Supabase.
+          </p>
+          <div className="bg-slate-900 p-4 rounded-xl overflow-x-auto text-left">
+            <pre className="text-emerald-400 text-sm font-mono">
+{`CREATE TABLE exchange_rule_sets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  name TEXT NOT NULL,
+  modes JSONB NOT NULL,
+  rules JSONB NOT NULL
+);`}
+            </pre>
+          </div>
+          <button onClick={fetchRulesAndProfiles} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black uppercase text-xs hover:bg-blue-700 block mx-auto">
+            J'ai créé la table, réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) return <div className="p-8 text-center text-slate-500 font-bold">Chargement des règles...</div>;
 
   return (
@@ -244,7 +411,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             onClick={() => setActiveTab('RULES')}
             className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            Règles d'équivalence
+            Configuration
+          </button>
+          <button 
+            onClick={() => setActiveTab('PROFILES')}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'PROFILES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Profils sauvegardés
           </button>
         </div>
         {error && (
@@ -334,10 +507,72 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </div>
         </div>
+      ) : activeTab === 'PROFILES' ? (
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+            <div className="flex items-center justify-between border-b pb-4">
+                <h3 className="text-xl font-black text-slate-900 uppercase">Profils Sauvegardés</h3>
+                <button onClick={createNewProfile} className="px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase shadow-sm hover:bg-slate-800 transition-colors">
+                    + Nouveau Profil
+                </button>
+            </div>
+            
+            {ruleSets.length === 0 ? (
+                <div className="text-center text-slate-500 font-bold py-12 bg-slate-50 rounded-xl border border-slate-100">Aucun profil enregistré.</div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {ruleSets.map(rs => (
+                        <div key={rs.id} className={`border rounded-xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all ${rs.id === activeProfileId ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-2">
+                                    <h4 className="font-black text-lg text-slate-900 uppercase">{rs.name}</h4>
+                                    {rs.id === activeProfileId && (
+                                        <span className="px-2 py-1 bg-blue-600 text-white text-[10px] uppercase font-black tracking-widest rounded-md">Actif</span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">Créé le {new Date(rs.created_at).toLocaleString('fr-FR')}</p>
+                                <p className="text-xs font-bold text-slate-400 mt-2">
+                                    {(rs.rules || []).length} règles définies.
+                                </p>
+                            </div>
+                            <div className="flex items-center justify-between mt-auto space-x-2 pt-4 border-t border-slate-100/50">
+                                <button onClick={() => deleteProfile(rs.id)} className="px-2 py-1.5 bg-white border border-red-200 text-red-600 rounded-lg text-[10px] font-black uppercase hover:bg-red-50 transition-colors truncate" title="Supprimer">Suppr.</button>
+                                <button onClick={() => viewProfile(rs.id)} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-600 rounded-lg text-[10px] font-black uppercase hover:bg-blue-50 transition-colors w-full" title="Consulter / Modifier ce profil">Voir / Modifier</button>
+                                {rs.id !== activeProfileId && (
+                                    <button onClick={() => activateProfile(rs.id)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase hover:bg-blue-700 transition-colors w-full shadow-sm" title="Activer ce profil">Activer</button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
       ) : (
-        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm">
-          <table className="w-full text-left border-collapse">
-          <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
+        <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 shrink-0">
+             <h3 className="text-sm font-black text-slate-900 uppercase">
+                {editingProfileId ? `Édition: ${ruleSets.find(rs => rs.id === editingProfileId)?.name}` : 'Nouvelle Configuration (non sauvegardée)'}
+             </h3>
+             <div className="flex gap-2">
+               {editingProfileId && (
+                 <button onClick={() => saveCurrentAsProfile()} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-black uppercase flex items-center gap-2 hover:bg-blue-700 shadow-sm transition-colors">
+                    <Save size={14} /> Mettre à jour le profil actuel
+                 </button>
+               )}
+               <button onClick={() => {
+                   if (editingProfileId) {
+                      setEditingProfileId(null);
+                      setNewProfileName("");
+                   }
+                   setSaveProfileModalOpen(true);
+                 }} className={`px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 shadow-sm transition-colors ${editingProfileId ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                  {!editingProfileId && <Save size={14} />} 
+                  {editingProfileId ? "Enregistrer sous..." : "Enregistrer dans un nouveau profil"}
+               </button>
+             </div>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 z-20 bg-slate-50 shadow-sm">
             <tr>
               <th className="p-3 border-b border-r border-slate-200 bg-slate-100 min-w-[150px] sticky left-0 z-30">
                 <div className="text-[10px] font-black uppercase text-slate-500">Période \ Colonne</div>
@@ -464,7 +699,35 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             </tr>
           </tbody>
         </table>
+          </div>
       </div>
+      )}
+
+      {saveProfileModalOpen && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6">
+                <h3 className="text-xl font-black uppercase text-slate-900 mb-4">Sauvegarder le profil</h3>
+                <div className="mb-6">
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Nom du profil</label>
+                    <input 
+                        autoFocus
+                        type="text"
+                        value={newProfileName}
+                        onChange={(e) => setNewProfileName(e.target.value)}
+                        className="w-full p-3 border border-slate-200 rounded-xl font-bold bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                        placeholder="Ex: Mon profil de règles 1"
+                    />
+                </div>
+                <div className="flex justify-end gap-3">
+                    <button onClick={() => setSaveProfileModalOpen(false)} className="px-5 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 uppercase text-xs tracking-wider">
+                        Annuler
+                    </button>
+                    <button onClick={saveCurrentAsProfile} className="px-5 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 uppercase text-xs tracking-wider flex items-center gap-2">
+                        <Save size={16} /> Sauvegarder
+                    </button>
+                </div>
+            </div>
+        </div>
       )}
 
       {modalOpen && (

@@ -12,8 +12,15 @@ create table if not exists shift_definitions (
   end_col integer not null
 );
 
+create table if not exists exchange_rule_sets (
+  id uuid default gen_random_uuid() primary key,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  name text not null,
+  modes jsonb not null,
+  rules jsonb not null
+);
+
 create table if not exists shift_global_settings (
-  id integer primary key default 1,
   target_substitute_active boolean default false,
   target_substitute_max integer default 0,
   target_doctor_active boolean default false,

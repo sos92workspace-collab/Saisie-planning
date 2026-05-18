@@ -2982,7 +2982,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 const substitutes = usersWithCounts.filter(u => u.role === 'SUBSTITUTE');
 
                 return (
-                    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-0 md:p-4">
+                    <div className={`fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center ${isCompareFullscreen ? 'p-0' : 'p-0 md:p-4'}`}>
                         <div className={`bg-white shadow-2xl w-full flex flex-col overflow-hidden transition-all duration-300 animate-in fade-in zoom-in-95 ${isCompareFullscreen ? 'h-screen max-w-none rounded-none' : 'max-h-[95vh] max-w-7xl rounded-[32px]'}`}>
                             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 shrink-0">
                                 <div>
@@ -3023,21 +3023,13 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                             <div className="shrink-0 p-4 border-b border-slate-100 bg-white">
                                 {(doctors.length > 0 || substitutes.length > 0) && (
                                     <div className="flex flex-col gap-3">
-                                        <div 
-                                            className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between cursor-pointer hover:text-slate-600 transition-colors select-none"
-                                            onClick={() => setShowCompareCounters(!showCompareCounters)}
-                                        >
-                                            <span>Compteurs (Notre Base / 4D)</span>
-                                            <span className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-[9px]">
-                                                {showCompareCounters ? 'Masquer' : 'Afficher'}
-                                                {showCompareCounters ? '▲' : '▼'}
-                                            </span>
-                                        </div>
-                                        
-                                        {showCompareCounters && (
-                                            <div className="flex flex-col gap-3 max-h-[30vh] overflow-y-auto custom-scrollbar pr-2">
-                                                {doctors.length > 0 && (
-                                                    <div className="space-y-2">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Compteurs
+                                    </div>
+                                    
+                                    <div className="flex flex-col gap-3 max-h-[30vh] overflow-y-auto custom-scrollbar pr-2">
+                                        {doctors.length > 0 && (
+                                            <div className="space-y-2">
                                                         <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Titulaires</div>
                                                         <div className="flex flex-wrap gap-2">
                                                             {doctors.map(uc => {
@@ -3069,8 +3061,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                         </div>
                                                     </div>
                                                 )}
-                                            </div>
-                                        )}
+                                    </div>
                                     </div>
                                 )}
                             </div>
@@ -3105,20 +3096,20 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                             
                                                             if (inOurs && !inImport) {
                                                                 state = 'EXTRA';
-                                                                textContent = <span className="text-[14px] md:text-[11px] font-black text-blue-700 drop-shadow-sm">{inOurs.userTrigram}</span>;
+                                                                textContent = <span className="text-[16px] md:text-[14px] font-black text-blue-700 drop-shadow-sm leading-none">{inOurs.userTrigram}</span>;
                                                             } else if (!inOurs && inImport) {
                                                                 state = 'MISSING';
-                                                                textContent = <span className="text-[14px] md:text-[11px] font-black text-red-700 drop-shadow-sm">{inImport.trigram}</span>;
+                                                                textContent = <span className="text-[16px] md:text-[14px] font-black text-red-700 drop-shadow-sm leading-none">{inImport.trigram}</span>;
                                                             } else if (inOurs && inImport) {
                                                                 if (inOurs.userTrigram === inImport.trigram) {
                                                                     state = 'MATCH';
-                                                                    textContent = <span className="text-[14px] md:text-[11px] font-black text-emerald-700 opacity-60 drop-shadow-sm">{inOurs.userTrigram}</span>;
+                                                                    textContent = <span className="text-[16px] md:text-[14px] font-black text-emerald-700 opacity-60 drop-shadow-sm leading-none">{inOurs.userTrigram}</span>;
                                                                 } else {
                                                                     state = 'MISMATCH';
                                                                     textContent = (
-                                                                        <div className="flex flex-col items-center leading-none">
-                                                                            <span className="text-[7px] font-bold text-slate-500 line-through">{inOurs.userTrigram}</span>
-                                                                            <span className="text-[11px] md:text-[9px] font-black text-orange-700">{inImport.trigram}</span>
+                                                                        <div className="flex flex-col items-center leading-[1]">
+                                                                            <span className="text-[9px] font-bold text-slate-500 line-through">{inOurs.userTrigram}</span>
+                                                                            <span className="text-[14px] md:text-[12px] font-black text-orange-700">{inImport.trigram}</span>
                                                                         </div>
                                                                     );
                                                                 }
@@ -3150,7 +3141,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                             };
 
                                                             return (
-                                                                <td key={col.id} onClick={handleCellClick} className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] align-middle overflow-hidden bg-white`}>
+                                                                <td key={col.id} onClick={handleCellClick} className={`border-r border-b border-slate-200 text-center relative min-w-[70px] w-[70px] md:min-w-[44px] md:w-[44px] align-middle overflow-hidden bg-white`}>
                                                                     <div className={`absolute inset-0 flex items-center justify-center ${cellClasses}`}>
                                                                         {textContent}
                                                                         {state !== 'MATCH' && state !== 'EMPTY' && !isResolved && <div className={`absolute top-0 right-0 w-4 h-4 -mr-2 -mt-2 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}
