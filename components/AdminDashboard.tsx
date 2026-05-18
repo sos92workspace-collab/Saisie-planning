@@ -1941,6 +1941,9 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     const [showCompareModal, setShowCompareModal] = useState(false);
     const [compareData, setCompareData] = useState<any[] | null>(null);
     const [compareMonthYear, setCompareMonthYear] = useState<string>('ALL');
+    const [resolvedCompareCells, setResolvedCompareCells] = useState<Record<string, boolean>>({});
+    const [isCompareFullscreen, setIsCompareFullscreen] = useState(false);
+    const [showCompareCounters, setShowCompareCounters] = useState(false);
 
     useEffect(() => {
         if (subTab === 'history') {
@@ -2979,14 +2982,14 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 const substitutes = usersWithCounts.filter(u => u.role === 'SUBSTITUTE');
 
                 return (
-                    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-                        <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-7xl max-h-[95vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] flex items-center justify-center p-0 md:p-4">
+                        <div className={`bg-white shadow-2xl w-full flex flex-col overflow-hidden transition-all duration-300 animate-in fade-in zoom-in-95 ${isCompareFullscreen ? 'h-screen max-w-none rounded-none' : 'max-h-[95vh] max-w-7xl rounded-[32px]'}`}>
                             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50 shrink-0">
                                 <div>
                                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Comparaison 4D</h3>
                                     <div className="flex flex-wrap gap-3 mt-2">
-                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-300 block"></span> En trop (Notre base)</div>
-                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-red-100 border border-red-300 block"></span> Manquant (4D pur)</div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-300 block"></span> Manquant</div>
+                                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-red-100 border border-red-300 block"></span> En trop</div>
                                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-orange-100 border border-orange-300 block"></span> Différent</div>
                                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 uppercase tracking-widest"><span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300 block"></span> OK</div>
                                     </div>
@@ -3004,48 +3007,68 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                             return <option key={ym} value={ym}>{label.charAt(0).toUpperCase() + label.slice(1)}</option>;
                                         })}
                                     </select>
+                                    <button onClick={() => setIsCompareFullscreen(!isCompareFullscreen)} className="w-11 h-11 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-slate-100 border border-slate-200 shadow-sm transition-all shrink-0" title={isCompareFullscreen ? "Quitter le plein écran" : "Plein écran"}>
+                                        {isCompareFullscreen ? (
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+                                        ) : (
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                                        )}
+                                    </button>
                                     <button onClick={() => setShowCompareModal(false)} className="w-11 h-11 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 shadow-sm transition-all shrink-0">
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                                     </button>
                                 </div>
                             </div>
                             
-                            <div className="shrink-0 p-4 border-b border-slate-100 bg-white space-y-4 max-h-[30vh] overflow-y-auto custom-scrollbar">
+                            <div className="shrink-0 p-4 border-b border-slate-100 bg-white">
                                 {(doctors.length > 0 || substitutes.length > 0) && (
                                     <div className="flex flex-col gap-3">
-                                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Compteurs (Notre Base / 4D)</div>
+                                        <div 
+                                            className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between cursor-pointer hover:text-slate-600 transition-colors select-none"
+                                            onClick={() => setShowCompareCounters(!showCompareCounters)}
+                                        >
+                                            <span>Compteurs (Notre Base / 4D)</span>
+                                            <span className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded text-[9px]">
+                                                {showCompareCounters ? 'Masquer' : 'Afficher'}
+                                                {showCompareCounters ? '▲' : '▼'}
+                                            </span>
+                                        </div>
                                         
-                                        {doctors.length > 0 && (
-                                            <div className="space-y-2">
-                                                <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Titulaires</div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {doctors.map(uc => {
-                                                        const isDiff = uc.ourCount !== uc.importCount;
-                                                        return (
-                                                            <div key={uc.trigram} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 ${isDiff ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
-                                                                <span>{uc.trigram}</span>
-                                                                <span className={`px-1.5 py-0.5 rounded-md text-white ${isDiff ? 'bg-orange-500' : 'bg-slate-400'}`}>{uc.ourCount} / {uc.importCount}</span>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
+                                        {showCompareCounters && (
+                                            <div className="flex flex-col gap-3 max-h-[30vh] overflow-y-auto custom-scrollbar pr-2">
+                                                {doctors.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <div className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">Titulaires</div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {doctors.map(uc => {
+                                                                const isDiff = uc.ourCount !== uc.importCount;
+                                                                return (
+                                                                    <div key={uc.trigram} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 ${isDiff ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                                                        <span>{uc.trigram}</span>
+                                                                        <span className={`px-1.5 py-0.5 rounded-md text-white ${isDiff ? 'bg-orange-500' : 'bg-slate-400'}`}>{uc.ourCount} / {uc.importCount}</span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
 
-                                        {substitutes.length > 0 && (
-                                            <div className="space-y-2">
-                                                <div className="text-[9px] font-bold text-orange-600 uppercase tracking-widest">Remplaçants</div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {substitutes.map(uc => {
-                                                        const isDiff = uc.ourCount !== uc.importCount;
-                                                        return (
-                                                            <div key={uc.trigram} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 ${isDiff ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
-                                                                <span>{uc.trigram}</span>
-                                                                <span className={`px-1.5 py-0.5 rounded-md text-white ${isDiff ? 'bg-orange-500' : 'bg-slate-400'}`}>{uc.ourCount} / {uc.importCount}</span>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                {substitutes.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <div className="text-[9px] font-bold text-orange-600 uppercase tracking-widest">Remplaçants</div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {substitutes.map(uc => {
+                                                                const isDiff = uc.ourCount !== uc.importCount;
+                                                                return (
+                                                                    <div key={uc.trigram} className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border flex items-center gap-1.5 ${isDiff ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                                                        <span>{uc.trigram}</span>
+                                                                        <span className={`px-1.5 py-0.5 rounded-md text-white ${isDiff ? 'bg-orange-500' : 'bg-slate-400'}`}>{uc.ourCount} / {uc.importCount}</span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -3101,16 +3124,37 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                                 }
                                                             }
 
-                                                            const cellClasses = state === 'EXTRA' ? 'bg-blue-100 border-blue-200' :
-                                                                                state === 'MISSING' ? 'bg-red-100 border-red-200' :
-                                                                                state === 'MISMATCH' ? 'bg-orange-100 border-orange-200' :
-                                                                                state === 'MATCH' ? 'bg-emerald-50 border-emerald-100' : 'bg-white opacity-50';
+                                                            const cellKey = `${tYear}-${tMonth}-${day}-${col.id}`;
+                                                            const isResolved = resolvedCompareCells[cellKey];
+
+                                                            let cellClasses = 'bg-white opacity-50';
+                                                            if (isResolved) {
+                                                                cellClasses = 'bg-emerald-200 border-emerald-400 cursor-pointer hover:bg-emerald-300';
+                                                            } else if (state === 'EXTRA') {
+                                                                cellClasses = 'bg-blue-100 border-blue-200 cursor-pointer hover:bg-blue-200 transition-colors';
+                                                            } else if (state === 'MISSING') {
+                                                                cellClasses = 'bg-red-100 border-red-200 cursor-pointer hover:bg-red-200 transition-colors';
+                                                            } else if (state === 'MISMATCH') {
+                                                                cellClasses = 'bg-orange-100 border-orange-200 cursor-pointer hover:bg-orange-200 transition-colors';
+                                                            } else if (state === 'MATCH') {
+                                                                cellClasses = 'bg-emerald-50 border-emerald-100';
+                                                            }
+
+                                                            const handleCellClick = () => {
+                                                                if (state !== 'MATCH' && state !== 'EMPTY') {
+                                                                    setResolvedCompareCells(prev => ({
+                                                                        ...prev,
+                                                                        [cellKey]: !prev[cellKey]
+                                                                    }));
+                                                                }
+                                                            };
 
                                                             return (
-                                                                <td key={col.id} className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] align-middle overflow-hidden bg-white`}>
+                                                                <td key={col.id} onClick={handleCellClick} className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] align-middle overflow-hidden bg-white`}>
                                                                     <div className={`absolute inset-0 flex items-center justify-center ${cellClasses}`}>
                                                                         {textContent}
-                                                                        {state !== 'MATCH' && state !== 'EMPTY' && <div className={`absolute top-0 right-0 w-4 h-4 -mr-2 -mt-2 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}
+                                                                        {state !== 'MATCH' && state !== 'EMPTY' && !isResolved && <div className={`absolute top-0 right-0 w-4 h-4 -mr-2 -mt-2 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}
+                                                                        {isResolved && <div className="absolute top-0.5 right-0.5 text-emerald-800"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>}
                                                                     </div>
                                                                 </td>
                                                             );
