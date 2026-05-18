@@ -284,11 +284,16 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         }
         setSaveProfileModalOpen(false);
         setNewProfileName("");
-        fetchRulesAndProfiles(false);
+        await fetchRulesAndProfiles(false);
         alert("Profil sauvegardé avec succès.");
     } catch (err: any) {
         console.error(err);
-        alert("Erreur lors de la sauvegarde du profil : " + err.message);
+        if (err.message && err.message.includes('relation "exchange_rule_sets" does not exist')) {
+            setShowSqlHelp(true);
+            setSaveProfileModalOpen(false);
+        } else {
+            alert("Erreur lors de la sauvegarde du profil : " + err.message);
+        }
         setLoading(false);
     }
   };
@@ -324,7 +329,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         }
 
         alert(`Profil "${profile.name}" activé avec succès.`);
-        fetchRulesAndProfiles(editingProfileId === null);
+        await fetchRulesAndProfiles(editingProfileId === null);
     } catch (err: any) {
         console.error(err);
         alert("Erreur lors de l'activation du profil : " + err.message);
@@ -353,7 +358,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     if (!window.confirm("Supprimer ce profil ?")) return;
     try {
         await supabase.from('exchange_rule_sets').delete().eq('id', profileId);
-        fetchRulesAndProfiles();
+        await fetchRulesAndProfiles();
     } catch(err) {
         console.error(err);
     }
