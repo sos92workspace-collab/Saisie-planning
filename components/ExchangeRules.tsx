@@ -288,7 +288,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         alert("Profil sauvegardé avec succès.");
     } catch (err: any) {
         console.error(err);
-        if (err.message && err.message.includes('relation "exchange_rule_sets" does not exist')) {
+        if (err.message && (err.message.includes('relation "exchange_rule_sets" does not exist') || err.message.includes('row-level security'))) {
             setShowSqlHelp(true);
             setSaveProfileModalOpen(false);
         } else {
@@ -370,17 +370,27 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         <div className="bg-white p-8 rounded-3xl border shadow-sm space-y-6">
           <h2 className="text-xl font-black text-slate-900">Configuration Requise</h2>
           <p className="text-slate-600">
-            Pour utiliser plusieurs profils de règles d'échange, vous devez créer la table <strong>exchange_rule_sets</strong> dans votre base de données Supabase.
+            Pour utiliser plusieurs profils de règles d'échange, vous devez créer la table <strong>exchange_rule_sets</strong> dans votre base de données Supabase, et configurer les politiques de sécurité (RLS).
           </p>
           <div className="bg-slate-900 p-4 rounded-xl overflow-x-auto text-left">
             <pre className="text-emerald-400 text-sm font-mono">
-{`CREATE TABLE exchange_rule_sets (
+{`CREATE TABLE IF NOT EXISTS exchange_rule_sets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   name TEXT NOT NULL,
   modes JSONB NOT NULL,
   rules JSONB NOT NULL
-);`}
+);
+
+ALTER TABLE exchange_rule_sets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow authenticated read access to exchange profiles" 
+ON exchange_rule_sets FOR SELECT 
+TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated full access to exchange profiles" 
+ON exchange_rule_sets FOR ALL 
+TO authenticated USING (true) WITH CHECK (true);`}
             </pre>
           </div>
           <button onClick={fetchRulesAndProfiles} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-black uppercase text-xs hover:bg-blue-700 block mx-auto">
