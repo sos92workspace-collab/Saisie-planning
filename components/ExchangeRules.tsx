@@ -143,14 +143,22 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     try {
       if (selectedVersionIdRef.current) {
         const dump = { modes: newModes, rules };
-        await supabase.from('exchange_rule_versions').update({ rules_data: dump }).eq('id', selectedVersionIdRef.current);
+        const { error } = await supabase.from('exchange_rule_versions').update({ rules_data: dump }).eq('id', selectedVersionIdRef.current);
+        if (error) throw error;
       } else {
         const upserts = colsToUpdate.map(c => ({ col_id: c, mode }));
-        await supabase.from('exchange_modes').upsert(upserts);
+        const { error } = await supabase.from('exchange_modes').upsert(upserts);
+        if (error) throw error;
       }
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la sauvegarde du mode.");
+      if (err instanceof Error) {
+        alert("Erreur lors de la sauvegarde du mode. " + err.message);
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        alert("Erreur lors de la sauvegarde du mode. " + err.message);
+      } else {
+        alert("Erreur lors de la sauvegarde du mode.");
+      }
     }
   };
 
@@ -190,19 +198,22 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
 
       if (selectedVersionIdRef.current) {
         const dump = { modes, rules: finalRules };
-        await supabase.from('exchange_rule_versions').update({ rules_data: dump }).eq('id', selectedVersionIdRef.current);
+        const { error } = await supabase.from('exchange_rule_versions').update({ rules_data: dump }).eq('id', selectedVersionIdRef.current);
+        if (error) throw error;
       } else {
         // 1. Delete existing rules for the selected source columns and period
         for (const colId of modalSourceCols) {
-          await supabase.from('exchange_rules')
+          const { error: delError } = await supabase.from('exchange_rules')
             .delete()
             .eq('source_col_id', colId)
             .eq('source_period', modalSourcePeriod);
+          if (delError) throw delError;
         }
 
         // 2. Insert new rules
         if (newRulesToInsert.length > 0) {
-          await supabase.from('exchange_rules').insert(newRulesToInsert);
+          const { error: insError } = await supabase.from('exchange_rules').insert(newRulesToInsert);
+          if (insError) throw insError;
         }
       }
 
@@ -213,7 +224,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       }
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de la sauvegarde des règles.");
+      if (err instanceof Error) {
+        alert("Erreur lors de la sauvegarde des règles : " + err.message);
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        alert("Erreur lors de la sauvegarde des règles : " + err.message);
+      } else {
+        alert("Erreur lors de la sauvegarde des règles.");
+      }
     }
   };
 
@@ -415,13 +432,21 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       
                       try {
                         // 1. Clear active
-                        await supabase.from('exchange_modes').delete().not('col_id', 'is', null);
-                        await supabase.from('exchange_rules').delete().not('source_col_id', 'is', null);
+                        const { error: err1 } = await supabase.from('exchange_modes').delete().not('col_id', 'is', null);
+                        if (err1) throw err1;
+                        const { error: err2 } = await supabase.from('exchange_rules').delete().not('source_col_id', 'is', null);
+                        if (err2) throw err2;
                         
                         // 2. Insert new
                         const modeUpserts = Object.keys(parsed.modes).map(k => ({ col_id: parseInt(k, 10), mode: parsed.modes[k] }));
-                        if (modeUpserts.length > 0) await supabase.from('exchange_modes').insert(modeUpserts);
-                        if (parsed.rules && parsed.rules.length > 0) await supabase.from('exchange_rules').insert(parsed.rules);
+                        if (modeUpserts.length > 0) {
+                          const { error: err3 } = await supabase.from('exchange_modes').insert(modeUpserts);
+                          if (err3) throw err3;
+                        }
+                        if (parsed.rules && parsed.rules.length > 0) {
+                          const { error: err4 } = await supabase.from('exchange_rules').insert(parsed.rules);
+                          if (err4) throw err4;
+                        }
                         
                         alert("Configuration en ligne mise à jour !");
                         setSelectedVersionId(null);
@@ -429,7 +454,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                         fetchRules();
                       } catch (err) {
                         console.error(err);
-                        alert("Erreur lors de l'application de la version.");
+                        if (err instanceof Error) {
+                          alert("Erreur lors de l'application de la version : " + err.message);
+                        } else if (err && typeof err === 'object' && 'message' in err) {
+                          alert("Erreur lors de l'application de la version : " + err.message);
+                        } else {
+                          alert("Erreur lors de l'application de la version.");
+                        }
                       }
                     }}
                     className="px-4 py-2 bg-emerald-500 text-white text-xs font-black uppercase rounded-lg hover:bg-emerald-600 shadow-sm"
@@ -439,11 +470,23 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                   <button 
                     onClick={async () => {
                       if(!window.confirm("Supprimer cette version ?")) return;
-                      await supabase.from('exchange_rule_versions').delete().eq('id', selectedVersionId);
-                      setSelectedVersionId(null);
-                      selectedVersionIdRef.current = null;
-                      fetchVersions();
-                      fetchRules();
+                      try {
+                        const { error } = await supabase.from('exchange_rule_versions').delete().eq('id', selectedVersionId);
+                        if (error) throw error;
+                        setSelectedVersionId(null);
+                        selectedVersionIdRef.current = null;
+                        fetchVersions();
+                        fetchRules();
+                      } catch (err) {
+                        console.error(err);
+                        if (err instanceof Error) {
+                          alert("Erreur lors de la suppression : " + err.message);
+                        } else if (err && typeof err === 'object' && 'message' in err) {
+                          alert("Erreur lors de la suppression : " + err.message);
+                        } else {
+                          alert("Erreur.");
+                        }
+                      }
                     }}
                     className="px-4 py-2 bg-red-50 text-red-600 hover:text-white hover:bg-red-600 text-xs font-black uppercase rounded-lg"
                   >
@@ -456,8 +499,21 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                     const name = window.prompt("Nom de la version :");
                     if (!name) return;
                     const dump = { modes, rules };
-                    await supabase.from('exchange_rule_versions').insert([{ name, is_active: false, rules_data: dump }]);
-                    fetchVersions();
+                    try {
+                      const { error } = await supabase.from('exchange_rule_versions').insert([{ name, is_active: false, rules_data: dump }]);
+                      if (error) throw error;
+                      fetchVersions();
+                      alert("Snapshot enregistré avec succès !");
+                    } catch (err) {
+                      console.error(err);
+                      if (err instanceof Error) {
+                        alert("Erreur lors de la sauvegarde du snapshot : " + err.message);
+                      } else if (err && typeof err === 'object' && 'message' in err) {
+                        alert("Erreur lors de la sauvegarde du snapshot : " + err.message);
+                      } else {
+                        alert("Erreur lors de la sauvegarde du snapshot.");
+                      }
+                    }
                   }}
                   className="px-4 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs font-black uppercase rounded-lg shadow-sm"
                 >
