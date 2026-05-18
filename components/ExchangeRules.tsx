@@ -384,10 +384,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
 
 ALTER TABLE exchange_rule_sets ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow authenticated read access to exchange profiles" ON exchange_rule_sets;
 CREATE POLICY "Allow authenticated read access to exchange profiles" 
 ON exchange_rule_sets FOR SELECT 
 TO authenticated USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated full access to exchange profiles" ON exchange_rule_sets;
 CREATE POLICY "Allow authenticated full access to exchange profiles" 
 ON exchange_rule_sets FOR ALL 
 TO authenticated USING (true) WITH CHECK (true);`}
