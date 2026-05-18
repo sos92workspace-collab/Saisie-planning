@@ -2946,7 +2946,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             {showCompareModal && compareData && (() => {
                 const availableYMs = Array.from(new Set([
                     ...compareData.map((c: any) => `${c.year}-${c.month}`),
-                    ...choices.filter((c: any) => c.status === 'ASSIGNED').map((c: any) => `${c.year}-${c.month - 1}`)
+                    ...choices.filter((c: any) => c.status === 'ASSIGNED').map((c: any) => `${c.year}-${c.month}`)
                 ])).sort();
 
                 const targetYM = compareMonthYear;
@@ -2954,7 +2954,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 const tYear = Number(tYearStr) || 2025;
                 const tMonth = Number(tMonthStr) || 0;
                 
-                const ourAssigned = choices.filter((c: any) => c.status === 'ASSIGNED' && c.year === tYear && (c.month - 1) === tMonth);
+                const ourAssigned = choices.filter((c: any) => c.status === 'ASSIGNED' && c.year === tYear && c.month === tMonth);
                 const imported = compareData.filter((c: any) => c.year === tYear && c.month === tMonth);
 
                 const daysInMonth = new Date(tYear, tMonth + 1, 0).getDate();
