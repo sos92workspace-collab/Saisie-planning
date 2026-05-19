@@ -1,9 +1,17 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronDown, Calendar, Bot } from 'lucide-react';
+import { ChevronDown, Calendar, Bot, X } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
+
+const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined) => {
+  if (day == null || month == null || year == null || col == null) return '';
+  const d = new Date(year, month, day);
+  const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' }).substring(0, 3).toUpperCase();
+  const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return `C${col} : ${colLabel || ''} - ${dayName} ${dateStr}`;
+};
 import { StepProgressBar } from './components/StepProgressBar';
 import { RecapView } from './components/RecapView';
 import { RoundInfo } from './components/RoundInfo';
@@ -323,6 +331,8 @@ const App: React.FC = () => {
   const [showExchangeConfirmModal, setShowExchangeConfirmModal] = useState(false);
   const [exchangeRules, setExchangeRules] = useState<any[]>([]);
   const [exchangeModes, setExchangeModes] = useState<Record<number, string>>({});
+  const [myPendingExchanges, setMyPendingExchanges] = useState<any[]>([]);
+  const [isExchangeSidebarOpen, setIsExchangeSidebarOpen] = useState(false);
 
   const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
 
@@ -668,6 +678,13 @@ const App: React.FC = () => {
     if (unav) setUnavailabilities(unav.map((u: any) => ({
         id: u.id, userTrigram: u.user_trigram, day: u.day, month: u.month - 1, year: u.year, period: u.period
     })));
+
+    // Fetch my pending exchanges
+    const { data: myExchanges } = await supabase.from('exchange_requests')
+      .select('*, requester_choice:choices!requester_choice_id(*)')
+      .eq('requester_trigram', tri.toUpperCase())
+      .eq('status', 'PENDING');
+    if (myExchanges) setMyPendingExchanges(myExchanges);
 
     // Load exchange rules
     const { data: rulesData } = await supabase.from('exchange_rules').select('*');
@@ -1022,6 +1039,10 @@ const App: React.FC = () => {
           const isAssigned = choices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year && c.status === 'ASSIGNED');
           if (isAssigned) return;
 
+          // Check if cell is already targeted by me in another pending exchange
+          const isAlreadyTargetedByMe = myPendingExchanges.some(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
+          if (isAlreadyTargetedByMe) return;
+
           possibleTargets.push({
             id: `empty-${day}-${month}-${year}-${col.id}`,
             row: day,
@@ -1035,7 +1056,7 @@ const App: React.FC = () => {
     });
 
     setPossibleTargetChoices(possibleTargets);
-  }, [choices, exchangeRules, exchangeModes, trigram, currentRoundId, globalClosures, monthsToDisplay, dynamicColumns, isColOpen, currentStep]);
+  }, [choices, exchangeRules, exchangeModes, trigram, currentRoundId, globalClosures, monthsToDisplay, dynamicColumns, isColOpen, currentStep, myPendingExchanges]);
 
   const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false, explicitPriority?: number) => {
     if (exchangeMode !== 'INACTIVE') {
@@ -1043,18 +1064,32 @@ const App: React.FC = () => {
 
         if (exchangeMode === 'SELECT_OWN') {
             if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
+                const existingPending = myPendingExchanges.find(ex => ex.requester_choice_id === clickedAssigned.id);
+                if (existingPending) {
+                    if (!window.confirm("Vous avez déjà une demande d'échange en attente pour cette garde. Voulez-vous la remplacer par une nouvelle demande ? L'ancienne sera supprimée.")) {
+                        return;
+                    }
+                }
                 setSelectedOwnChoice(clickedAssigned);
                 setExchangeMode('SELECT_TARGET');
                 computePossibleTargets(clickedAssigned);
             }
         } else if (exchangeMode === 'SELECT_TARGET') {
             if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
+                const existingPending = myPendingExchanges.find(ex => ex.requester_choice_id === clickedAssigned.id);
+                if (existingPending) {
+                    if (!window.confirm("Vous avez déjà une demande d'échange en attente pour cette garde. Voulez-vous la remplacer par une nouvelle demande ? L'ancienne sera supprimée.")) {
+                        return;
+                    }
+                }
                 setSelectedOwnChoice(clickedAssigned);
                 computePossibleTargets(clickedAssigned);
             } else if (possibleTargetChoices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year)) {
                 const target = possibleTargetChoices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year);
                 setSelectedTargetChoice(target);
                 setShowExchangeConfirmModal(true);
+            } else if (myPendingExchanges.some(ex => ex.target_row === row && ex.target_col === colId && ex.target_month === month && ex.target_year === year)) {
+                alert("Vous avez déjà une demande d'échange en attente pour récupérer cette garde.");
             }
         }
         return;
@@ -1185,6 +1220,11 @@ const App: React.FC = () => {
     if (!selectedOwnChoice || !selectedTargetChoice) return;
     
     try {
+      const existingPending = myPendingExchanges.find(ex => ex.requester_choice_id === selectedOwnChoice.id);
+      if (existingPending) {
+         await supabase.from('exchange_requests').delete().eq('id', existingPending.id);
+      }
+
       const { error } = await supabase.from('exchange_requests').insert({
         round_id: currentRoundId,
         requester_trigram: trigram.toUpperCase(),
@@ -1200,6 +1240,14 @@ const App: React.FC = () => {
       if (error) throw error;
       
       alert("Votre demande d'échange a été envoyée à l'administrateur.");
+      
+      // Refresh my pending exchanges
+      const { data: myExchanges } = await supabase.from('exchange_requests')
+        .select('*, requester_choice:choices!requester_choice_id(*)')
+        .eq('requester_trigram', trigram.toUpperCase())
+        .eq('status', 'PENDING');
+      if (myExchanges) setMyPendingExchanges(myExchanges);
+
       setExchangeMode('INACTIVE');
       setSelectedOwnChoice(null);
       setSelectedTargetChoice(null);
@@ -1416,6 +1464,7 @@ const App: React.FC = () => {
                     )}
 
                     {activeRound?.allow_exchanges && isConsultationMode && (
+                        <>
                         <button 
                             onClick={() => {
                                 if (exchangeMode === 'INACTIVE') {
@@ -1431,6 +1480,14 @@ const App: React.FC = () => {
                             <span className="hidden md:inline">{exchangeMode !== 'INACTIVE' ? 'Annuler l\'échange' : 'Échanger des gardes'}</span>
                             <span className="md:hidden">Échanger</span>
                         </button>
+                        <button 
+                            onClick={() => setIsExchangeSidebarOpen(true)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingExchanges.length > 0 ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            <span className="hidden md:inline">Mes Demandes ({myPendingExchanges.length})</span>
+                            <span className="md:hidden">Demandes ({myPendingExchanges.length})</span>
+                        </button>
+                        </>
                     )}
 
                     {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && (
@@ -1683,6 +1740,9 @@ const App: React.FC = () => {
                                   const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14 * 60);
                                   const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                   
+                                  const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && ex.requester_choice?.month === month && ex.requester_choice?.year === year);
+                                  const pendingTake = myPendingExchanges.find(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
+
                                   if (exchangeMode !== 'INACTIVE') {
                                       const isOwnSelected = selectedOwnChoice?.row === day && selectedOwnChoice?.col === col.id && selectedOwnChoice?.month === month && selectedOwnChoice?.year === year;
                                       const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
@@ -1700,6 +1760,12 @@ const App: React.FC = () => {
                                       } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all";
+                                      } else if (pendingGiveUp) {
+                                          bgColor = '#a855f7'; // purple-500
+                                          cellStyles += " opacity-40 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
+                                      } else if (pendingTake) {
+                                          bgColor = '#c084fc'; // purple-400
+                                          cellStyles += " opacity-40 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
                                       } else if (assignedList.length > 0) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-30 text-slate-900";
@@ -1708,7 +1774,13 @@ const App: React.FC = () => {
                                           cellStyles += " opacity-20";
                                       }
                                   } else if (isConsultationMode) {
-                                      if (isAssignedToMe) {
+                                      if (pendingGiveUp) {
+                                          bgColor = '#a855f7'; // purple-500
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea]";
+                                      } else if (pendingTake) {
+                                          bgColor = '#c084fc'; // purple-400
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea]";
+                                      } else if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";
                                       } else if (assignedList.length > 0) {
@@ -1838,9 +1910,15 @@ const App: React.FC = () => {
 
                                       {/* Cas 2 : Garde Validée (Moi ou Autre) - Affiche le(s) trigramme(s) */}
                                       {(isAssignedToMe || isAssignedToOther) && (
-                                          <div className="flex flex-col items-center justify-center gap-[1px]">
+                                          <div className="flex flex-col items-center justify-center gap-[1px] relative">
+                                              {isConsultationMode && pendingGiveUp && (
+                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↗</span>
+                                              )}
+                                              {isConsultationMode && pendingTake && (
+                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↙</span>
+                                              )}
                                               {assignedList.map((a, i) => (
-                                                  <span key={i} className="text-[14px] md:text-[11px] font-black drop-shadow-sm tracking-tighter block leading-none text-slate-900">
+                                                  <span key={i} className={`text-[14px] md:text-[11px] font-black drop-shadow-sm tracking-tighter block leading-none ${(isConsultationMode && (pendingGiveUp || pendingTake)) ? 'text-white' : 'text-slate-900'}`}>
                                                       {a.userTrigram}
                                                   </span>
                                               ))}
@@ -1875,6 +1953,56 @@ const App: React.FC = () => {
             <span className="whitespace-nowrap">{hoveredCell.colLabel}</span>
         </div>
       )}
+
+      {/* Exchange Sidebar */}
+      <div 
+        className={`absolute top-0 right-0 h-full bg-white shadow-2xl z-[300] border-l border-slate-200 transition-transform duration-300 transform w-96 flex flex-col ${isExchangeSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-black uppercase tracking-widest text-slate-900">Demandes en attente</h3>
+            <button onClick={() => setIsExchangeSidebarOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+             {myPendingExchanges.map(ex => (
+                 <div key={ex.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3">
+                     <div className="flex flex-col gap-1">
+                         <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest">Garde cédée (Départ)</span>
+                         <span className="text-sm font-bold text-slate-800">
+                             {formatRequestDate(ex.requester_choice?.row, ex.requester_choice?.month, ex.requester_choice?.year, ex.requester_choice?.col, ex.requester_choice?.colLabel)}
+                         </span>
+                     </div>
+                     <div className="flex justify-center text-slate-300 -my-1">
+                        <ChevronDown size={16} />
+                     </div>
+                     <div className="flex flex-col gap-1">
+                         <span className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Garde souhaitée (Arrivée)</span>
+                         <span className="text-sm font-bold text-slate-800">
+                             {formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label)}
+                         </span>
+                     </div>
+                     <div className="pt-3 border-t border-slate-200 mt-1">
+                         <button 
+                             onClick={async () => {
+                                 if(!window.confirm("Annuler cette demande d'échange ?")) return;
+                                 try {
+                                     await supabase.from('exchange_requests').delete().eq('id', ex.id);
+                                     setMyPendingExchanges(prev => prev.filter(p => p.id !== ex.id));
+                                 } catch(err) {
+                                     console.error(err);
+                                 }
+                             }}
+                             className="w-full text-[10px] font-black uppercase tracking-widest bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                         >
+                             Annuler la demande
+                         </button>
+                     </div>
+                 </div>
+             ))}
+             {myPendingExchanges.length === 0 && (
+                 <div className="text-center text-slate-400 font-bold text-sm mt-8">Aucune demande d'échange en cours.</div>
+             )}
+        </div>
+      </div>
 
       {viewMode === ViewMode.APP && (
         <ChatAssistant 

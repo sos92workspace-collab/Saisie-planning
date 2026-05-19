@@ -96,7 +96,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
           requester_choice:choices!requester_choice_id(*),
           target_choice:choices!target_choice_id(*)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
       
       if (error) throw error;
       setRequests(data || []);
@@ -124,6 +124,24 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             month: req.target_month,
             year: req.target_year
         }).eq('id', req.requester_choice_id);
+
+        // Auto-reject other pending requests for the same target cell
+        const otherRequests = requests.filter(r => 
+          r.id !== req.id && 
+          r.status === 'PENDING' &&
+          r.target_row === req.target_row &&
+          r.target_col === req.target_col &&
+          r.target_month === req.target_month &&
+          r.target_year === req.target_year
+        );
+
+        if (otherRequests.length > 0) {
+          const reason = `Refusé car attribué à ${req.requester_trigram}`;
+          const otherIds = otherRequests.map(r => r.id);
+          await supabase.from('exchange_requests')
+            .update({ status: 'REJECTED', reason })
+            .in('id', otherIds);
+        }
       }
 
       await supabase.from('exchange_requests').update({ status: action }).eq('id', requestId);
@@ -379,10 +397,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                         </div>
                       </div>
                       {req.status !== 'PENDING' && (
-                        <div className="flex items-center gap-2 ml-[136px] pl-4 border-l-2 border-slate-200">
-                          <span className={`font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200">
+                          <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                             {req.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
                           </span>
+                          {req.reason && <span className="text-xs text-slate-500 italic mt-1">{req.reason}</span>}
                         </div>
                       )}
                     </div>
