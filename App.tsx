@@ -1973,7 +1973,7 @@ const App: React.FC = () => {
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
-                                          if (exchangeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
+                                          if (exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
                                           const cellKey = `${day}-${col.id}`;
                                           const existingTimeout = clickTimeoutsRef.current.get(cellKey);
                                           if (existingTimeout) {
