@@ -5,12 +5,19 @@ import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHolid
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 
-const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined) => {
+const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined, is1IndexedMonth: boolean = false, columnConfigs: ColumnConfig[] = []) => {
   if (day == null || month == null || year == null || col == null) return '';
-  const d = new Date(year, month, day);
-  const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' }).substring(0, 3).toUpperCase();
+  const adjustedMonth = is1IndexedMonth ? month - 1 : month;
+  const d = new Date(year, adjustedMonth, day);
+  const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' }).toUpperCase();
   const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  return `C${col} : ${colLabel || ''} - ${dayName} ${dateStr}`;
+  
+  const columnDef = COLUMNS.find(c => c.id === col);
+  const cfg = columnConfigs.find(c => c.column_id === col);
+  const displayLabel = colLabel || cfg?.custom_label || columnDef?.label || '';
+  const typeInfos = columnDef ? ` | ${cfg?.custom_type || columnDef.type} ${cfg?.custom_time_range || columnDef.timeRange}` : '';
+  
+  return `Col. ${col} : ${displayLabel} - ${dayName} ${dateStr}${typeInfos}`;
 };
 import { StepProgressBar } from './components/StepProgressBar';
 import { RecapView } from './components/RecapView';
@@ -323,8 +330,14 @@ const App: React.FC = () => {
      }
   });
 
-  // Exchange state
+  // Exchange & Abandon state
   const [exchangeMode, setExchangeMode] = useState<'INACTIVE' | 'SELECT_OWN' | 'SELECT_TARGET'>('INACTIVE');
+  const [abandonMode, setAbandonMode] = useState<'INACTIVE' | 'SELECT_OWN'>('INACTIVE');
+  const [myPendingAbandons, setMyPendingAbandons] = useState<any[]>([]);
+  const [selectedOwnAbandonChoice, setSelectedOwnAbandonChoice] = useState<Choice | null>(null);
+  const [showAbandonConfirmModal, setShowAbandonConfirmModal] = useState(false);
+  const [isAbandonSidebarOpen, setIsAbandonSidebarOpen] = useState(false);
+  
   const [selectedOwnChoice, setSelectedOwnChoice] = useState<Choice | null>(null);
   const [possibleTargetChoices, setPossibleTargetChoices] = useState<Choice[]>([]);
   const [selectedTargetChoice, setSelectedTargetChoice] = useState<Choice | null>(null);
@@ -685,6 +698,13 @@ const App: React.FC = () => {
       .eq('requester_trigram', tri.toUpperCase())
       .eq('status', 'PENDING');
     if (myExchanges) setMyPendingExchanges(myExchanges);
+
+    // Fetch my pending abandons
+    const { data: myAbandons } = await supabase.from('abandon_requests')
+      .select('*, requester_choice:choices!choice_id(*)')
+      .eq('requester_trigram', tri.toUpperCase())
+      .eq('status', 'PENDING');
+    if (myAbandons) setMyPendingAbandons(myAbandons);
 
     // Load exchange rules
     const { data: rulesData } = await supabase.from('exchange_rules').select('*');
@@ -1095,6 +1115,31 @@ const App: React.FC = () => {
         return;
     }
 
+    if (abandonMode === 'SELECT_OWN') {
+        const clickedAssigned = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
+            
+            const theDate = new Date(year, month - 1, row, 0, 0, 0); // month is 1-indexed here, month-1 for JS Date
+            const now = new Date();
+            const diffHours = (theDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+            if (diffHours < 48) {
+                alert("Appeler le standard SOS92 car la demande est à moins de 48 heures de la garde.");
+                return;
+            }
+
+            const existingAbandon = myPendingAbandons.find(ab => ab.choice_id === clickedAssigned.id);
+            if (existingAbandon) {
+                alert("Vous avez déjà une demande d'abandon en attente pour cette garde.");
+                return;
+            }
+
+            setSelectedOwnAbandonChoice(clickedAssigned);
+            setShowAbandonConfirmModal(true);
+        }
+        return;
+    }
+
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
 
     const cleanTri = trigram.trim().toUpperCase();
@@ -1258,6 +1303,35 @@ const App: React.FC = () => {
     }
   };
 
+  const handleAbandonConfirm = async () => {
+    if (!selectedOwnAbandonChoice) return;
+    try {
+        const { error } = await supabase.from('abandon_requests').insert({
+            requester_trigram: trigram.toUpperCase(),
+            choice_id: selectedOwnAbandonChoice.id,
+            status: 'PENDING'
+        });
+
+        if (error) throw error;
+        
+        alert("Votre demande d'abandon a été envoyée à l'administrateur.");
+
+        // Refresh my pending abandons
+        const { data: myAbandons } = await supabase.from('abandon_requests')
+          .select('*, requester_choice:choices!choice_id(*)')
+          .eq('requester_trigram', trigram.toUpperCase())
+          .eq('status', 'PENDING');
+        if (myAbandons) setMyPendingAbandons(myAbandons);
+
+        setAbandonMode('INACTIVE');
+        setSelectedOwnAbandonChoice(null);
+        setShowAbandonConfirmModal(false);
+    } catch (err) {
+        console.error(err);
+        alert("Erreur lors de la création de la demande d'abandon.");
+    }
+  };
+
   if (isInitialLoading && viewMode === ViewMode.LOGIN) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6">
@@ -1323,8 +1397,8 @@ const App: React.FC = () => {
                 <div className="space-y-4 mb-8">
                     <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl">
                         <div className="text-[10px] font-black text-orange-500 uppercase mb-1">Vous cédez :</div>
-                        <div className="font-bold text-slate-900">
-                            {selectedOwnChoice.row}/{selectedOwnChoice.month + 1}/{selectedOwnChoice.year} - {selectedOwnChoice.colLabel}
+                        <div className="font-bold text-slate-900 text-sm">
+                            {formatRequestDate(selectedOwnChoice.row, selectedOwnChoice.month, selectedOwnChoice.year, selectedOwnChoice.col, selectedOwnChoice.colLabel, false, columnConfigs)}
                         </div>
                     </div>
                     <div className="flex justify-center">
@@ -1334,8 +1408,8 @@ const App: React.FC = () => {
                     </div>
                     <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
                         <div className="text-[10px] font-black text-blue-500 uppercase mb-1">Vous récupérez :</div>
-                        <div className="font-bold text-slate-900">
-                            {selectedTargetChoice.row}/{selectedTargetChoice.month + 1}/{selectedTargetChoice.year} - {selectedTargetChoice.colLabel}
+                        <div className="font-bold text-slate-900 text-sm">
+                            {formatRequestDate(selectedTargetChoice.row, selectedTargetChoice.month, selectedTargetChoice.year, selectedTargetChoice.col, selectedTargetChoice.colLabel, false, columnConfigs)}
                         </div>
                     </div>
                 </div>
@@ -1471,6 +1545,7 @@ const App: React.FC = () => {
                                     setExchangeMode('SELECT_OWN');
                                     setSelectedOwnChoice(null);
                                     setPossibleTargetChoices([]);
+                                    setAbandonMode('INACTIVE');
                                 } else {
                                     setExchangeMode('INACTIVE');
                                 }
@@ -1484,8 +1559,31 @@ const App: React.FC = () => {
                             onClick={() => setIsExchangeSidebarOpen(true)}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingExchanges.length > 0 ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                         >
-                            <span className="hidden md:inline">Mes Demandes ({myPendingExchanges.length})</span>
-                            <span className="md:hidden">Demandes ({myPendingExchanges.length})</span>
+                            <span className="hidden md:inline">Mes Échanges ({myPendingExchanges.length})</span>
+                            <span className="md:hidden">Échanges ({myPendingExchanges.length})</span>
+                        </button>
+
+                        <button 
+                            onClick={() => {
+                                if (abandonMode === 'INACTIVE') {
+                                    setAbandonMode('SELECT_OWN');
+                                    setSelectedOwnAbandonChoice(null);
+                                    setExchangeMode('INACTIVE');
+                                } else {
+                                    setAbandonMode('INACTIVE');
+                                }
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${abandonMode !== 'INACTIVE' ? 'bg-rose-500 text-white border-rose-600 hover:bg-rose-600' : 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-500 hover:text-white'}`}
+                        >
+                            <span className="hidden md:inline">{abandonMode !== 'INACTIVE' ? 'Annuler abandon' : 'Abandonner une garde'}</span>
+                            <span className="md:hidden">Abandonner</span>
+                        </button>
+                        <button 
+                            onClick={() => setIsAbandonSidebarOpen(true)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingAbandons.length > 0 ? 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            <span className="hidden md:inline">Mes Abandons ({myPendingAbandons.length})</span>
+                            <span className="md:hidden">Abandons ({myPendingAbandons.length})</span>
                         </button>
                         </>
                     )}
@@ -1740,10 +1838,27 @@ const App: React.FC = () => {
                                   const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14 * 60);
                                   const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                   
-                                  const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && ex.requester_choice?.month === month && ex.requester_choice?.year === year);
+                                  const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && (ex.requester_choice?.month - 1) === month && ex.requester_choice?.year === year);
                                   const pendingTake = myPendingExchanges.find(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
+                                  
+                                  const pendingAbandon = myPendingAbandons.find(ab => ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
 
-                                  if (exchangeMode !== 'INACTIVE') {
+                                  if (abandonMode !== 'INACTIVE') {
+                                      const isOwnAbandonSelected = selectedOwnAbandonChoice?.row === day && selectedOwnAbandonChoice?.col === col.id && selectedOwnAbandonChoice?.month === month && selectedOwnAbandonChoice?.year === year;
+                                      
+                                      if (isOwnAbandonSelected) {
+                                          bgColor = '#f43f5e'; // rose-500
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#e11d48] cursor-pointer";
+                                      } else if (abandonMode === 'SELECT_OWN' && isAssignedToMe) {
+                                          bgColor = '#fecdd3'; // rose-200
+                                          cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#fda4af] transition-all text-rose-900 font-bold";
+                                      } else if (pendingAbandon) {
+                                          bgColor = '#be123c'; // rose-700
+                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239] cursor-not-allowed";
+                                      } else {
+                                          cellStyles += " opacity-40 cursor-not-allowed pointer-events-none";
+                                      }
+                                  } else if (exchangeMode !== 'INACTIVE') {
                                       const isOwnSelected = selectedOwnChoice?.row === day && selectedOwnChoice?.col === col.id && selectedOwnChoice?.month === month && selectedOwnChoice?.year === year;
                                       const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
                                       const isPossibleTarget = possibleTargetChoices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year);
@@ -1963,12 +2078,15 @@ const App: React.FC = () => {
             <button onClick={() => setIsExchangeSidebarOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={20} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-             {myPendingExchanges.map(ex => (
-                 <div key={ex.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3">
-                     <div className="flex flex-col gap-1">
+             {[...myPendingExchanges].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(ex => {
+                 const date = new Date(ex.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                 return (
+                 <div key={ex.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3 relative">
+                     <div className="absolute top-3 right-4 text-[9px] text-slate-400 font-mono">{date}</div>
+                     <div className="flex flex-col gap-1 mt-2">
                          <span className="text-[10px] font-black uppercase text-purple-500 tracking-widest">Garde cédée (Départ)</span>
                          <span className="text-sm font-bold text-slate-800">
-                             {formatRequestDate(ex.requester_choice?.row, ex.requester_choice?.month, ex.requester_choice?.year, ex.requester_choice?.col, ex.requester_choice?.colLabel)}
+                             {formatRequestDate(ex.requester_choice?.row, ex.requester_choice?.month, ex.requester_choice?.year, ex.requester_choice?.col, ex.requester_choice?.colLabel, true, columnConfigs)}
                          </span>
                      </div>
                      <div className="flex justify-center text-slate-300 -my-1">
@@ -1977,7 +2095,7 @@ const App: React.FC = () => {
                      <div className="flex flex-col gap-1">
                          <span className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Garde souhaitée (Arrivée)</span>
                          <span className="text-sm font-bold text-slate-800">
-                             {formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label)}
+                             {formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)}
                          </span>
                      </div>
                      <div className="pt-3 border-t border-slate-200 mt-1">
@@ -1997,12 +2115,111 @@ const App: React.FC = () => {
                          </button>
                      </div>
                  </div>
-             ))}
+             )})}
              {myPendingExchanges.length === 0 && (
                  <div className="text-center text-slate-400 font-bold text-sm mt-8">Aucune demande d'échange en cours.</div>
              )}
         </div>
       </div>
+
+      {/* Abandon Sidebar */}
+      <div 
+        className={`absolute top-0 right-0 h-full bg-white shadow-2xl z-[300] border-l border-slate-200 transition-transform duration-300 transform w-96 flex flex-col ${isAbandonSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-black uppercase tracking-widest text-slate-900">Abandons en attente</h3>
+            <button onClick={() => setIsAbandonSidebarOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+             {[...myPendingAbandons].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(ab => {
+                 const date = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                 return (
+                 <div key={ab.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3 relative">
+                     <div className="absolute top-3 right-4 text-[9px] text-slate-400 font-mono">{date}</div>
+                     <div className="flex flex-col gap-1 mt-2">
+                         <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest">Garde à abandonner</span>
+                         <span className="text-sm font-bold text-slate-800">
+                             {formatRequestDate(ab.requester_choice?.row, ab.requester_choice?.month, ab.requester_choice?.year, ab.requester_choice?.col, ab.requester_choice?.colLabel, true, columnConfigs)}
+                         </span>
+                     </div>
+                     <div className="pt-3 border-t border-slate-200 mt-1">
+                         <button 
+                             onClick={async () => {
+                                 if(!window.confirm("Annuler cette demande d'abandon ?")) return;
+                                 try {
+                                     await supabase.from('abandon_requests').delete().eq('id', ab.id);
+                                     setMyPendingAbandons(prev => prev.filter(p => p.id !== ab.id));
+                                 } catch(err) {
+                                     console.error(err);
+                                 }
+                             }}
+                             className="w-full text-[10px] font-black uppercase tracking-widest bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                         >
+                             Annuler la demande
+                         </button>
+                     </div>
+                 </div>
+             )})}
+             {myPendingAbandons.length === 0 && (
+                 <div className="text-center text-slate-400 font-bold text-sm mt-8">Aucune demande d'abandon en cours.</div>
+             )}
+        </div>
+      </div>
+
+      {showExchangeConfirmModal && (
+        <div className="fixed inset-0 z-[400] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-2xl">
+            <div className="bg-white rounded-3xl p-8 max-w-lg w-full transform transition-all shadow-xl">
+                <h3 className="text-2xl font-black uppercase text-slate-900 mb-6 text-center tracking-tighter">Confirmation de la demande d'échange</h3>
+                <div className="flex flex-col gap-6 mb-8">
+                    <div className="flex items-center gap-4 bg-orange-50 p-4 rounded-xl border border-orange-100">
+                        <div className="flex-1">
+                            <span className="text-[10px] font-black uppercase text-orange-500 tracking-widest block mb-1">Je donne ma garde :</span>
+                            <span className="text-sm font-bold text-slate-800 leading-snug">
+                                {formatRequestDate(selectedOwnChoice?.row, selectedOwnChoice?.month, selectedOwnChoice?.year, selectedOwnChoice?.col, selectedOwnChoice?.colLabel, true, columnConfigs)}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex justify-center text-slate-300">
+                        <ArrowRight size={24} className="rotate-90 md:rotate-0" />
+                    </div>
+                    <div className="flex items-center gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                        <div className="flex-1">
+                            <span className="text-[10px] font-black uppercase text-blue-500 tracking-widest block mb-1">Pour récupérer la garde :</span>
+                            <span className="text-sm font-bold text-slate-800 leading-snug">
+                                {formatRequestDate(selectedTargetChoice?.row, selectedTargetChoice?.month, selectedTargetChoice?.year, selectedTargetChoice?.col, selectedTargetChoice?.colLabel, false, columnConfigs)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex gap-4">
+                    <button onClick={() => setShowExchangeConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
+                    <button onClick={handleExchangeConfirm} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-500/20 transition-all flex justify-center items-center gap-2">Confirmer la demande</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showAbandonConfirmModal && (
+        <div className="fixed inset-0 z-[400] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-2xl">
+            <div className="bg-white rounded-3xl p-8 max-w-lg w-full transform transition-all shadow-xl">
+                <h3 className="text-2xl font-black uppercase text-slate-900 mb-6 text-center tracking-tighter">Confirmation d'abandon de garde</h3>
+                <div className="flex flex-col gap-6 mb-8">
+                    <div className="flex items-center gap-4 bg-rose-50 p-4 rounded-xl border border-rose-100">
+                        <div className="flex-1">
+                            <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest block mb-1">Garde à abandonner :</span>
+                            <span className="text-sm font-bold text-slate-800 leading-snug">
+                                {formatRequestDate(selectedOwnAbandonChoice?.row, selectedOwnAbandonChoice?.month, selectedOwnAbandonChoice?.year, selectedOwnAbandonChoice?.col, selectedOwnAbandonChoice?.colLabel, true, columnConfigs)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex gap-4">
+                    <button onClick={() => setShowAbandonConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Retour</button>
+                    <button onClick={handleAbandonConfirm} className="flex-1 px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-rose-500/20 transition-all flex justify-center items-center gap-2">Confirmer l'abandon</button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {viewMode === ViewMode.APP && (
         <ChatAssistant 

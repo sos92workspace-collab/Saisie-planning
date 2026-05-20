@@ -6,13 +6,18 @@ import { Save, AlertCircle, Check, MousePointerSquareDashed } from 'lucide-react
 export type ExchangePeriod = 'SEMAINE' | 'SAMEDI' | 'DIMANCHE' | 'GLOBAL';
 export type TargetPeriod = 'SEMAINE' | 'SAMEDI' | 'DIMANCHE';
 
-const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined) => {
+const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined, is1IndexedMonth: boolean = false, columnConfigs: any[] = []) => {
   if (day == null || month == null || year == null || col == null) return '';
-  const d = new Date(year, month, day);
-  const dayName = d.toLocaleDateString('fr-FR', { weekday: 'short' }).substring(0, 3).replace('.', '');
+  const adjustedMonth = is1IndexedMonth ? month - 1 : month;
+  const d = new Date(year, adjustedMonth, day);
+  const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' }).toUpperCase();
   const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const jf = isPublicHoliday(d) ? ' - JF' : '';
-  return `C${col} : ${colLabel || ''} - ${dayName.toUpperCase()} ${dateStr}${jf}`;
+  const columnDef = COLUMNS.find(c => c.id === col);
+  const cfg = columnConfigs.find(c => c.column_id === col);
+  const displayLabel = colLabel || cfg?.custom_label || columnDef?.label || '';
+  const typeInfos = columnDef ? ` | ${cfg?.custom_type || columnDef.type} ${cfg?.custom_time_range || columnDef.timeRange}` : '';
+  return `Col. ${col} : ${displayLabel} - ${dayName} ${dateStr}${jf}${typeInfos}`;
 };
 
 export interface ExchangeMode {
@@ -34,6 +39,7 @@ interface ExchangeRulesProps {
 export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [modes, setModes] = useState<Record<number, 'GLOBAL' | 'INDIVIDUAL'>>({});
   const [rules, setRules] = useState<ExchangeRule[]>([]);
+  const [columnConfigs, setColumnConfigs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCols, setSelectedCols] = useState<Set<number>>(new Set());
@@ -58,6 +64,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     try {
       const { data, error } = await supabase.from('exchange_rule_versions').select('*').order('created_at', { ascending: false });
       if (data) setExchangeVersions(data);
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchColumnConfigs = async () => {
+    try {
+      const { data } = await supabase.from('column_configs').select('*');
+      if (data) setColumnConfigs(data);
     } catch (e) { console.error(e); }
   };
 
@@ -105,10 +118,29 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     }
   };
 
+  const fetchAbandons = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('abandon_requests')
+        .select(`
+          *,
+          requester_choice:choices!choice_id(*)
+        `)
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      setAbandons(data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
+    fetchColumnConfigs();
     fetchRules();
     fetchRequests();
     fetchVersions();
+    fetchAbandons();
   }, []);
 
   const handleRequestAction = async (requestId: string, action: 'APPROVED' | 'REJECTED') => {
@@ -121,7 +153,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         await supabase.from('choices').update({ 
             row: req.target_row,
             col: req.target_col,
-            month: req.target_month,
+            month: req.target_month + 1,
             year: req.target_year
         }).eq('id', req.requester_choice_id);
 
@@ -139,16 +171,33 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
           const reason = `Refusé car attribué à ${req.requester_trigram}`;
           const otherIds = otherRequests.map(r => r.id);
           await supabase.from('exchange_requests')
-            .update({ status: 'REJECTED', reason })
+            .update({ status: 'REJECTED', reason, updated_at: new Date().toISOString() })
             .in('id', otherIds);
         }
       }
 
-      await supabase.from('exchange_requests').update({ status: action }).eq('id', requestId);
+      await supabase.from('exchange_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', requestId);
       fetchRequests();
     } catch (err) {
       console.error(err);
       alert("Erreur lors du traitement de la demande.");
+    }
+  };
+
+  const handleAbandonAction = async (abandonId: string, action: 'APPROVED' | 'REJECTED') => {
+    try {
+      if (action === 'APPROVED') {
+        const ab = abandons.find(a => a.id === abandonId);
+        if (ab) {
+            // Delete the choice if approved
+            await supabase.from('choices').delete().eq('id', ab.choice_id);
+        }
+      }
+      await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+      fetchAbandons();
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors du traitement de la demande d'abandon.");
     }
   };
 
@@ -315,6 +364,17 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </button>
           <button 
+            onClick={() => setActiveTab('ABANDONS')}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'ABANDONS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Abandons
+            {abandons.filter(a => a.status === 'PENDING').length > 0 && (
+              <span className="bg-rose-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
+                {abandons.filter(a => a.status === 'PENDING').length}
+              </span>
+            )}
+          </button>
+          <button 
             onClick={() => setActiveTab('RULES')}
             className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -329,7 +389,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
         )}
       </div>
 
-      {activeTab === 'REQUESTS' ? (
+      {activeTab === 'REQUESTS' && (
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
           
           {/* Pending Requests */}
@@ -339,18 +399,21 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
               <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucune demande en attente.</div>
             ) : (
               <div className="space-y-4">
-                {requests.filter(r => r.status === 'PENDING').map(req => (
+                {requests.filter(r => r.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(req => {
+                  const date = new Date(req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
                   <div key={req.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between bg-white shadow-sm">
                     <div className="flex items-center gap-6">
                       <div className="flex flex-col items-center">
                         <div className="text-[10px] font-black text-slate-400 uppercase mb-1">Demandeur</div>
-                        <div className="font-black text-lg text-slate-900">{req.requester_trigram}</div>
+                        <div className="font-black text-xl text-slate-900 leading-none">{req.requester_trigram}</div>
+                        <div className="text-[9px] text-slate-400 mt-2 whitespace-nowrap">{date}</div>
                       </div>
                       
                       <div className="p-3 bg-orange-50 border border-orange-100 rounded-lg">
                         <div className="text-[9px] font-black text-orange-500 uppercase mb-1">Cède</div>
                         <div className="font-bold text-slate-900 text-sm">
-                          {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel)}
+                          {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}
                         </div>
                       </div>
 
@@ -361,7 +424,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
                         <div className="text-[9px] font-black text-blue-500 uppercase mb-1">Récupère</div>
                         <div className="font-bold text-slate-900 text-sm">
-                          {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label)}
+                          {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}
                         </div>
                       </div>
                     </div>
@@ -371,7 +434,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       <button onClick={() => handleRequestAction(req.id, 'APPROVED')} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Valider</button>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -383,7 +446,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
               <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique.</div>
             ) : (
               <div className="space-y-3">
-                {requests.map(req => {
+                {[...requests].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(req => {
                   const date = new Date(req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${req.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
@@ -392,15 +455,22 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                         <div className="flex flex-col gap-1">
                           <span className="font-bold text-slate-700">Demande initiée par {req.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
-                          Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label)}]
+                          Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}]
                           </span>
                         </div>
                       </div>
                       {req.status !== 'PENDING' && (
-                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200">
-                          <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {req.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
-                          </span>
+                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {req.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
+                            </span>
+                            {req.updated_at && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                le {new Date(req.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
                           {req.reason && <span className="text-xs text-slate-500 italic mt-1">{req.reason}</span>}
                         </div>
                       )}
@@ -411,7 +481,90 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </div>
         </div>
-      ) : (
+      )}
+      
+      {activeTab === 'ABANDONS' && (
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+          
+          {/* Pending Abandons */}
+          <div>
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'abandon en attente</h3>
+            {abandons.filter(a => a.status === 'PENDING').length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun abandon en attente.</div>
+            ) : (
+              <div className="space-y-4">
+                {abandons.filter(a => a.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(ab => {
+                  const date = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                  <div key={ab.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between bg-white shadow-sm">
+                    <div className="flex items-center gap-6">
+                      <div className="flex flex-col items-center">
+                        <div className="text-[10px] font-black text-slate-400 uppercase mb-1">Demandeur</div>
+                        <div className="font-black text-xl text-slate-900 leading-none">{ab.requester_trigram}</div>
+                        <div className="text-[9px] text-slate-400 mt-2 whitespace-nowrap">{date}</div>
+                      </div>
+                      
+                      <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg">
+                        <div className="text-[9px] font-black text-rose-500 uppercase mb-1">Garde à abandonner</div>
+                        <div className="text-sm font-bold text-slate-800">
+                           {formatRequestDate(ab.requester_choice?.row, ab.requester_choice?.month, ab.requester_choice?.year, ab.requester_choice?.col, ab.requester_choice?.colLabel, true, columnConfigs)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <button onClick={() => handleAbandonAction(ab.id, 'REJECTED')} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
+                       <button onClick={() => handleAbandonAction(ab.id, 'APPROVED')} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Prise en compte (Supprimer)</button>
+                    </div>
+                  </div>
+                )})}
+              </div>
+            )}
+          </div>
+
+          {/* History Logs */}
+          <div>
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des abandons</h3>
+            {abandons.length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique.</div>
+            ) : (
+              <div className="space-y-3">
+                {[...abandons].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(ab => {
+                  const date = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <div key={`log-${ab.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
+                      <div className="flex items-start gap-4">
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-bold text-slate-700">Demande initiée par {ab.requester_trigram}</span>
+                          <span className="text-slate-500 text-xs">
+                          Garde [{formatRequestDate(ab.requester_choice?.row, ab.requester_choice?.month, ab.requester_choice?.year, ab.requester_choice?.col, ab.requester_choice?.colLabel, true, columnConfigs)}]
+                          </span>
+                        </div>
+                      </div>
+                      {ab.status !== 'PENDING' && (
+                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${ab.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {ab.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'}
+                            </span>
+                            {ab.updated_at && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                le {new Date(ab.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'RULES' && (
         <div className="flex-1 flex flex-col gap-4">
           
           {/* VERSION MANAGER */}
@@ -565,7 +718,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
               <th className="p-3 border-b border-r border-slate-200 bg-slate-100 min-w-[150px] sticky left-0 z-30">
                 <div className="text-[10px] font-black uppercase text-slate-500">Période \ Colonne</div>
               </th>
-              {COLUMNS.map(col => (
+              {COLUMNS.map(col => {
+                const cfg = columnConfigs.find(c => c.column_id === col.id);
+                const displayLabel = cfg?.custom_label || col.label;
+                const displayColorStyle = cfg?.custom_color ? { backgroundColor: cfg.custom_color } : {};
+                const displayColorClass = cfg?.custom_color ? '' : col.colorClass;
+                return (
                 <th key={col.id} className="p-2 border-b border-r border-slate-200 min-w-[80px] text-center">
                   <div className="flex flex-col items-center gap-2">
                     <button 
@@ -574,13 +732,16 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                     >
                       <Check size={12} strokeWidth={4} />
                     </button>
-                    <div className={`text-xs font-black px-2 py-1 rounded ${col.colorClass} text-slate-900 whitespace-nowrap`}>
+                    <div 
+                      className={`text-xs font-black px-2 py-1 rounded text-slate-900 whitespace-nowrap ${displayColorClass}`}
+                      style={displayColorStyle}
+                    >
                       <span className="opacity-60 mr-1">#{col.id}</span>
-                      {col.label}
+                      {displayLabel}
                     </div>
                   </div>
                 </th>
-              ))}
+              )})}
             </tr>
           </thead>
           <tbody>
@@ -697,7 +858,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
                 <h3 className="text-xl font-black uppercase text-slate-900">
-                  Équivalences pour {modalSourceCols.length > 1 ? `${modalSourceCols.length} colonnes` : `Colonne #${modalSourceCols[0]} - ${COLUMNS.find(c => c.id === modalSourceCols[0])?.label}`}
+                  Équivalences pour {modalSourceCols.length > 1 ? `${modalSourceCols.length} colonnes` : `Colonne #${modalSourceCols[0]} - ${columnConfigs.find(c => c.column_id === modalSourceCols[0])?.custom_label || COLUMNS.find(c => c.id === modalSourceCols[0])?.label}`}
                 </h3>
                 <p className="text-sm font-bold text-slate-500 mt-1">
                   Période source : <span className="text-blue-600">{modalSourcePeriod}</span>
@@ -720,14 +881,22 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                 <thead className="bg-slate-100">
                   <tr>
                     <th className="p-3 border-b border-r border-slate-200 font-black text-xs uppercase text-slate-500 sticky left-0 z-10 bg-slate-100">Cible</th>
-                    {COLUMNS.map(col => (
+                    {COLUMNS.map(col => {
+                      const cfg = columnConfigs.find(c => c.column_id === col.id);
+                      const displayLabel = cfg?.custom_label || col.label;
+                      const displayColorStyle = cfg?.custom_color ? { backgroundColor: cfg.custom_color } : {};
+                      const displayColorClass = cfg?.custom_color ? '' : col.colorClass;
+                      return (
                       <th key={col.id} className="p-2 border-b border-slate-200 text-center min-w-[60px]">
-                        <div className={`text-[10px] font-black px-1.5 py-1 rounded ${col.colorClass} text-slate-900 inline-block whitespace-nowrap`}>
+                        <div 
+                           className={`text-[10px] font-black px-1.5 py-1 rounded text-slate-900 inline-block whitespace-nowrap ${displayColorClass}`}
+                           style={displayColorStyle}
+                        >
                           <span className="opacity-60 mr-1">#{col.id}</span>
-                          {col.label}
+                          {displayLabel}
                         </div>
                       </th>
-                    ))}
+                    )})}
                   </tr>
                 </thead>
                 <tbody>
