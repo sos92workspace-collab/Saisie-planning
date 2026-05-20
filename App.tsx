@@ -1084,6 +1084,15 @@ const App: React.FC = () => {
 
         if (exchangeMode === 'SELECT_OWN') {
             if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
+                const theDate = new Date(year, month, row, 0, 0, 0); // month is JS 0-indexed month
+                const now = new Date();
+                const diffHours = (theDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+                if (diffHours < 48) {
+                    alert("Appeler le standard SOS92 car la demande est à moins de 48 heures de la garde.");
+                    return;
+                }
+
                 const existingPending = myPendingExchanges.find(ex => ex.requester_choice_id === clickedAssigned.id);
                 if (existingPending) {
                     if (!window.confirm("Vous avez déjà une demande d'échange en attente pour cette garde. Voulez-vous la remplacer par une nouvelle demande ? L'ancienne sera supprimée.")) {
@@ -1119,7 +1128,7 @@ const App: React.FC = () => {
         const clickedAssigned = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
         if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
             
-            const theDate = new Date(year, month - 1, row, 0, 0, 0); // month is 1-indexed here, month-1 for JS Date
+            const theDate = new Date(year, month, row, 0, 0, 0); // month is 0-indexed JS month
             const now = new Date();
             const diffHours = (theDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
@@ -1843,13 +1852,17 @@ const App: React.FC = () => {
                                   
                                   const pendingAbandon = myPendingAbandons.find(ab => ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
 
+                                  const cellDateObj = new Date(year, month, day, 0, 0, 0);
+                                  const cellDiffHours = (cellDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
+                                  const isLessThan48h = cellDiffHours < 48;
+
                                   if (abandonMode !== 'INACTIVE') {
                                       const isOwnAbandonSelected = selectedOwnAbandonChoice?.row === day && selectedOwnAbandonChoice?.col === col.id && selectedOwnAbandonChoice?.month === month && selectedOwnAbandonChoice?.year === year;
                                       
                                       if (isOwnAbandonSelected) {
                                           bgColor = '#f43f5e'; // rose-500
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#e11d48] cursor-pointer";
-                                      } else if (abandonMode === 'SELECT_OWN' && isAssignedToMe) {
+                                      } else if (abandonMode === 'SELECT_OWN' && isAssignedToMe && !isLessThan48h) {
                                           bgColor = '#fecdd3'; // rose-200
                                           cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#fda4af] transition-all text-rose-900 font-bold";
                                       } else if (pendingAbandon) {
@@ -1872,7 +1885,7 @@ const App: React.FC = () => {
                                       } else if (isPossibleTarget) {
                                           bgColor = '#3b82f6'; // blue-500
                                           cellStyles += " opacity-100 z-10 scale-[1.02] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#2563eb] cursor-pointer hover:bg-blue-600";
-                                      } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe) {
+                                      } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe && !isLessThan48h) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all";
                                       } else if (pendingGiveUp) {
