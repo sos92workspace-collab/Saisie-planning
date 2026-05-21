@@ -214,11 +214,19 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       if (action === 'APPROVED') {
         const ab = abandons.find(a => a.id === abandonId);
         if (ab) {
+            // Read choice
+            const { data: choiceData } = await supabase.from('choices').select('*').eq('id', ab.choice_id).single();
+            if (choiceData) {
+               await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+            } else {
+               await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+            }
             // Delete the choice if approved
             await supabase.from('choices').delete().eq('id', ab.choice_id);
         }
+      } else {
+        await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
       }
-      await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
       fetchAbandons();
     } catch (err) {
       console.error(err);
@@ -618,7 +626,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg">
                         <div className="text-[9px] font-black text-rose-500 uppercase mb-1">Garde à abandonner</div>
                         <div className="text-sm font-bold text-slate-800">
-                           {formatRequestDate(ab.requester_choice?.row, ab.requester_choice?.month, ab.requester_choice?.year, ab.requester_choice?.col, ab.requester_choice?.colLabel, true, columnConfigs)}
+                           {ab.requester_choice 
+                             ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
+                             : ab.shift_snapshot 
+                               ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
+                               : 'Garde supprimée'}
                         </div>
                       </div>
                     </div>
@@ -648,7 +660,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                         <div className="flex flex-col gap-1">
                           <span className="font-bold text-slate-700">Demande initiée par {ab.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
-                          Garde [{formatRequestDate(ab.requester_choice?.row, ab.requester_choice?.month, ab.requester_choice?.year, ab.requester_choice?.col, ab.requester_choice?.colLabel, true, columnConfigs)}]
+                          Garde [{ab.requester_choice 
+                            ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
+                            : ab.shift_snapshot 
+                              ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
+                              : 'supprimée'}]
                           </span>
                         </div>
                       </div>

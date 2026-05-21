@@ -2178,7 +2178,11 @@ const App: React.FC = () => {
                      <div className="flex flex-col gap-1 mt-2">
                          <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest">Garde à abandonner</span>
                          <span className="text-sm font-bold text-slate-800">
-                             {formatRequestDate(ab.requester_choice?.row, ab.requester_choice?.month, ab.requester_choice?.year, ab.requester_choice?.col, ab.requester_choice?.colLabel, true, columnConfigs)}
+                             {ab.requester_choice 
+                               ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
+                               : ab.shift_snapshot
+                                 ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
+                                 : 'Garde supprimée'}
                          </span>
                      </div>
                      <div className="pt-3 border-t border-slate-200 mt-1">

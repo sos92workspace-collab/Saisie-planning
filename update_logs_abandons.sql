@@ -9,5 +9,8 @@ CREATE TABLE IF NOT EXISTS logs (
   details jsonb
 );
 
--- 2. Ajout de la colonne updated_at à la table abandon_requests (pour filtrer les abandons approuvés après la date de réinitialisation)
+-- 2. Conserver l'information d'abandon même après la suppression d'une garde
+ALTER TABLE abandon_requests DROP CONSTRAINT IF EXISTS abandon_requests_choice_id_fkey;
+ALTER TABLE abandon_requests ADD CONSTRAINT abandon_requests_choice_id_fkey FOREIGN KEY (choice_id) REFERENCES choices(id) ON DELETE SET NULL;
+ALTER TABLE abandon_requests ADD COLUMN IF NOT EXISTS shift_snapshot jsonb;
 ALTER TABLE abandon_requests ADD COLUMN IF NOT EXISTS updated_at timestamp with time zone;
