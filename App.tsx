@@ -699,11 +699,11 @@ const App: React.FC = () => {
       .eq('status', 'PENDING');
     if (myExchanges) setMyPendingExchanges(myExchanges);
 
-    // Fetch my pending abandons
+    // Fetch my abandons (pending and approved)
     const { data: myAbandons } = await supabase.from('abandon_requests')
       .select('*, requester_choice:choices!choice_id(*)')
       .eq('requester_trigram', tri.toUpperCase())
-      .eq('status', 'PENDING');
+      .in('status', ['PENDING', 'APPROVED']);
     if (myAbandons) setMyPendingAbandons(myAbandons);
 
     // Load exchange rules
@@ -1039,6 +1039,14 @@ const App: React.FC = () => {
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       for (let day = 1; day <= daysInMonth; day++) {
         const targetDate = new Date(year, month, day);
+        
+        // Skip target dates that are in the past or less than 48h away
+        const now = new Date();
+        const diffHours = (targetDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+        if (diffHours < 48) {
+            continue;
+        }
+
         const targetDayOfWeek = targetDate.getDay();
         const targetIsHoliday = isPublicHoliday(targetDate);
         let targetPeriod: 'SEMAINE' | 'SAMEDI' | 'DIMANCHE' = 'SEMAINE';
@@ -1137,7 +1145,7 @@ const App: React.FC = () => {
                 return;
             }
 
-            const existingAbandon = myPendingAbandons.find(ab => ab.choice_id === clickedAssigned.id);
+            const existingAbandon = myPendingAbandons.find(ab => ab.status === 'PENDING' && ab.choice_id === clickedAssigned.id);
             if (existingAbandon) {
                 alert("Vous avez déjà une demande d'abandon en attente pour cette garde.");
                 return;
@@ -1270,6 +1278,23 @@ const App: React.FC = () => {
     setChoices(prev => [...prev, newChoice]);
   }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice, isConsultationMode]);
 
+  const displayedAbandons = useMemo(() => {
+    return myPendingAbandons.filter(ab => {
+        let m: number;
+        let y: number;
+        if (ab.requester_choice) {
+            m = ab.requester_choice.month - 1; 
+            y = ab.requester_choice.year;
+        } else if (ab.shift_snapshot) {
+            m = ab.shift_snapshot.month - 1; 
+            y = ab.shift_snapshot.year;
+        } else {
+            return false;
+        }
+        return monthsToDisplay.some(md => md.month === m && md.year === y);
+    });
+  }, [myPendingAbandons, monthsToDisplay]);
+
   const handleExchangeConfirm = async () => {
     if (!selectedOwnChoice || !selectedTargetChoice) return;
     
@@ -1325,11 +1350,11 @@ const App: React.FC = () => {
         
         alert("Votre demande d'abandon a été envoyée à l'administrateur.");
 
-        // Refresh my pending abandons
+        // Refresh my abandons
         const { data: myAbandons } = await supabase.from('abandon_requests')
           .select('*, requester_choice:choices!choice_id(*)')
           .eq('requester_trigram', trigram.toUpperCase())
-          .eq('status', 'PENDING');
+          .in('status', ['PENDING', 'APPROVED']);
         if (myAbandons) setMyPendingAbandons(myAbandons);
 
         setAbandonMode('INACTIVE');
@@ -1556,30 +1581,13 @@ const App: React.FC = () => {
 
                     {activeRound?.allow_exchanges && isConsultationMode && exchangeMode === 'INACTIVE' && (
                         <>
-                        <button 
-                            onClick={() => {
-                                if (abandonMode === 'INACTIVE') {
-                                    setAbandonMode('SELECT_OWN');
-                                    setSelectedOwnAbandonChoice(null);
-                                    setExchangeMode('INACTIVE');
-                                } else {
-                                    setAbandonMode('INACTIVE');
-                                }
-                            }}
-                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${abandonMode !== 'INACTIVE' ? 'bg-rose-500 text-white border-rose-600 hover:bg-rose-600' : 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-500 hover:text-white'}`}
-                        >
-                            <span className="hidden md:inline">{abandonMode !== 'INACTIVE' ? 'Annuler abandon' : 'Abandonner une garde'}</span>
-                            <span className="md:hidden">Abandonner</span>
-                        </button>
-                        {abandonMode === 'INACTIVE' && (
                            <button 
                                onClick={() => setIsAbandonSidebarOpen(true)}
-                               className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingAbandons.length > 0 ? 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                               className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${displayedAbandons.length > 0 ? 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                            >
-                               <span className="hidden md:inline">Mes Abandons ({myPendingAbandons.length})</span>
-                               <span className="md:hidden">Abandons ({myPendingAbandons.length})</span>
+                               <span className="hidden md:inline">Mes Abandons ({displayedAbandons.length})</span>
+                               <span className="md:hidden">Abandons ({displayedAbandons.length})</span>
                            </button>
-                        )}
                         </>
                     )}
 
@@ -1659,7 +1667,9 @@ const App: React.FC = () => {
                           </div>
                           <div className="pr-2">
                               <div className="text-[10px] text-slate-400 font-black uppercase">Vous cédez</div>
-                              <div className="font-bold text-sm text-white">{selectedOwnChoice.colLabel}</div>
+                              <div className="font-bold text-sm text-white">
+                                  {formatRequestDate(selectedOwnChoice.row, selectedOwnChoice.month, selectedOwnChoice.year, selectedOwnChoice.col, selectedOwnChoice.colLabel, false, columnConfigs)}
+                              </div>
                           </div>
                       </div>
                       
@@ -1668,13 +1678,29 @@ const App: React.FC = () => {
                       </div>
                       
                       <div className="flex items-center gap-3 bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/30 border-dashed">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                          </div>
-                          <div className="pr-2">
-                              <div className="text-[10px] text-blue-400 font-black uppercase">Vous récupérez</div>
-                              <div className="font-bold text-sm text-blue-300">Sélectionnez une garde bleue</div>
-                          </div>
+                          {selectedTargetChoice ? (
+                              <>
+                                  <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center font-black shadow-inner text-white">
+                                      {selectedTargetChoice.row}
+                                  </div>
+                                  <div className="pr-2">
+                                      <div className="text-[10px] text-blue-400 font-black uppercase">Vous récupérez</div>
+                                      <div className="font-bold text-sm text-blue-300">
+                                          {formatRequestDate(selectedTargetChoice.row, selectedTargetChoice.month, selectedTargetChoice.year, selectedTargetChoice.col, selectedTargetChoice.colLabel, false, columnConfigs)}
+                                      </div>
+                                  </div>
+                              </>
+                          ) : (
+                              <>
+                                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                  </div>
+                                  <div className="pr-2">
+                                      <div className="text-[10px] text-blue-400 font-black uppercase">Vous récupérez</div>
+                                      <div className="font-bold text-sm text-blue-300">Sélectionnez une garde bleue</div>
+                                  </div>
+                              </>
+                          )}
                       </div>
                       
                       <button 
@@ -1863,7 +1889,7 @@ const App: React.FC = () => {
                                   const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && (ex.requester_choice?.month - 1) === month && ex.requester_choice?.year === year);
                                   const pendingTake = myPendingExchanges.find(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
                                   
-                                  const pendingAbandon = myPendingAbandons.find(ab => ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
+                                  const pendingAbandon = myPendingAbandons.find(ab => ab.status === 'PENDING' && ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
 
                                   const cellDateObj = new Date(year, month, day, 0, 0, 0);
                                   const cellDiffHours = (cellDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
@@ -2166,18 +2192,26 @@ const App: React.FC = () => {
         className={`absolute top-0 right-0 h-full bg-white shadow-2xl z-[300] border-l border-slate-200 transition-transform duration-300 transform w-96 flex flex-col ${isAbandonSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-black uppercase tracking-widest text-slate-900">Abandons en attente</h3>
+            <h3 className="font-black uppercase tracking-widest text-slate-900">Mes Abandons</h3>
             <button onClick={() => setIsAbandonSidebarOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={20} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-             {[...myPendingAbandons].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(ab => {
+             {[...displayedAbandons].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(ab => {
                  const date = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                 const isApproved = ab.status === 'APPROVED';
                  return (
                  <div key={ab.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3 relative">
                      <div className="absolute top-3 right-4 text-[9px] text-slate-400 font-mono">{date}</div>
                      <div className="flex flex-col gap-1 mt-2">
-                         <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest">Garde à abandonner</span>
-                         <span className="text-sm font-bold text-slate-800">
+                         <div className="flex items-center gap-2">
+                             <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest">Garde abandonnée</span>
+                             {isApproved ? (
+                                 <span className="px-2 py-0.5 rounded-md bg-green-100 text-green-700 text-[9px] font-black uppercase">Validé</span>
+                             ) : (
+                                 <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black uppercase">En attente</span>
+                             )}
+                         </div>
+                         <span className="text-sm font-bold text-slate-800 mt-1">
                              {ab.requester_choice 
                                ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
                                : ab.shift_snapshot
@@ -2185,26 +2219,10 @@ const App: React.FC = () => {
                                  : 'Garde supprimée'}
                          </span>
                      </div>
-                     <div className="pt-3 border-t border-slate-200 mt-1">
-                         <button 
-                             onClick={async () => {
-                                 if(!window.confirm("Annuler cette demande d'abandon ?")) return;
-                                 try {
-                                     await supabase.from('abandon_requests').delete().eq('id', ab.id);
-                                     setMyPendingAbandons(prev => prev.filter(p => p.id !== ab.id));
-                                 } catch(err) {
-                                     console.error(err);
-                                 }
-                             }}
-                             className="w-full text-[10px] font-black uppercase tracking-widest bg-red-50 text-red-600 py-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-                         >
-                             Annuler la demande
-                         </button>
-                     </div>
                  </div>
              )})}
-             {myPendingAbandons.length === 0 && (
-                 <div className="text-center text-slate-400 font-bold text-sm mt-8">Aucune demande d'abandon en cours.</div>
+             {displayedAbandons.length === 0 && (
+                 <div className="text-center text-slate-400 font-bold text-sm mt-8">Aucun abandon pour les mois affichés.</div>
              )}
         </div>
       </div>
