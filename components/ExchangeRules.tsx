@@ -139,6 +139,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [users, setUsers] = useState<any[]>([]);
   const [counterResetDate, setCounterResetDate] = useState<Date>(new Date(0));
   const [isCounterExpanded, setIsCounterExpanded] = useState(false);
+  const [expandedUserTrigram, setExpandedUserTrigram] = useState<string | null>(null);
 
   const fetchUsersAndLogs = async () => {
     try {
@@ -564,19 +565,47 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                   <div>
                     <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
                     <div className="flex flex-col gap-2">
-                       {users.filter(u => u.role === 'DOCTOR').sort((a,b) => a.trigram.localeCompare(b.trigram)).map(user => {
-                          const count = abandons.filter(a => {
-                            if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
-                            const actionDate = new Date(a.updated_at || a.created_at);
-                            return actionDate > counterResetDate;
-                          }).length;
-                          return (
-                            <div key={user.trigram} className="flex items-center justify-between py-1">
-                              <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
-                              <span className={`text-xs font-black px-2 py-0.5 rounded-full ${count > 0 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
-                            </div>
-                          )
-                       })}
+                       {(() => {
+                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                           const matchedAbandons = abandons.filter(a => {
+                             if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                             const actionDate = new Date(a.updated_at || a.created_at);
+                             return actionDate > counterResetDate;
+                           });
+                           return { user, count: matchedAbandons.length, matchedAbandons };
+                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+
+                         if (userCounts.length === 0) {
+                           return <div className="text-xs text-slate-500 italic py-1">Aucun abandon comptabilisé.</div>;
+                         }
+
+                         return userCounts.map(({ user, count, matchedAbandons }) => (
+                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                             <div 
+                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+                               onClick={() => setExpandedUserTrigram(expandedUserTrigram === user.trigram ? null : user.trigram)}
+                             >
+                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                 {user.trigram}
+                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigram === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{count}</span>
+                             </div>
+                             {expandedUserTrigram === user.trigram && (
+                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
+                                 {matchedAbandons.map((ab, idx) => (
+                                   <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Ce jour-ci : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Abandon traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ));
+                       })()}
                     </div>
                   </div>
 
@@ -584,19 +613,47 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                   <div>
                     <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
                     <div className="flex flex-col gap-2">
-                       {users.filter(u => u.role === 'SUBSTITUTE').sort((a,b) => a.trigram.localeCompare(b.trigram)).map(user => {
-                          const count = abandons.filter(a => {
-                            if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
-                            const actionDate = new Date(a.updated_at || a.created_at);
-                            return actionDate > counterResetDate;
-                          }).length;
-                          return (
-                            <div key={user.trigram} className="flex items-center justify-between py-1">
-                              <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
-                              <span className={`text-xs font-black px-2 py-0.5 rounded-full ${count > 0 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
-                            </div>
-                          )
-                       })}
+                       {(() => {
+                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                           const matchedAbandons = abandons.filter(a => {
+                             if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                             const actionDate = new Date(a.updated_at || a.created_at);
+                             return actionDate > counterResetDate;
+                           });
+                           return { user, count: matchedAbandons.length, matchedAbandons };
+                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+
+                         if (userCounts.length === 0) {
+                           return <div className="text-xs text-slate-500 italic py-1">Aucun abandon comptabilisé.</div>;
+                         }
+
+                         return userCounts.map(({ user, count, matchedAbandons }) => (
+                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                             <div 
+                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+                               onClick={() => setExpandedUserTrigram(expandedUserTrigram === user.trigram ? null : user.trigram)}
+                             >
+                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                 {user.trigram}
+                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigram === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{count}</span>
+                             </div>
+                             {expandedUserTrigram === user.trigram && (
+                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
+                                 {matchedAbandons.map((ab, idx) => (
+                                   <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Ce jour-ci : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Abandon traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ));
+                       })()}
                     </div>
                   </div>
                 </div>
