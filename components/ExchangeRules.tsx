@@ -52,8 +52,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS'>('REQUESTS');
   const [requests, setRequests] = useState<any[]>([]);
+  const [abandons, setAbandons] = useState<any[]>([]);
 
   // Versioning state
   const [exchangeVersions, setExchangeVersions] = useState<any[]>([]);
@@ -135,12 +136,36 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     }
   };
 
+  const [users, setUsers] = useState<any[]>([]);
+  const [counterResetDate, setCounterResetDate] = useState<Date>(new Date(0));
+  const [isCounterExpanded, setIsCounterExpanded] = useState(false);
+
+  const fetchUsersAndLogs = async () => {
+    try {
+      const { data: usersData } = await supabase.from('users').select('*');
+      if (usersData) setUsers(usersData);
+
+      const { data: logsData } = await supabase.from('logs')
+        .select('created_at')
+        .eq('action', 'RESET_ABANDON_COUNTER')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (logsData && logsData.length > 0) {
+        setCounterResetDate(new Date(logsData[0].created_at));
+      } else {
+        setCounterResetDate(new Date(0));
+      }
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => {
     fetchColumnConfigs();
     fetchRules();
     fetchRequests();
     fetchVersions();
     fetchAbandons();
+    fetchUsersAndLogs();
   }, []);
 
   const handleRequestAction = async (requestId: string, action: 'APPROVED' | 'REJECTED') => {
@@ -486,6 +511,92 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       {activeTab === 'ABANDONS' && (
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
           
+          {/* Compteur Medecin */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setIsCounterExpanded(!isCounterExpanded)}
+              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
+            >
+              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Abandons)</h3>
+              <div className="flex items-center gap-4">
+                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDate.getFullYear() === 1970 ? 'début' : counterResetDate.toLocaleDateString('fr-FR')}</span>
+                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </button>
+            {isCounterExpanded && (
+              <div className="p-6 border-t border-slate-200 bg-white">
+                <div className="flex justify-end mb-6">
+                  <button 
+                    onClick={async () => {
+                      const adminUser = users.find(u => u.role === 'ADMIN');
+                      if (!adminUser) return alert("Utilisateur admin non trouvé.");
+                      
+                      const pwd = window.prompt("Pour réinitialiser le compteur, veuillez saisir le mot de passe administrateur :");
+                      if (pwd === null) return;
+                      if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
+                      
+                      try {
+                        const { error } = await supabase.from('logs').insert([{ action: 'RESET_ABANDON_COUNTER', details: {} }]);
+                        if (error) throw error;
+                        fetchUsersAndLogs();
+                        alert("Compteur réinitialisé avec succès.");
+                      } catch (err) {
+                        console.error(err);
+                        alert("Erreur lors de la réinitialisation.");
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm"
+                  >
+                    Réinitialiser le compteur
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Titulaires */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
+                    <div className="flex flex-col gap-2">
+                       {users.filter(u => u.role === 'DOCTOR').sort((a,b) => a.trigram.localeCompare(b.trigram)).map(user => {
+                          const count = abandons.filter(a => {
+                            if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                            const actionDate = new Date(a.updated_at || a.created_at);
+                            return actionDate > counterResetDate;
+                          }).length;
+                          return (
+                            <div key={user.trigram} className="flex items-center justify-between py-1">
+                              <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                              <span className={`text-xs font-black px-2 py-0.5 rounded-full ${count > 0 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
+                            </div>
+                          )
+                       })}
+                    </div>
+                  </div>
+
+                  {/* Remplaçants */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
+                    <div className="flex flex-col gap-2">
+                       {users.filter(u => u.role === 'SUBSTITUTE').sort((a,b) => a.trigram.localeCompare(b.trigram)).map(user => {
+                          const count = abandons.filter(a => {
+                            if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                            const actionDate = new Date(a.updated_at || a.created_at);
+                            return actionDate > counterResetDate;
+                          }).length;
+                          return (
+                            <div key={user.trigram} className="flex items-center justify-between py-1">
+                              <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                              <span className={`text-xs font-black px-2 py-0.5 rounded-full ${count > 0 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-400'}`}>{count}</span>
+                            </div>
+                          )
+                       })}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+
           {/* Pending Abandons */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'abandon en attente</h3>
@@ -513,7 +624,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                     </div>
                     <div className="flex items-center gap-2">
                        <button onClick={() => handleAbandonAction(ab.id, 'REJECTED')} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
-                       <button onClick={() => handleAbandonAction(ab.id, 'APPROVED')} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Prise en compte (Supprimer)</button>
+                       <button onClick={() => handleAbandonAction(ab.id, 'APPROVED')} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Prise en compte</button>
                     </div>
                   </div>
                 )})}
@@ -545,7 +656,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                         <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
                           <div className="flex items-center gap-2">
                             <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${ab.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {ab.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'}
+                              {ab.status === 'APPROVED' ? 'Traité' : 'Abandon refusé'}
                             </span>
                             {ab.updated_at && (
                               <span className="text-[10px] text-slate-400 font-mono">

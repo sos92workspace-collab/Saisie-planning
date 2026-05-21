@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronDown, Calendar, Bot, X } from 'lucide-react';
+import { ChevronDown, Calendar, Bot, X, ArrowRight } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
@@ -1149,7 +1149,7 @@ const App: React.FC = () => {
         return;
     }
 
-    if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING) return;
+    if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING || isConsultationMode) return;
 
     const cleanTri = trigram.trim().toUpperCase();
     const existing = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.userTrigram === cleanTri && c.category === category);
@@ -1268,7 +1268,7 @@ const App: React.FC = () => {
     };
     
     setChoices(prev => [...prev, newChoice]);
-  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice]);
+  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice, isConsultationMode]);
 
   const handleExchangeConfirm = async () => {
     if (!selectedOwnChoice || !selectedTargetChoice) return;
@@ -2214,7 +2214,7 @@ const App: React.FC = () => {
                         <div className="flex-1">
                             <span className="text-[10px] font-black uppercase text-orange-500 tracking-widest block mb-1">Je donne ma garde :</span>
                             <span className="text-sm font-bold text-slate-800 leading-snug">
-                                {formatRequestDate(selectedOwnChoice?.row, selectedOwnChoice?.month, selectedOwnChoice?.year, selectedOwnChoice?.col, selectedOwnChoice?.colLabel, true, columnConfigs)}
+                                {formatRequestDate(selectedOwnChoice?.row, selectedOwnChoice?.month, selectedOwnChoice?.year, selectedOwnChoice?.col, selectedOwnChoice?.colLabel, false, columnConfigs)}
                             </span>
                         </div>
                     </div>
@@ -2247,7 +2247,7 @@ const App: React.FC = () => {
                         <div className="flex-1">
                             <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest block mb-1">Garde à abandonner :</span>
                             <span className="text-sm font-bold text-slate-800 leading-snug">
-                                {formatRequestDate(selectedOwnAbandonChoice?.row, selectedOwnAbandonChoice?.month, selectedOwnAbandonChoice?.year, selectedOwnAbandonChoice?.col, selectedOwnAbandonChoice?.colLabel, true, columnConfigs)}
+                                {formatRequestDate(selectedOwnAbandonChoice?.row, selectedOwnAbandonChoice?.month, selectedOwnAbandonChoice?.year, selectedOwnAbandonChoice?.col, selectedOwnAbandonChoice?.colLabel, false, columnConfigs)}
                             </span>
                         </div>
                     </div>
