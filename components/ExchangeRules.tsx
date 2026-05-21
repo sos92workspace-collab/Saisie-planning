@@ -52,9 +52,10 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS' | 'TAKES'>('REQUESTS');
   const [requests, setRequests] = useState<any[]>([]);
   const [abandons, setAbandons] = useState<any[]>([]);
+  const [takes, setTakes] = useState<any[]>([]);
 
   // Versioning state
   const [exchangeVersions, setExchangeVersions] = useState<any[]>([]);
@@ -136,6 +137,20 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     }
   };
 
+  const fetchTakes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('take_requests')
+        .select('*')
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      setTakes(data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const [users, setUsers] = useState<any[]>([]);
   const [counterResetDate, setCounterResetDate] = useState<Date>(new Date(0));
   const [isCounterExpanded, setIsCounterExpanded] = useState(false);
@@ -166,6 +181,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     fetchRequests();
     fetchVersions();
     fetchAbandons();
+    fetchTakes();
     fetchUsersAndLogs();
   }, []);
 
@@ -232,6 +248,57 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     } catch (err) {
       console.error(err);
       alert("Erreur lors du traitement de la demande d'abandon.");
+    }
+  };
+
+  const handleTakeAction = async (takeId: string, action: 'APPROVED' | 'REJECTED') => {
+    try {
+      if (action === 'APPROVED') {
+        const tk = takes.find(t => t.id === takeId);
+        if (tk) {
+            // Find user id for requester_trigram
+            const { data: usersData } = await supabase.from('users').select('id').eq('trigram', tk.requester_trigram).single();
+            const userId = usersData ? usersData.id : null;
+
+            if (userId) {
+                // Insert new choice
+                await supabase.from('choices').insert({
+                    user_id: userId,
+                    user_trigram: tk.requester_trigram,
+                    round_id: tk.round_id,
+                    row: tk.target_row,
+                    col: tk.target_col,
+                    month: tk.target_month + 1, // Choices table is 1-indexed month
+                    year: tk.target_year,
+                    category: 'normal',
+                    status: 'ASSIGNED'
+                });
+
+                // Auto-reject other pending takes for the same target cell
+                const otherTakes = takes.filter(t => 
+                  t.id !== tk.id && 
+                  t.status === 'PENDING' &&
+                  t.target_row === tk.target_row &&
+                  t.target_col === tk.target_col &&
+                  t.target_month === tk.target_month &&
+                  t.target_year === tk.target_year
+                );
+
+                if (otherTakes.length > 0) {
+                  const otherIds = otherTakes.map(t => t.id);
+                  await supabase.from('take_requests')
+                    .update({ status: 'REJECTED', updated_at: new Date().toISOString() })
+                    .in('id', otherIds);
+                }
+            }
+        }
+      }
+      
+      await supabase.from('take_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', takeId);
+      fetchTakes();
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors du traitement de la prise de garde.");
     }
   };
 
@@ -385,12 +452,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
           <h2 className="text-2xl font-black uppercase text-slate-900 tracking-tight">Paramétrage des Échanges</h2>
           <p className="text-sm text-slate-500 font-medium">Définissez les règles et gérez les demandes d'échange.</p>
         </div>
-        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
+        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl w-full max-w-full overflow-x-auto">
           <button 
             onClick={() => setActiveTab('REQUESTS')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'REQUESTS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex border-none items-center gap-2 whitespace-nowrap ${activeTab === 'REQUESTS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            Demandes
+            Échanges
             {requests.filter(r => r.status === 'PENDING').length > 0 && (
               <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
                 {requests.filter(r => r.status === 'PENDING').length}
@@ -398,8 +465,19 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </button>
           <button 
+            onClick={() => setActiveTab('TAKES')}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex border-none items-center gap-2 whitespace-nowrap ${activeTab === 'TAKES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Ajouts
+            {takes.filter(t => t.status === 'PENDING').length > 0 && (
+              <span className="bg-teal-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
+                {takes.filter(t => t.status === 'PENDING').length}
+              </span>
+            )}
+          </button>
+          <button 
             onClick={() => setActiveTab('ABANDONS')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === 'ABANDONS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex border-none items-center gap-2 whitespace-nowrap ${activeTab === 'ABANDONS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             Abandons
             {abandons.filter(a => a.status === 'PENDING').length > 0 && (
@@ -410,7 +488,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
           </button>
           <button 
             onClick={() => setActiveTab('RULES')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-none whitespace-nowrap ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             Règles d'équivalence
           </button>
@@ -734,6 +812,84 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                             {ab.updated_at && (
                               <span className="text-[10px] text-slate-400 font-mono">
                                 le {new Date(ab.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'TAKES' && (
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+          <div>
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'ajout en attente</h3>
+            {takes.filter(t => t.status === 'PENDING').length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun ajout en attente.</div>
+            ) : (
+              <div className="space-y-4">
+                {takes.filter(t => t.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(tk => {
+                  const date = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                  <div key={tk.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between bg-white shadow-sm">
+                    <div className="flex items-center gap-6">
+                      <div className="flex flex-col items-center">
+                        <div className="text-[10px] font-black text-slate-400 uppercase mb-1">Demandeur</div>
+                        <div className="font-black text-xl text-slate-900 leading-none">{tk.requester_trigram}</div>
+                        <div className="text-[9px] text-slate-400 mt-2 whitespace-nowrap">{date}</div>
+                      </div>
+                      
+                      <div className="p-3 bg-teal-50 border border-teal-100 rounded-lg">
+                        <div className="text-[9px] font-black text-teal-500 uppercase mb-1">Garde à prendre</div>
+                        <div className="text-sm font-bold text-slate-800">
+                           {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <button onClick={() => handleTakeAction(tk.id, 'REJECTED')} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
+                       <button onClick={() => handleTakeAction(tk.id, 'APPROVED')} className="px-4 py-2 bg-teal-500 text-white hover:bg-teal-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Accepter</button>
+                    </div>
+                  </div>
+                )})}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des ajouts</h3>
+            {takes.length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique.</div>
+            ) : (
+              <div className="space-y-3">
+                {[...takes].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(tk => {
+                  const date = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <div key={`log-${tk.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
+                      <div className="flex items-start gap-4">
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-bold text-slate-700">Demande initiée par {tk.requester_trigram}</span>
+                          <span className="text-slate-500 text-xs">
+                          Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
+                          </span>
+                        </div>
+                      </div>
+                      {tk.status !== 'PENDING' && (
+                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${tk.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {tk.status === 'APPROVED' ? 'Accepté' : 'Refusé'}
+                            </span>
+                            {tk.updated_at && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                le {new Date(tk.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                               </span>
                             )}
                           </div>

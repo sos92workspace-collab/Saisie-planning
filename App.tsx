@@ -1169,15 +1169,6 @@ const App: React.FC = () => {
     }
 
     if (takeMode === 'SELECT_TARGET') {
-        const theDate = new Date(year, month, row, 0, 0, 0); // month is JS 0-indexed month
-        const now = new Date();
-        const diffHours = (theDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-        if (diffHours < 48) {
-            alert("Appeler le standard SOS92 car la demande est à moins de 48 heures de la garde.");
-            return;
-        }
-
         const isAssigned = choices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
         if (isAssigned) {
             alert("Cette garde est déjà assignée.");
@@ -2087,14 +2078,17 @@ const App: React.FC = () => {
                                           bgColor = '#14b8a6'; // teal-500
                                           cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
                                       } else if (open && !isClosed && assignedList.length === 0 && !isLessThan48h) {
-                                          bgColor = '#ccfbf1'; // teal-50
-                                          cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:bg-teal-200 transition-all text-teal-900 border-teal-200 text-[10px] font-bold";
-                                      } else if (assignedList.length > 0 || isLessThan48h) {
                                           bgColor = col.customColor || '#FFFFFF';
-                                          cellStyles += " opacity-30 cursor-pointer text-slate-900"; // point to allow alert if clicked
+                                          cellStyles += " hover:bg-teal-50 cursor-pointer transition-colors opacity-100 text-slate-900 font-bold hover:shadow-[inset_0_0_0_2px_#5eead4]";
+                                      } else if (open && !isClosed && assignedList.length === 0 && isLessThan48h) {
+                                          bgColor = col.customColor || '#FFFFFF';
+                                          cellStyles += " opacity-30 cursor-not-allowed text-slate-900 pointer-events-none"; 
+                                      } else if (assignedList.length > 0) {
+                                          bgColor = col.customColor || '#FFFFFF';
+                                          cellStyles += " opacity-30 cursor-not-allowed text-slate-900 pointer-events-none";
                                       } else {
                                           bgColor = '#f8fafc';
-                                          cellStyles += " opacity-20 cursor-pointer";
+                                          cellStyles += " opacity-20 pointer-events-none";
                                       }
                                   } else if (isConsultationMode) {
                                       if (pendingAbandon) {
@@ -2171,7 +2165,7 @@ const App: React.FC = () => {
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
-                                          if (exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
+                                          if (exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && takeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
                                           const cellKey = `${day}-${col.id}`;
                                           const existingTimeout = clickTimeoutsRef.current.get(cellKey);
                                           if (existingTimeout) {
