@@ -1524,7 +1524,29 @@ const App: React.FC = () => {
         <div className="flex items-center gap-4">
             {currentUser?.role !== 'ADMIN' && (
                 <div className="flex items-center gap-2">
-                    {activeRound?.allow_exchanges && isConsultationMode && abandonMode === 'INACTIVE' && (
+                    {!isConsultationMode && (
+                        <button 
+                            onClick={() => setViewMode(viewMode === ViewMode.APP ? ViewMode.LIST_INPUT : ViewMode.APP)}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all shadow-sm whitespace-nowrap"
+                        >
+                            <span className="hidden md:inline">{viewMode === ViewMode.APP ? 'Saisie via Liste' : 'Saisie via Planning'}</span>
+                            <span className="md:hidden">{viewMode === ViewMode.APP ? 'Liste' : 'Planning'}</span>
+                        </button>
+                    )}
+                    {(viewMode === ViewMode.APP || isConsultationMode) && (
+                        <button 
+                            onClick={() => {
+                                setIsConsultationMode(!isConsultationMode);
+                                if (exchangeMode !== 'INACTIVE') setExchangeMode('INACTIVE');
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
+                        >
+                            <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
+                            <span className="md:hidden">Planning</span>
+                        </button>
+                    )}
+
+                    {activeRound?.allow_exchanges && isConsultationMode && (
                         <>
                         <button 
                             onClick={() => {
@@ -1539,23 +1561,17 @@ const App: React.FC = () => {
                             }}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${exchangeMode !== 'INACTIVE' ? 'bg-orange-500 text-white border-orange-600 hover:bg-orange-600' : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-500 hover:text-white'}`}
                         >
-                            <span className="hidden md:inline">{exchangeMode !== 'INACTIVE' ? 'Annuler l\'échange' : 'Échanger une garde'}</span>
+                            <span className="hidden md:inline">{exchangeMode !== 'INACTIVE' ? 'Annuler l\'échange' : 'Échanger des gardes'}</span>
                             <span className="md:hidden">Échanger</span>
                         </button>
-                        {exchangeMode === 'INACTIVE' && (
-                           <button 
-                               onClick={() => setIsExchangeSidebarOpen(true)}
-                               className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingExchanges.length > 0 ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                           >
-                               <span className="hidden md:inline">Mes Échanges ({myPendingExchanges.length})</span>
-                               <span className="md:hidden">Échanges ({myPendingExchanges.length})</span>
-                           </button>
-                        )}
-                        </>
-                    )}
+                        <button 
+                            onClick={() => setIsExchangeSidebarOpen(true)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingExchanges.length > 0 ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            <span className="hidden md:inline">Mes Échanges ({myPendingExchanges.length})</span>
+                            <span className="md:hidden">Échanges ({myPendingExchanges.length})</span>
+                        </button>
 
-                    {activeRound?.allow_exchanges && isConsultationMode && exchangeMode === 'INACTIVE' && (
-                        <>
                         <button 
                             onClick={() => {
                                 if (abandonMode === 'INACTIVE') {
@@ -1571,39 +1587,14 @@ const App: React.FC = () => {
                             <span className="hidden md:inline">{abandonMode !== 'INACTIVE' ? 'Annuler abandon' : 'Abandonner une garde'}</span>
                             <span className="md:hidden">Abandonner</span>
                         </button>
-                        {abandonMode === 'INACTIVE' && (
-                           <button 
-                               onClick={() => setIsAbandonSidebarOpen(true)}
-                               className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingAbandons.length > 0 ? 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                           >
-                               <span className="hidden md:inline">Mes Abandons ({myPendingAbandons.length})</span>
-                               <span className="md:hidden">Abandons ({myPendingAbandons.length})</span>
-                           </button>
-                        )}
+                        <button 
+                            onClick={() => setIsAbandonSidebarOpen(true)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingAbandons.length > 0 ? 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            <span className="hidden md:inline">Mes Abandons ({myPendingAbandons.length})</span>
+                            <span className="md:hidden">Abandons ({myPendingAbandons.length})</span>
+                        </button>
                         </>
-                    )}
-
-                    {!isConsultationMode && (
-                        <button 
-                            onClick={() => setViewMode(viewMode === ViewMode.APP ? ViewMode.LIST_INPUT : ViewMode.APP)}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all shadow-sm whitespace-nowrap"
-                        >
-                            <span className="hidden md:inline">{viewMode === ViewMode.APP ? 'Saisie via Liste' : 'Saisie via Planning'}</span>
-                            <span className="md:hidden">{viewMode === ViewMode.APP ? 'Liste' : 'Planning'}</span>
-                        </button>
-                    )}
-
-                    {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (
-                        <button 
-                            onClick={() => {
-                                setIsConsultationMode(!isConsultationMode);
-                                if (exchangeMode !== 'INACTIVE') setExchangeMode('INACTIVE');
-                            }}
-                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
-                        >
-                            <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
-                            <span className="md:hidden">Planning</span>
-                        </button>
                     )}
 
                     {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && (
@@ -1618,27 +1609,23 @@ const App: React.FC = () => {
                 </div>
             )}
 
-          {exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (
-              <>
-                  <div className="text-right hidden sm:block">
-                    <div className="text-[12px] font-black uppercase text-slate-900">{trigram.toUpperCase()}</div>
-                    <div className={`text-[7px] font-black uppercase tracking-widest ${currentUser?.role === 'SUBSTITUTE' ? 'text-orange-600' : 'text-blue-600'}`}>
-                      {currentUser?.role === 'SUBSTITUTE' ? 'Remplaçant' : 'Titulaire'}
-                    </div>
-                  </div>
-                  
-                  {!isConsultationMode && currentStep > AppStep.NORMAL_SELECTION && (
-                     <button onClick={goToPrevStep} className="hidden md:block px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
-                  )}
-
-                  {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
-                      <button onClick={goToNextStep} className="hidden md:block px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
-                  ) : (
-                      <button onClick={handleFinalValidation} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
-                  ))}
-                  <button onClick={() => setViewMode(ViewMode.LOGIN)} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
-              </>
+          <div className="text-right hidden sm:block">
+            <div className="text-[12px] font-black uppercase text-slate-900">{trigram.toUpperCase()}</div>
+            <div className={`text-[7px] font-black uppercase tracking-widest ${currentUser?.role === 'SUBSTITUTE' ? 'text-orange-600' : 'text-blue-600'}`}>
+              {currentUser?.role === 'SUBSTITUTE' ? 'Remplaçant' : 'Titulaire'}
+            </div>
+          </div>
+          
+          {!isConsultationMode && currentStep > AppStep.NORMAL_SELECTION && (
+             <button onClick={goToPrevStep} className="hidden md:block px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
           )}
+
+          {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
+              <button onClick={goToNextStep} className="hidden md:block px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
+          ) : (
+              <button onClick={handleFinalValidation} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
+          ))}
+          <button onClick={() => setViewMode(ViewMode.LOGIN)} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
         </div>
       </header>
 
@@ -1875,17 +1862,12 @@ const App: React.FC = () => {
                                       if (isOwnAbandonSelected) {
                                           bgColor = '#f43f5e'; // rose-500
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#e11d48] cursor-pointer";
-                                      } else if (abandonMode === 'SELECT_OWN' && isAssignedToMe) {
-                                          if (!isLessThan48h) {
-                                              bgColor = '#fecdd3'; // rose-200
-                                              cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#fda4af] transition-all text-rose-900 font-bold";
-                                          } else {
-                                              bgColor = col.customColor || '#FFFFFF';
-                                              cellStyles += " opacity-40 cursor-pointer text-slate-900"; // pointer so it triggers the alert
-                                          }
+                                      } else if (abandonMode === 'SELECT_OWN' && isAssignedToMe && !isLessThan48h) {
+                                          bgColor = '#fecdd3'; // rose-200
+                                          cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#fda4af] transition-all text-rose-900 font-bold";
                                       } else if (pendingAbandon) {
                                           bgColor = '#be123c'; // rose-700
-                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239] cursor-not-allowed pointer-events-none";
+                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239] cursor-not-allowed";
                                       } else {
                                           cellStyles += " opacity-40 cursor-not-allowed pointer-events-none";
                                       }
@@ -1903,14 +1885,9 @@ const App: React.FC = () => {
                                       } else if (isPossibleTarget) {
                                           bgColor = '#3b82f6'; // blue-500
                                           cellStyles += " opacity-100 z-10 scale-[1.02] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#2563eb] cursor-pointer hover:bg-blue-600";
-                                      } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe) {
-                                          if (!isLessThan48h) {
-                                              bgColor = '#fde047'; // Yellow 300
-                                              cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all";
-                                          } else {
-                                              bgColor = col.customColor || '#FFFFFF';
-                                              cellStyles += " opacity-40 cursor-pointer text-slate-900"; // pointer so it triggers the alert
-                                          }
+                                      } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe && !isLessThan48h) {
+                                          bgColor = '#fde047'; // Yellow 300
+                                          cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all";
                                       } else if (pendingGiveUp) {
                                           bgColor = '#a855f7'; // purple-500
                                           cellStyles += " opacity-40 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
@@ -1925,10 +1902,7 @@ const App: React.FC = () => {
                                           cellStyles += " opacity-20";
                                       }
                                   } else if (isConsultationMode) {
-                                      if (pendingAbandon) {
-                                          bgColor = '#be123c'; // rose-700
-                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239]";
-                                      } else if (pendingGiveUp) {
+                                      if (pendingGiveUp) {
                                           bgColor = '#a855f7'; // purple-500
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea]";
                                       } else if (pendingTake) {
