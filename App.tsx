@@ -1268,7 +1268,7 @@ const App: React.FC = () => {
     };
     
     setChoices(prev => [...prev, newChoice]);
-  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets]);
+  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice]);
 
   const handleExchangeConfirm = async () => {
     if (!selectedOwnChoice || !selectedTargetChoice) return;
