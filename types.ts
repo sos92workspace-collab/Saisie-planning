@@ -109,6 +109,7 @@ export interface Round {
   maxOverlapMinutes?: number;
   allow_choice_reproduction: boolean;
   allow_exchanges: boolean;
+  allow_takes: boolean;
 }
 
 export interface ColumnConfig {

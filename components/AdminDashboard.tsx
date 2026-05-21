@@ -793,6 +793,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   };
 
   const isExchangesAllowed = allRounds.every(r => r.allow_exchanges);
+  const isTakesAllowed = allRounds.every(r => r.allow_takes);
 
   const toggleExchanges = async () => {
     if (isUpdating) return;
@@ -804,6 +805,21 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
         logAction('AUTORISATION_ECHANGES', { etat: newState ? 'AUTORISÉ' : 'INTERDIT' });
     } catch (e) {
         console.error("Erreur autorisation échanges:", e);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
+  const toggleTakes = async () => {
+    if (isUpdating) return;
+    const newState = !isTakesAllowed;
+    setIsUpdating(true);
+    try {
+        await supabase.from('rounds').update({ allow_takes: newState }).neq('id', 0);
+        await refreshRounds();
+        logAction('AUTORISATION_PRISES', { etat: newState ? 'AUTORISÉE' : 'INTERDITE' });
+    } catch (e) {
+        console.error("Erreur autorisation prises:", e);
     } finally {
         setIsUpdating(false);
     }
@@ -1051,6 +1067,18 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                          <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isExchangesAllowed ? 'translate-x-6' : ''}`}></div>
                      </div>
                      <span className={`text-xs font-bold ${isExchangesAllowed ? 'text-green-600' : 'text-slate-400'}`}>{isExchangesAllowed ? 'AUTORISÉ' : 'INTERDIT'}</span>
+                 </label>
+             </div>
+             
+             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
+
+             <div className="flex flex-col">
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Autoriser la prise de garde</label>
+                 <label className="flex items-center gap-3 cursor-pointer">
+                     <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isTakesAllowed ? 'bg-green-500' : 'bg-slate-200'}`} onClick={toggleTakes}>
+                         <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isTakesAllowed ? 'translate-x-6' : ''}`}></div>
+                     </div>
+                     <span className={`text-xs font-bold ${isTakesAllowed ? 'text-green-600' : 'text-slate-400'}`}>{isTakesAllowed ? 'AUTORISÉE' : 'INTERDITE'}</span>
                  </label>
              </div>
          </div>

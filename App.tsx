@@ -333,7 +333,11 @@ const App: React.FC = () => {
   // Exchange & Abandon state
   const [exchangeMode, setExchangeMode] = useState<'INACTIVE' | 'SELECT_OWN' | 'SELECT_TARGET'>('INACTIVE');
   const [abandonMode, setAbandonMode] = useState<'INACTIVE' | 'SELECT_OWN'>('INACTIVE');
+  const [takeMode, setTakeMode] = useState<'INACTIVE' | 'SELECT_TARGET'>('INACTIVE');
   const [myPendingAbandons, setMyPendingAbandons] = useState<any[]>([]);
+  const [myPendingTakes, setMyPendingTakes] = useState<any[]>([]);
+  const [showTakeConfirmModal, setShowTakeConfirmModal] = useState(false);
+  const [isTakeSidebarOpen, setIsTakeSidebarOpen] = useState(false);
   const [selectedOwnAbandonChoice, setSelectedOwnAbandonChoice] = useState<Choice | null>(null);
   const [showAbandonConfirmModal, setShowAbandonConfirmModal] = useState(false);
   const [isAbandonSidebarOpen, setIsAbandonSidebarOpen] = useState(false);
@@ -705,6 +709,13 @@ const App: React.FC = () => {
       .eq('requester_trigram', tri.toUpperCase())
       .in('status', ['PENDING', 'APPROVED']);
     if (myAbandons) setMyPendingAbandons(myAbandons);
+
+    // Fetch my pending takes
+    const { data: myTakes } = await supabase.from('take_requests')
+      .select('*')
+      .eq('requester_trigram', tri.toUpperCase())
+      .eq('status', 'PENDING');
+    if (myTakes) setMyPendingTakes(myTakes);
 
     // Load exchange rules
     const { data: rulesData } = await supabase.from('exchange_rules').select('*');
@@ -1157,6 +1168,47 @@ const App: React.FC = () => {
         return;
     }
 
+    if (takeMode === 'SELECT_TARGET') {
+        const theDate = new Date(year, month, row, 0, 0, 0); // month is JS 0-indexed month
+        const now = new Date();
+        const diffHours = (theDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+        if (diffHours < 48) {
+            alert("Appeler le standard SOS92 car la demande est à moins de 48 heures de la garde.");
+            return;
+        }
+
+        const isAssigned = choices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        if (isAssigned) {
+            alert("Cette garde est déjà assignée.");
+            return;
+        }
+        
+        const isClosed = globalClosures.some((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
+        if (isClosed || !isColOpen(colId, currentStep, row, month, year)) {
+            alert("Cette garde n'est pas ouverte.");
+            return;
+        }
+
+        const existingPending = myPendingTakes.find(tk => tk.target_row === row && tk.target_col === colId && tk.target_month === month && tk.target_year === year);
+        if (existingPending) {
+            alert("Vous avez déjà une demande de prise de garde en attente pour cette date.");
+            return;
+        }
+
+        const colConfig = columnConfigs.find(c => c.column_id === colId);
+        const colDef = COLUMNS.find(c => c.id === colId);
+        const colLabel = colConfig?.custom_label || colDef?.label || '';
+
+        setSelectedTargetChoice({
+            id: `empty-take-${row}-${month}-${year}-${colId}`,
+            row, col: colId, month, year, colLabel, colType: colDef?.type || '', colTimeRange: colDef?.timeRange || '',
+            userId: currentUser?.id || '', userTrigram: trigram.toUpperCase(), status: 'PENDING', submittedAt: '', roundId: currentRoundId, category: 'normal'
+        });
+        setShowTakeConfirmModal(true);
+        return;
+    }
+
     if (!accessStatus.allowed || currentStep === AppStep.RECAP_ORDERING || isConsultationMode) return;
 
     const cleanTri = trigram.trim().toUpperCase();
@@ -1276,7 +1328,7 @@ const App: React.FC = () => {
     };
     
     setChoices(prev => [...prev, newChoice]);
-  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice, isConsultationMode]);
+  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice, isConsultationMode, takeMode, myPendingTakes, setShowTakeConfirmModal, COLUMNS]);
 
   const displayedAbandons = useMemo(() => {
     return myPendingAbandons.filter(ab => {
@@ -1334,6 +1386,40 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       alert("Erreur lors de l'envoi de la demande d'échange.");
+    }
+  };
+
+  const handleTakeConfirm = async () => {
+    if (!selectedTargetChoice) return;
+    try {
+        const { error } = await supabase.from('take_requests').insert({
+            round_id: currentRoundId,
+            requester_trigram: trigram.toUpperCase(),
+            target_row: selectedTargetChoice.row,
+            target_col: selectedTargetChoice.col,
+            target_month: selectedTargetChoice.month,
+            target_year: selectedTargetChoice.year,
+            target_col_label: selectedTargetChoice.colLabel,
+            status: 'PENDING'
+        });
+
+        if (error) throw error;
+        
+        alert("Votre demande de prise de garde a été envoyée à l'administrateur.");
+
+        // Refresh my takes
+        const { data: myTakes } = await supabase.from('take_requests')
+          .select('*')
+          .eq('requester_trigram', trigram.toUpperCase())
+          .eq('status', 'PENDING');
+        if (myTakes) setMyPendingTakes(myTakes);
+
+        setTakeMode('INACTIVE');
+        setSelectedTargetChoice(null);
+        setShowTakeConfirmModal(false);
+    } catch (err) {
+        console.error(err);
+        alert("Une erreur est survenue lors de la demande.");
     }
   };
 
@@ -1549,7 +1635,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-4">
             {currentUser?.role !== 'ADMIN' && (
                 <div className="flex items-center gap-2">
-                    {activeRound?.allow_exchanges && isConsultationMode && abandonMode === 'INACTIVE' && (
+                    {activeRound?.allow_exchanges && isConsultationMode && abandonMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
                         <>
                         <button 
                             onClick={() => {
@@ -1558,6 +1644,7 @@ const App: React.FC = () => {
                                     setSelectedOwnChoice(null);
                                     setPossibleTargetChoices([]);
                                     setAbandonMode('INACTIVE');
+                                    setTakeMode('INACTIVE');
                                 } else {
                                     setExchangeMode('INACTIVE');
                                 }
@@ -1579,7 +1666,36 @@ const App: React.FC = () => {
                         </>
                     )}
 
-                    {activeRound?.allow_exchanges && isConsultationMode && exchangeMode === 'INACTIVE' && (
+                    {activeRound?.allow_takes && isConsultationMode && exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (
+                        <>
+                        <button 
+                            onClick={() => {
+                                if (takeMode === 'INACTIVE') {
+                                    setTakeMode('SELECT_TARGET');
+                                    setExchangeMode('INACTIVE');
+                                    setAbandonMode('INACTIVE');
+                                } else {
+                                    setTakeMode('INACTIVE');
+                                }
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${takeMode !== 'INACTIVE' ? 'bg-teal-500 text-white border-teal-600 hover:bg-teal-600' : 'bg-teal-50 text-teal-600 border-teal-100 hover:bg-teal-500 hover:text-white'}`}
+                        >
+                            <span className="hidden md:inline">{takeMode !== 'INACTIVE' ? 'Annuler la prise' : 'Reprendre une garde'}</span>
+                            <span className="md:hidden">Reprendre</span>
+                        </button>
+                        {takeMode === 'INACTIVE' && (
+                           <button 
+                               onClick={() => setIsTakeSidebarOpen(true)}
+                               className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingTakes.length > 0 ? 'bg-teal-100 text-teal-700 border-teal-200 hover:bg-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                           >
+                               <span className="hidden md:inline">Mes Prises ({myPendingTakes.length})</span>
+                               <span className="md:hidden">Prises ({myPendingTakes.length})</span>
+                           </button>
+                        )}
+                        </>
+                    )}
+
+                    {activeRound?.allow_exchanges && isConsultationMode && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
                         <>
                            <button 
                                onClick={() => setIsAbandonSidebarOpen(true)}
@@ -1601,11 +1717,10 @@ const App: React.FC = () => {
                         </button>
                     )}
 
-                    {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (
+                    {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
                         <button 
                             onClick={() => {
                                 setIsConsultationMode(!isConsultationMode);
-                                if (exchangeMode !== 'INACTIVE') setExchangeMode('INACTIVE');
                             }}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
                         >
@@ -1649,6 +1764,17 @@ const App: React.FC = () => {
           )}
         </div>
       </header>
+
+      {takeMode !== 'INACTIVE' && (
+          <div className="bg-slate-900 text-white p-4 flex flex-col md:flex-row items-center justify-center gap-4 shadow-lg z-40 shrink-0">
+              {takeMode === 'SELECT_TARGET' && (
+                  <div className="font-bold flex items-center gap-3 text-sm">
+                      <span className="w-3 h-3 rounded-full bg-teal-400 animate-pulse shadow-[0_0_10px_rgba(45,212,191,0.5)]"></span>
+                      Sélectionnez une garde vide et ouverte sur le planning pour la prendre
+                  </div>
+              )}
+          </div>
+      )}
 
       {/* Exchange Banner */}
       {exchangeMode !== 'INACTIVE' && (
@@ -1950,6 +2076,26 @@ const App: React.FC = () => {
                                           bgColor = '#f8fafc';
                                           cellStyles += " opacity-20";
                                       }
+                                  } else if (takeMode !== 'INACTIVE') {
+                                      const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
+                                      const existingTake = myPendingTakes.find(tk => tk.target_row === day && tk.target_col === col.id && tk.target_month === month && tk.target_year === year);
+                                      
+                                      if (isTargetSelected) {
+                                          bgColor = '#0d9488'; // teal-600
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
+                                      } else if (existingTake) {
+                                          bgColor = '#14b8a6'; // teal-500
+                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
+                                      } else if (open && !isClosed && assignedList.length === 0 && !isLessThan48h) {
+                                          bgColor = '#ccfbf1'; // teal-50
+                                          cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:bg-teal-200 transition-all text-teal-900 border-teal-200 text-[10px] font-bold";
+                                      } else if (assignedList.length > 0 || isLessThan48h) {
+                                          bgColor = col.customColor || '#FFFFFF';
+                                          cellStyles += " opacity-30 cursor-pointer text-slate-900"; // point to allow alert if clicked
+                                      } else {
+                                          bgColor = '#f8fafc';
+                                          cellStyles += " opacity-20 cursor-pointer";
+                                      }
                                   } else if (isConsultationMode) {
                                       if (pendingAbandon) {
                                           bgColor = '#be123c'; // rose-700
@@ -2227,6 +2373,59 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Take Sidebar */}
+      <div 
+        className={`absolute top-0 right-0 h-full bg-white shadow-2xl z-[300] border-l border-slate-200 transition-transform duration-300 transform w-96 flex flex-col ${isTakeSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="font-black uppercase tracking-widest text-slate-900">Mes Prises</h3>
+            <button onClick={() => setIsTakeSidebarOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+             {[...myPendingTakes].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(tk => {
+                 const date = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                 const theDate = new Date(tk.target_year, tk.target_month, tk.target_row);
+                 const dateStr = theDate.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+
+                 return (
+                 <div key={tk.id} className="bg-slate-50 rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col gap-3 relative">
+                     <div className="absolute top-3 right-4 text-[9px] text-slate-400 font-mono">{date}</div>
+                     <div className="flex flex-col gap-1 pr-24">
+                         <div className="flex items-center gap-2">
+                             <span className="text-[10px] font-black uppercase text-teal-600 tracking-widest">Demande</span>
+                             <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[9px] font-black uppercase">En attente</span>
+                         </div>
+                         <span className="text-sm font-bold text-slate-800 mt-1 capitalize">
+                             {dateStr}
+                         </span>
+                         <span className="text-sm font-black text-slate-500">
+                             {tk.target_col_label}
+                         </span>
+                     </div>
+                     <div className="pt-3 border-t border-slate-200 mt-1">
+                         <button 
+                             onClick={async () => {
+                                 if(!window.confirm("Annuler cette demande de prise de garde ?")) return;
+                                 try {
+                                     await supabase.from('take_requests').delete().eq('id', tk.id);
+                                     setMyPendingTakes(prev => prev.filter(p => p.id !== tk.id));
+                                 } catch(err) {
+                                     console.error(err);
+                                 }
+                             }}
+                             className="w-full px-4 py-2 bg-slate-200 hover:bg-rose-100 text-slate-600 hover:text-rose-600 rounded-lg text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                         >
+                             <X size={14} /> Annuler
+                         </button>
+                     </div>
+                 </div>
+             )})}
+             {myPendingTakes.length === 0 && (
+                 <div className="text-center text-slate-400 font-bold text-sm mt-8">Aucune prise de garde en cours.</div>
+             )}
+        </div>
+      </div>
+
       {showExchangeConfirmModal && (
         <div className="fixed inset-0 z-[400] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-2xl">
             <div className="bg-white rounded-3xl p-8 max-w-lg w-full transform transition-all shadow-xl">
@@ -2277,6 +2476,28 @@ const App: React.FC = () => {
                 <div className="flex gap-4">
                     <button onClick={() => setShowAbandonConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Retour</button>
                     <button onClick={handleAbandonConfirm} className="flex-1 px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-rose-500/20 transition-all flex justify-center items-center gap-2">Confirmer l'abandon</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showTakeConfirmModal && (
+        <div className="fixed inset-0 z-[400] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-2xl">
+            <div className="bg-white rounded-3xl p-8 max-w-lg w-full transform transition-all shadow-xl">
+                <h3 className="text-2xl font-black uppercase text-slate-900 mb-6 text-center tracking-tighter">Prise de garde</h3>
+                <div className="flex flex-col gap-6 mb-8">
+                    <div className="flex items-center gap-4 bg-teal-50 p-4 rounded-xl border border-teal-100">
+                        <div className="flex-1">
+                            <span className="text-[10px] font-black uppercase text-teal-600 tracking-widest block mb-1">Garde ciblée :</span>
+                            <span className="text-sm font-bold text-slate-800 leading-snug">
+                                {formatRequestDate(selectedTargetChoice?.row, selectedTargetChoice?.month, selectedTargetChoice?.year, selectedTargetChoice?.col, selectedTargetChoice?.colLabel, false, columnConfigs)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex gap-4">
+                    <button onClick={() => setShowTakeConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
+                    <button onClick={handleTakeConfirm} className="flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-teal-500/20 transition-all flex justify-center items-center gap-2">Confirmer</button>
                 </div>
             </div>
         </div>
