@@ -299,7 +299,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Échanges', icon: '🔄' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -350,7 +350,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Échanges', icon: '🔄' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -408,7 +408,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
-          {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} />}
+          {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
         </div>
       </main>
     </div>
@@ -1465,7 +1465,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   );
 };
 
-const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction }: any) => {
+export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells }: any) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
@@ -1500,6 +1500,13 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
   }, [columnConfigs]);
 
   const handleCellClick = async (row: number, colId: number, month: number, year: number) => {
+      if (overrideAdminMode) {
+          if (onCellClick) {
+              const assigned = choices.find((c: any) => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+              onCellClick({ row, col: colId, month, year, assigned });
+          }
+          return;
+      }
       if (isEditClosuresMode) {
           const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
           if (existing) {
@@ -1673,31 +1680,25 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
     <div className="flex-1 overflow-auto custom-scrollbar p-8 pb-32 relative">
         <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-3xl border shadow-sm">
             <div>
-                <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">Planning Global</h2>
-                <p className="text-xs font-bold text-slate-400 mt-1">Gérez les attributions ou fermez des cases pour tous les tours.</p>
+                <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{overrideAdminMode ? 'Planning (Sélectionnez une garde)' : 'Planning Global'}</h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">{overrideAdminMode ? 'Cliquez sur une case pour confirmer l\'abandon.' : 'Gérez les attributions ou fermez des cases pour tous les tours.'}</p>
             </div>
-            <div className="flex gap-3">
-                <a 
-                    href="https://traitement-planning-avec-lecture-bd-log-tours-com-947006681133.us-west1.run.app"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white border border-purple-100 flex items-center"
-                >
-                    Traitement des choix
-                </a>
-                <button 
-                    onClick={handleCreateVersion}
-                    className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"
-                >
-                    Créer une version
-                </button>
-                <button 
-                    onClick={() => setIsEditClosuresMode(!isEditClosuresMode)}
-                    className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${isEditClosuresMode ? 'bg-red-600 text-white shadow-red-200 hover:bg-red-700' : 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800'}`}
-                >
-                    {isEditClosuresMode ? 'Terminer la fermeture' : 'Fermer des cases'}
-                </button>
-            </div>
+            {!overrideAdminMode && (
+                <div className="flex gap-3">
+                    <button 
+                        onClick={handleCreateVersion}
+                        className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"
+                    >
+                        Créer une version
+                    </button>
+                    <button 
+                        onClick={() => setIsEditClosuresMode(!isEditClosuresMode)}
+                        className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${isEditClosuresMode ? 'bg-red-600 text-white shadow-red-200 hover:bg-red-700' : 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800'}`}
+                    >
+                        {isEditClosuresMode ? 'Terminer la fermeture' : 'Fermer des cases'}
+                    </button>
+                </div>
+            )}
         </div>
 
         {/* Assignment Modal */}
@@ -1875,6 +1876,9 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                 const isHoveredCol = hoveredCell?.colId === col.id && hoveredCell?.month === month && hoveredCell?.year === year;
                                                 const isCrosshair = isHoveredRow || isHoveredCol;
                                                 
+                                                const allHighlights = [...(highlightCells || []), ...(highlightCell ? [highlightCell] : [])];
+                                                const isHighlightedCell = allHighlights.some((hc: any) => hc && hc.row === day && hc.col === col.id && hc.month === month && hc.year === year);
+                                                
                                                 const assigned = choices.find((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
                                                 
                                                 let bgColor = col.customColor || '#FFFFFF';
@@ -1909,7 +1913,7 @@ const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs,
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (

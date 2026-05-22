@@ -332,14 +332,11 @@ const App: React.FC = () => {
 
   // Exchange & Abandon state
   const [exchangeMode, setExchangeMode] = useState<'INACTIVE' | 'SELECT_OWN' | 'SELECT_TARGET'>('INACTIVE');
-  const [abandonMode, setAbandonMode] = useState<'INACTIVE' | 'SELECT_OWN'>('INACTIVE');
   const [takeMode, setTakeMode] = useState<'INACTIVE' | 'SELECT_TARGET'>('INACTIVE');
   const [myPendingAbandons, setMyPendingAbandons] = useState<any[]>([]);
   const [myPendingTakes, setMyPendingTakes] = useState<any[]>([]);
   const [showTakeConfirmModal, setShowTakeConfirmModal] = useState(false);
   const [isTakeSidebarOpen, setIsTakeSidebarOpen] = useState(false);
-  const [selectedOwnAbandonChoice, setSelectedOwnAbandonChoice] = useState<Choice | null>(null);
-  const [showAbandonConfirmModal, setShowAbandonConfirmModal] = useState(false);
   const [isAbandonSidebarOpen, setIsAbandonSidebarOpen] = useState(false);
   
   const [selectedOwnChoice, setSelectedOwnChoice] = useState<Choice | null>(null);
@@ -1143,31 +1140,6 @@ const App: React.FC = () => {
         return;
     }
 
-    if (abandonMode === 'SELECT_OWN') {
-        const clickedAssigned = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
-        if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
-            
-            const theDate = new Date(year, month, row, 0, 0, 0); // month is 0-indexed JS month
-            const now = new Date();
-            const diffHours = (theDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-            if (diffHours < 48) {
-                alert("Appeler le standard SOS92 car la demande est à moins de 48 heures de la garde.");
-                return;
-            }
-
-            const existingAbandon = myPendingAbandons.find(ab => ab.status === 'PENDING' && ab.choice_id === clickedAssigned.id);
-            if (existingAbandon) {
-                alert("Vous avez déjà une demande d'abandon en attente pour cette garde.");
-                return;
-            }
-
-            setSelectedOwnAbandonChoice(clickedAssigned);
-            setShowAbandonConfirmModal(true);
-        }
-        return;
-    }
-
     if (takeMode === 'SELECT_TARGET') {
         const isAssigned = choices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
         if (isAssigned) {
@@ -1319,7 +1291,7 @@ const App: React.FC = () => {
     };
     
     setChoices(prev => [...prev, newChoice]);
-  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, abandonMode, myPendingAbandons, setSelectedOwnAbandonChoice, setShowAbandonConfirmModal, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice, isConsultationMode, takeMode, myPendingTakes, setShowTakeConfirmModal, COLUMNS]);
+  }, [choices, currentStep, trigram, currentRoundId, isColOpen, isBlockedByUnavailability, currentUser, accessStatus, activePriority, category, columnConfigs, globalClosures, exchangeMode, possibleTargetChoices, selectedOwnChoice, selectedTargetChoice, computePossibleTargets, myPendingAbandons, myPendingExchanges, setShowExchangeConfirmModal, setSelectedTargetChoice, setExchangeMode, setSelectedOwnChoice, isConsultationMode, takeMode, myPendingTakes, setShowTakeConfirmModal, COLUMNS]);
 
   const displayedAbandons = useMemo(() => {
     return myPendingAbandons.filter(ab => {
@@ -1411,35 +1383,6 @@ const App: React.FC = () => {
     } catch (err) {
         console.error(err);
         alert("Une erreur est survenue lors de la demande.");
-    }
-  };
-
-  const handleAbandonConfirm = async () => {
-    if (!selectedOwnAbandonChoice) return;
-    try {
-        const { error } = await supabase.from('abandon_requests').insert({
-            requester_trigram: trigram.toUpperCase(),
-            choice_id: selectedOwnAbandonChoice.id,
-            status: 'PENDING'
-        });
-
-        if (error) throw error;
-        
-        alert("Votre demande d'abandon a été envoyée à l'administrateur.");
-
-        // Refresh my abandons
-        const { data: myAbandons } = await supabase.from('abandon_requests')
-          .select('*, requester_choice:choices!choice_id(*)')
-          .eq('requester_trigram', trigram.toUpperCase())
-          .in('status', ['PENDING', 'APPROVED']);
-        if (myAbandons) setMyPendingAbandons(myAbandons);
-
-        setAbandonMode('INACTIVE');
-        setSelectedOwnAbandonChoice(null);
-        setShowAbandonConfirmModal(false);
-    } catch (err) {
-        console.error(err);
-        alert("Erreur lors de la création de la demande d'abandon.");
     }
   };
 
@@ -1626,7 +1569,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-4">
             {currentUser?.role !== 'ADMIN' && (
                 <div className="flex items-center gap-2">
-                    {activeRound?.allow_exchanges && isConsultationMode && abandonMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
+                    {activeRound?.allow_exchanges && isConsultationMode && takeMode === 'INACTIVE' && (
                         <>
                         <button 
                             onClick={() => {
@@ -1634,7 +1577,6 @@ const App: React.FC = () => {
                                     setExchangeMode('SELECT_OWN');
                                     setSelectedOwnChoice(null);
                                     setPossibleTargetChoices([]);
-                                    setAbandonMode('INACTIVE');
                                     setTakeMode('INACTIVE');
                                 } else {
                                     setExchangeMode('INACTIVE');
@@ -1657,22 +1599,21 @@ const App: React.FC = () => {
                         </>
                     )}
 
-                    {activeRound?.allow_takes && isConsultationMode && exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (
+                    {activeRound?.allow_takes && isConsultationMode && exchangeMode === 'INACTIVE' && (
                         <>
                         <button 
                             onClick={() => {
                                 if (takeMode === 'INACTIVE') {
                                     setTakeMode('SELECT_TARGET');
                                     setExchangeMode('INACTIVE');
-                                    setAbandonMode('INACTIVE');
                                 } else {
                                     setTakeMode('INACTIVE');
                                 }
                             }}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${takeMode !== 'INACTIVE' ? 'bg-teal-500 text-white border-teal-600 hover:bg-teal-600' : 'bg-teal-50 text-teal-600 border-teal-100 hover:bg-teal-500 hover:text-white'}`}
                         >
-                            <span className="hidden md:inline">{takeMode !== 'INACTIVE' ? 'Annuler la prise' : 'Reprendre une garde'}</span>
-                            <span className="md:hidden">Reprendre</span>
+                            <span className="hidden md:inline">{takeMode !== 'INACTIVE' ? 'Annuler la prise' : 'Prendre une garde'}</span>
+                            <span className="md:hidden">Prendre</span>
                         </button>
                         {takeMode === 'INACTIVE' && (
                            <button 
@@ -1708,7 +1649,7 @@ const App: React.FC = () => {
                         </button>
                     )}
 
-                    {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
+                    {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
                         <button 
                             onClick={() => {
                                 setIsConsultationMode(!isConsultationMode);
@@ -1732,7 +1673,7 @@ const App: React.FC = () => {
                 </div>
             )}
 
-          {exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && (
+          {exchangeMode === 'INACTIVE' && (
               <>
                   <div className="text-right hidden sm:block">
                     <div className="text-[12px] font-black uppercase text-slate-900">{trigram.toUpperCase()}</div>
@@ -2012,27 +1953,7 @@ const App: React.FC = () => {
                                   const cellDiffHours = (cellDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
                                   const isLessThan48h = cellDiffHours < 48;
 
-                                  if (abandonMode !== 'INACTIVE') {
-                                      const isOwnAbandonSelected = selectedOwnAbandonChoice?.row === day && selectedOwnAbandonChoice?.col === col.id && selectedOwnAbandonChoice?.month === month && selectedOwnAbandonChoice?.year === year;
-                                      
-                                      if (isOwnAbandonSelected) {
-                                          bgColor = '#f43f5e'; // rose-500
-                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#e11d48] cursor-pointer";
-                                      } else if (abandonMode === 'SELECT_OWN' && isAssignedToMe) {
-                                          if (!isLessThan48h) {
-                                              bgColor = '#fecdd3'; // rose-200
-                                              cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#fda4af] transition-all text-rose-900 font-bold";
-                                          } else {
-                                              bgColor = col.customColor || '#FFFFFF';
-                                              cellStyles += " opacity-40 cursor-pointer text-slate-900"; // pointer so it triggers the alert
-                                          }
-                                      } else if (pendingAbandon) {
-                                          bgColor = '#be123c'; // rose-700
-                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239] cursor-not-allowed pointer-events-none";
-                                      } else {
-                                          cellStyles += " opacity-40 cursor-not-allowed pointer-events-none";
-                                      }
-                                  } else if (exchangeMode !== 'INACTIVE') {
+                                  if (exchangeMode !== 'INACTIVE') {
                                       const isOwnSelected = selectedOwnChoice?.row === day && selectedOwnChoice?.col === col.id && selectedOwnChoice?.month === month && selectedOwnChoice?.year === year;
                                       const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
                                       const isPossibleTarget = possibleTargetChoices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year);
@@ -2165,7 +2086,7 @@ const App: React.FC = () => {
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
-                                          if (exchangeMode === 'INACTIVE' && abandonMode === 'INACTIVE' && takeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
+                                          if (exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
                                           const cellKey = `${day}-${col.id}`;
                                           const existingTimeout = clickTimeoutsRef.current.get(cellKey);
                                           if (existingTimeout) {
@@ -2448,28 +2369,6 @@ const App: React.FC = () => {
                 <div className="flex gap-4">
                     <button onClick={() => setShowExchangeConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
                     <button onClick={handleExchangeConfirm} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-500/20 transition-all flex justify-center items-center gap-2">Confirmer la demande</button>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {showAbandonConfirmModal && (
-        <div className="fixed inset-0 z-[400] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 shadow-2xl">
-            <div className="bg-white rounded-3xl p-8 max-w-lg w-full transform transition-all shadow-xl">
-                <h3 className="text-2xl font-black uppercase text-slate-900 mb-6 text-center tracking-tighter">Confirmation d'abandon de garde</h3>
-                <div className="flex flex-col gap-6 mb-8">
-                    <div className="flex items-center gap-4 bg-rose-50 p-4 rounded-xl border border-rose-100">
-                        <div className="flex-1">
-                            <span className="text-[10px] font-black uppercase text-rose-500 tracking-widest block mb-1">Garde à abandonner :</span>
-                            <span className="text-sm font-bold text-slate-800 leading-snug">
-                                {formatRequestDate(selectedOwnAbandonChoice?.row, selectedOwnAbandonChoice?.month, selectedOwnAbandonChoice?.year, selectedOwnAbandonChoice?.col, selectedOwnAbandonChoice?.colLabel, false, columnConfigs)}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                <div className="flex gap-4">
-                    <button onClick={() => setShowAbandonConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Retour</button>
-                    <button onClick={handleAbandonConfirm} className="flex-1 px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-rose-500/20 transition-all flex justify-center items-center gap-2">Confirmer l'abandon</button>
                 </div>
             </div>
         </div>

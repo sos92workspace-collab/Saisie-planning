@@ -34,12 +34,21 @@ export interface ExchangeRule {
 
 interface ExchangeRulesProps {
   supabase: any;
+  choices?: any[];
+  users?: any[];
+  activeRound?: any;
+  columnConfigs?: any[];
+  headerConfigs?: any[];
+  globalClosures?: any[];
+  PlanningPanel?: any;
+  refreshData?: () => void;
 }
 
-export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
+export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices, users: propsUsers, activeRound, columnConfigs: propsColumnConfigs, headerConfigs, globalClosures, PlanningPanel, refreshData }) => {
   const [modes, setModes] = useState<Record<number, 'GLOBAL' | 'INDIVIDUAL'>>({});
   const [rules, setRules] = useState<ExchangeRule[]>([]);
-  const [columnConfigs, setColumnConfigs] = useState<any[]>([]);
+  const [columnConfigsState, setColumnConfigsState] = useState<any[]>([]);
+  const columnConfigs = propsColumnConfigs || columnConfigsState;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCols, setSelectedCols] = useState<Set<number>>(new Set());
@@ -52,10 +61,25 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS' | 'TAKES'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS' | 'TAKES' | 'HISTORIQUE'>('REQUESTS');
   const [requests, setRequests] = useState<any[]>([]);
   const [abandons, setAbandons] = useState<any[]>([]);
   const [takes, setTakes] = useState<any[]>([]);
+  const [adminLogs, setAdminLogs] = useState<any[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+
+  // History filters
+  const [historyFilters, setHistoryFilters] = useState({
+    trigram: '',
+    startDate: '',
+    endDate: '',
+    colId: 'ALL',
+    shiftType: 'ALL'
+  });
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyFilters]);
 
   // Versioning state
   const [exchangeVersions, setExchangeVersions] = useState<any[]>([]);
@@ -72,7 +96,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
   const fetchColumnConfigs = async () => {
     try {
       const { data } = await supabase.from('column_configs').select('*');
-      if (data) setColumnConfigs(data);
+      if (data) setColumnConfigsState(data);
     } catch (e) { console.error(e); }
   };
 
@@ -151,27 +175,86 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     }
   };
 
-  const [users, setUsers] = useState<any[]>([]);
+  const fetchAdminLogs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('logs')
+        .select('*')
+        .in('action', ['ASSIGNATION_MANUELLE', 'SUPPRESSION_GARDE'])
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      setAdminLogs(data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const [usersState, setUsersState] = useState<any[]>([]);
+  const users = propsUsers || usersState;
+
   const [counterResetDate, setCounterResetDate] = useState<Date>(new Date(0));
   const [isCounterExpanded, setIsCounterExpanded] = useState(false);
   const [expandedUserTrigram, setExpandedUserTrigram] = useState<string | null>(null);
 
+  const [counterResetDateRequests, setCounterResetDateRequests] = useState<Date>(new Date(0));
+  const [isCounterExpandedRequests, setIsCounterExpandedRequests] = useState(false);
+  const [expandedUserTrigramRequests, setExpandedUserTrigramRequests] = useState<string | null>(null);
+
+  const [counterResetDateTakes, setCounterResetDateTakes] = useState<Date>(new Date(0));
+  const [isCounterExpandedTakes, setIsCounterExpandedTakes] = useState(false);
+  const [expandedUserTrigramTakes, setExpandedUserTrigramTakes] = useState<string | null>(null);
+
+  const [confirmAbandonChoice, setConfirmAbandonChoice] = useState<any>(null);
+  const [confirmTakeCell, setConfirmTakeCell] = useState<any>(null);
+  const [takeTargetUser, setTakeTargetUser] = useState<string>('');
+  const [exchangeSourceChoice, setExchangeSourceChoice] = useState<any>(null);
+  const [exchangeTargetCell, setExchangeTargetCell] = useState<any>(null);
+  const [selectedExchangeRequest, setSelectedExchangeRequest] = useState<any>(null);
+  const [selectedTakeRequest, setSelectedTakeRequest] = useState<any>(null);
+  const [selectedAbandonRequest, setSelectedAbandonRequest] = useState<any>(null);
+
+  const [assignedChoicesState, setAssignedChoicesState] = useState<any[]>([]);
+  const assignedChoices = choices ? choices.filter(c => c.status === 'ASSIGNED' && c.userTrigram) : assignedChoicesState;
+
+  const fetchAssignedChoices = async () => {
+    try {
+      const { data } = await supabase.from('choices').select('*').eq('status', 'ASSIGNED').not('user_trigram', 'is', null);
+      if (data) setAssignedChoicesState(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const fetchUsersAndLogs = async () => {
     try {
       const { data: usersData } = await supabase.from('users').select('*');
-      if (usersData) setUsers(usersData);
+      if (usersData) setUsersState(usersData);
 
-      const { data: logsData } = await supabase.from('logs')
-        .select('created_at')
-        .eq('action', 'RESET_ABANDON_COUNTER')
-        .order('created_at', { ascending: false })
-        .limit(1);
+      const [logsAbandons, logsRequests, logsTakes] = await Promise.all([
+        supabase.from('logs').select('created_at').eq('action', 'RESET_ABANDON_COUNTER').order('created_at', { ascending: false }).limit(1),
+        supabase.from('logs').select('created_at').eq('action', 'RESET_EXCHANGE_COUNTER').order('created_at', { ascending: false }).limit(1),
+        supabase.from('logs').select('created_at').eq('action', 'RESET_TAKE_COUNTER').order('created_at', { ascending: false }).limit(1),
+      ]);
       
-      if (logsData && logsData.length > 0) {
-        setCounterResetDate(new Date(logsData[0].created_at));
+      if (logsAbandons.data && logsAbandons.data.length > 0) {
+        setCounterResetDate(new Date(logsAbandons.data[0].created_at));
       } else {
         setCounterResetDate(new Date(0));
       }
+
+      if (logsRequests.data && logsRequests.data.length > 0) {
+        setCounterResetDateRequests(new Date(logsRequests.data[0].created_at));
+      } else {
+        setCounterResetDateRequests(new Date(0));
+      }
+
+      if (logsTakes.data && logsTakes.data.length > 0) {
+        setCounterResetDateTakes(new Date(logsTakes.data[0].created_at));
+      } else {
+        setCounterResetDateTakes(new Date(0));
+      }
+
     } catch (e) { console.error(e); }
   };
 
@@ -182,8 +265,155 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     fetchVersions();
     fetchAbandons();
     fetchTakes();
+    fetchAdminLogs();
     fetchUsersAndLogs();
+    fetchAssignedChoices();
   }, []);
+
+  const handleAdminTake = async () => {
+    if (!confirmTakeCell || !takeTargetUser) return;
+    try {
+      const userObj = users.find((u: any) => u.trigram === takeTargetUser);
+      
+      const { error: choiceError } = await supabase.from('choices').insert([{
+        user_trigram: takeTargetUser,
+        user_role: userObj?.role || 'DOCTOR',
+        row: confirmTakeCell.row,
+        col: confirmTakeCell.col,
+        month: confirmTakeCell.month + 1,
+        year: confirmTakeCell.year,
+        status: 'ASSIGNED',
+        round_id: activeRound?.id || 0,
+        group_index: 1,
+        sub_rank: 1,
+        category: 'normal',
+        submitted_at: new Date().toISOString()
+      }]);
+      if (choiceError) throw choiceError;
+
+      await supabase.from('take_requests').insert([{
+        requester_trigram: takeTargetUser,
+        target_row: confirmTakeCell.row,
+        target_month: confirmTakeCell.month + 1,
+        target_year: confirmTakeCell.year,
+        target_col: confirmTakeCell.col,
+        target_col_label: columnConfigs.find((c: any) => c.column_id === confirmTakeCell.col)?.custom_label || confirmTakeCell.col,
+        status: 'APPROVED',
+        updated_at: new Date().toISOString()
+      }]);
+
+      await supabase.from('logs').insert([{
+        action: 'AJOUT_MANUEL',
+        details: { mode: 'AJOUT_MANUEL', user: takeTargetUser, date: `${confirmTakeCell.row}/${confirmTakeCell.month + 1}/${confirmTakeCell.year}`, col: confirmTakeCell.col }
+      }]);
+
+      if (refreshData) refreshData();
+      fetchAssignedChoices();
+      fetchTakes();
+      setConfirmTakeCell(null);
+      setTakeTargetUser('');
+    } catch (e: any) {
+      console.error(e);
+      alert("Erreur lors de l'ajout: " + (e.message || JSON.stringify(e)));
+    }
+  };
+
+  const handleAdminExchange = async () => {
+    if (!exchangeSourceChoice || !exchangeTargetCell) return;
+    const oldTrigram = exchangeSourceChoice.userTrigram || exchangeSourceChoice.user_trigram;
+    const newTrigram = exchangeTargetCell.assigned?.userTrigram || exchangeTargetCell.assigned?.user_trigram;
+    
+    if (oldTrigram === newTrigram && oldTrigram) {
+      alert("Veuillez sélectionner un médecin différent.");
+      return;
+    }
+    
+    try {
+      if (newTrigram) {
+        // Swap users between two assigned choices
+        const { error: updateError1 } = await supabase.from('choices').update({
+          user_trigram: newTrigram
+        }).eq('id', exchangeSourceChoice.id);
+        if (updateError1) throw updateError1;
+
+        const { error: updateError2 } = await supabase.from('choices').update({
+          user_trigram: oldTrigram
+        }).eq('id', exchangeTargetCell.assigned.id);
+        if (updateError2) throw updateError2;
+      } else {
+        // Just move the user to the target cell
+        const { error: moveError } = await supabase.from('choices').update({
+          row: exchangeTargetCell.row,
+          month: exchangeTargetCell.month + 1, // Store as 1-indexed
+          year: exchangeTargetCell.year,
+          col: exchangeTargetCell.col
+        }).eq('id', exchangeSourceChoice.id);
+        if (moveError) throw moveError;
+      }
+
+      await supabase.from('exchange_requests').insert([{
+        requester_trigram: oldTrigram,
+        requester_choice_id: exchangeSourceChoice.id,
+        target_row: exchangeTargetCell.row,
+        target_month: exchangeTargetCell.month + 1,
+        target_year: exchangeTargetCell.year,
+        target_col: exchangeTargetCell.col,
+        target_col_label: columnConfigs.find((c: any) => c.column_id === exchangeTargetCell.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === exchangeTargetCell.col)?.name || exchangeTargetCell.col,
+        status: 'APPROVED',
+        reason: newTrigram ? `Échange Manuel avec ${newTrigram}` : `Déplacement Manuel`,
+        updated_at: new Date().toISOString()
+      }]);
+
+      await supabase.from('logs').insert([{
+        action: 'ECHANGE_MANUEL',
+        details: { mode: 'ECHANGE_MANUEL', oldUser: oldTrigram, newUser: newTrigram || 'Aucun', date: `${exchangeSourceChoice.row}/${exchangeSourceChoice.month + 1}/${exchangeSourceChoice.year}`, col: exchangeSourceChoice.col }
+      }]);
+
+      if (refreshData) refreshData();
+      fetchAssignedChoices();
+      fetchRequests();
+      setExchangeSourceChoice(null);
+      setExchangeTargetCell(null);
+    } catch (e: any) {
+      console.error(e);
+      alert("Erreur lors de l'échange: " + (e.message || JSON.stringify(e)));
+    }
+  };
+
+  const handleAdminAbandon = async (choice: any) => {
+    try {
+      const { error: deleteError } = await supabase.from('choices').delete().eq('id', choice.id);
+      if (deleteError) throw deleteError;
+
+      const { error: abandonError } = await supabase.from('abandon_requests').insert([{
+        requester_trigram: choice.userTrigram || choice.user_trigram,
+        shift_snapshot: {
+          row: choice.row,
+          month: choice.month + 1,
+          year: choice.year,
+          col: choice.col,
+          colLabel: columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === choice.col)?.name || choice.col
+        },
+        status: 'APPROVED',
+        updated_at: new Date().toISOString()
+      }]);
+      if (abandonError) throw abandonError;
+
+      fetchAssignedChoices();
+      fetchAbandons();
+      
+      const { error: logError } = await supabase.from('logs').insert([{
+        action: 'SUPPRESSION_GARDE', // from Admin Dashboard
+        details: { mode: 'ABANDON_MANUEL', user: choice.userTrigram || choice.user_trigram, date: `${choice.row}/${choice.month + 1}/${choice.year}`, col: choice.col }
+      }]);
+      
+      if (refreshData) refreshData();
+      setConfirmAbandonChoice(null);
+    } catch (e: any) {
+      console.error(e);
+      alert("Erreur lors de l'abandon: " + (e.message || JSON.stringify(e)));
+    }
+  };
 
   const handleRequestAction = async (requestId: string, action: 'APPROVED' | 'REJECTED') => {
     try {
@@ -251,7 +481,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     }
   };
 
-  const handleTakeAction = async (takeId: string, action: 'APPROVED' | 'REJECTED') => {
+  const handleTakeAction = async (takeId: any, action: 'APPROVED' | 'REJECTED') => {
     try {
       if (action === 'APPROVED') {
         const tk = takes.find(t => t.id === takeId);
@@ -287,14 +517,14 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                 if (otherTakes.length > 0) {
                   const otherIds = otherTakes.map(t => t.id);
                   await supabase.from('take_requests')
-                    .update({ status: 'REJECTED', updated_at: new Date().toISOString() })
+                    .update({ status: 'REJECTED' })
                     .in('id', otherIds);
                 }
             }
         }
       }
       
-      await supabase.from('take_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', takeId);
+      await supabase.from('take_requests').update({ status: action }).eq('id', takeId);
       fetchTakes();
     } catch (err) {
       console.error(err);
@@ -439,11 +669,75 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
     });
   };
 
+  const applyHistoryFilters = (items: { type: string, data: any, date: Date }[]) => {
+      return items.filter(item => {
+          let reqTrigram = '';
+          const { type, data, date: itemDate } = item;
+
+          if (type === 'EXCHANGE') {
+              reqTrigram = data.requester_trigram.toLowerCase();
+          } else if (type === 'ABANDON') {
+              reqTrigram = data.requester_trigram.toLowerCase();
+          } else if (type === 'TAKE') {
+              reqTrigram = data.requester_trigram.toLowerCase();
+          } else if (type === 'ADMIN') {
+              reqTrigram = data.details?.user?.toLowerCase() || '';
+          }
+
+          // Trigram filter
+          if (historyFilters.trigram && !reqTrigram.includes(historyFilters.trigram.toLowerCase())) {
+              return false;
+          }
+
+          // Date filters
+          if (historyFilters.startDate) {
+              const s = new Date(historyFilters.startDate);
+              if (itemDate < s) return false;
+          }
+          if (historyFilters.endDate) {
+              const e = new Date(historyFilters.endDate);
+              e.setHours(23, 59, 59, 999);
+              if (itemDate > e) return false;
+          }
+
+          return true;
+      });
+  };
+
+  const HistoryFiltersUI = () => (
+      <div className="flex flex-col md:flex-row gap-4 mb-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+          <div className="flex-1">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Médecin (Trigramme)</label>
+              <input type="text" placeholder="Ex: ABC" className="w-full text-sm p-2 border border-slate-200 rounded-lg uppercase" value={historyFilters.trigram} onChange={e => setHistoryFilters({...historyFilters, trigram: e.target.value})} />
+          </div>
+          <div className="flex-1">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Date début</label>
+              <input type="date" className="w-full text-sm p-2 border border-slate-200 rounded-lg" value={historyFilters.startDate} onChange={e => setHistoryFilters({...historyFilters, startDate: e.target.value})} />
+          </div>
+          <div className="flex-1">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 block">Date fin</label>
+              <input type="date" className="w-full text-sm p-2 border border-slate-200 rounded-lg" value={historyFilters.endDate} onChange={e => setHistoryFilters({...historyFilters, endDate: e.target.value})} />
+          </div>
+      </div>
+  );
+
   const isConfigured = (colId: number, period: ExchangePeriod) => {
     return rules.some(r => r.source_col_id === colId && r.source_period === period);
   };
 
   if (loading) return <div className="p-8 text-center text-slate-500 font-bold">Chargement des règles...</div>;
+
+  const allHistory = [
+    ...requests.filter(r => r.status !== 'PENDING').map(r => ({ type: 'EXCHANGE', data: r, date: new Date(r.updated_at || r.created_at) })),
+    ...abandons.filter(a => a.status !== 'PENDING').map(a => ({ type: 'ABANDON', data: a, date: new Date(a.updated_at || a.created_at) })),
+    ...takes.filter(t => t.status !== 'PENDING').map(t => ({ type: 'TAKE', data: t, date: new Date(t.updated_at || t.created_at) })),
+    ...adminLogs.map(l => ({ type: 'ADMIN', data: l, date: new Date(l.created_at) }))
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const ITEMS_PER_PAGE = 30;
+  const filteredHistory = applyHistoryFilters(allHistory);
+  const totalHistoryPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
+  const paginatedHistory = filteredHistory.slice((historyPage - 1) * ITEMS_PER_PAGE, historyPage * ITEMS_PER_PAGE);
 
   return (
     <div className="p-6 h-full flex flex-col" onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
@@ -487,6 +781,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </button>
           <button 
+            onClick={() => setActiveTab('HISTORIQUE')}
+            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex border-none items-center gap-2 whitespace-nowrap ${activeTab === 'HISTORIQUE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Historique
+          </button>
+          <button 
             onClick={() => setActiveTab('RULES')}
             className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-none whitespace-nowrap ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -504,6 +804,147 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
       {activeTab === 'REQUESTS' && (
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
           
+          {/* Compteur Medecin (Exchanges) */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setIsCounterExpandedRequests(!isCounterExpandedRequests)}
+              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
+            >
+              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Échanges)</h3>
+              <div className="flex items-center gap-4">
+                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDateRequests.getFullYear() === 1970 ? 'début' : counterResetDateRequests.toLocaleDateString('fr-FR')}</span>
+                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpandedRequests ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </button>
+            {isCounterExpandedRequests && (
+              <div className="p-6 border-t border-slate-200 bg-white">
+                <div className="flex justify-end mb-6">
+                  <button 
+                    onClick={async () => {
+                      const adminUser = users.find(u => u.role === 'ADMIN');
+                      if (!adminUser) return alert("Utilisateur admin non trouvé.");
+                      
+                      const pwd = window.prompt("Pour réinitialiser le compteur d'échanges, veuillez saisir le mot de passe administrateur :");
+                      if (pwd === null) return;
+                      if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
+                      
+                      try {
+                        const { error } = await supabase.from('logs').insert([{ action: 'RESET_EXCHANGE_COUNTER', details: {} }]);
+                        if (error) throw error;
+                        fetchUsersAndLogs();
+                        alert("Compteur réinitialisé avec succès.");
+                      } catch (err) {
+                        console.error(err);
+                        alert("Erreur lors de la réinitialisation.");
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm"
+                  >
+                    Réinitialiser le compteur
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Titulaires */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
+                    <div className="flex flex-col gap-2">
+                       {(() => {
+                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                           const matchedRequests = requests.filter(r => {
+                             if (r.requester_trigram !== user.trigram || r.status !== 'APPROVED') return false;
+                             const actionDate = new Date(r.updated_at || r.created_at);
+                             return actionDate > counterResetDateRequests;
+                           });
+                           return { user, count: matchedRequests.length, matchedRequests };
+                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+
+                         if (userCounts.length === 0) {
+                           return <div className="text-xs text-slate-500 italic py-1">Aucun échange comptabilisé.</div>;
+                         }
+
+                         return userCounts.map(({ user, count, matchedRequests }) => (
+                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                             <div 
+                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+                               onClick={() => setExpandedUserTrigramRequests(expandedUserTrigramRequests === user.trigram ? null : user.trigram)}
+                             >
+                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                 {user.trigram}
+                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramRequests === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{count}</span>
+                             </div>
+                             {expandedUserTrigramRequests === user.trigram && (
+                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
+                                 {matchedRequests.map((req, idx) => (
+                                   <div key={req.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}]
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Échange validé le {new Date(req.updated_at || req.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ));
+                       })()}
+                    </div>
+                  </div>
+
+                  {/* Remplaçants */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
+                    <div className="flex flex-col gap-2">
+                       {(() => {
+                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                           const matchedRequests = requests.filter(r => {
+                             if (r.requester_trigram !== user.trigram || r.status !== 'APPROVED') return false;
+                             const actionDate = new Date(r.updated_at || r.created_at);
+                             return actionDate > counterResetDateRequests;
+                           });
+                           return { user, count: matchedRequests.length, matchedRequests };
+                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+
+                         if (userCounts.length === 0) {
+                           return <div className="text-xs text-slate-500 italic py-1">Aucun échange comptabilisé.</div>;
+                         }
+
+                         return userCounts.map(({ user, count, matchedRequests }) => (
+                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                             <div 
+                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+                               onClick={() => setExpandedUserTrigramRequests(expandedUserTrigramRequests === user.trigram ? null : user.trigram)}
+                             >
+                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                 {user.trigram}
+                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramRequests === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{count}</span>
+                             </div>
+                             {expandedUserTrigramRequests === user.trigram && (
+                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
+                                 {matchedRequests.map((req, idx) => (
+                                   <div key={req.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}]
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Échange validé le {new Date(req.updated_at || req.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ));
+                       })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes en attente</h3>
@@ -513,8 +954,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
               <div className="space-y-4">
                 {requests.filter(r => r.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(req => {
                   const date = new Date(req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const isSelected = selectedExchangeRequest?.id === req.id;
                   return (
-                  <div key={req.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between bg-white shadow-sm">
+                  <div 
+                    key={req.id} 
+                    onClick={() => setSelectedExchangeRequest(isSelected ? null : req)}
+                    className={`cursor-pointer border ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400 bg-yellow-50' : 'border-slate-200 bg-white hover:border-blue-300'} rounded-xl p-4 flex items-center justify-between shadow-sm transition-all`}
+                  >
                     <div className="flex items-center gap-6">
                       <div className="flex flex-col items-center">
                         <div className="text-[10px] font-black text-slate-400 uppercase mb-1">Demandeur</div>
@@ -542,8 +988,8 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button onClick={() => handleRequestAction(req.id, 'REJECTED')} className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-lg text-xs font-black uppercase transition-colors">Refuser</button>
-                      <button onClick={() => handleRequestAction(req.id, 'APPROVED')} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Valider</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleRequestAction(req.id, 'REJECTED'); }} className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-lg text-xs font-black uppercase transition-colors">Refuser</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleRequestAction(req.id, 'APPROVED'); }} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Valider</button>
                     </div>
                   </div>
                 )})}
@@ -551,15 +997,51 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </div>
 
-          {/* History Logs */}
-          <div>
-            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des actions</h3>
-            {requests.length === 0 ? (
-              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique.</div>
+          {/* Exchange Planning Grid */}
+          <div className="flex flex-col h-[70vh] mt-8 border-t border-slate-100 pt-8">
+             {PlanningPanel && <PlanningPanel 
+               choices={choices || []} 
+               setChoices={() => {}} 
+               users={users} 
+               activeRound={activeRound} 
+               columnConfigs={columnConfigs} 
+               headerConfigs={headerConfigs} 
+               supabase={supabase} 
+               globalClosures={globalClosures} 
+               overrideAdminMode={true}
+               highlightCells={[
+                 exchangeSourceChoice, 
+                 exchangeTargetCell,
+                 selectedExchangeRequest ? { row: selectedExchangeRequest.target_row, month: selectedExchangeRequest.target_month, year: selectedExchangeRequest.target_year, col: selectedExchangeRequest.target_col } : null,
+                 selectedExchangeRequest?.requester_choice ? { row: selectedExchangeRequest.requester_choice.row, month: selectedExchangeRequest.requester_choice.month - 1, year: selectedExchangeRequest.requester_choice.year, col: selectedExchangeRequest.requester_choice.col } : null
+               ].filter(Boolean)}
+               onCellClick={(data: any) => {
+                 if (!exchangeSourceChoice) {
+                   if (data.assigned) {
+                     setExchangeSourceChoice(data.assigned);
+                   } else {
+                     alert("Veuillez sélectionner une case déjà attribuée pour initialiser l'échange.");
+                   }
+                 } else {
+                   if (data.row === exchangeSourceChoice.row && data.month === exchangeSourceChoice.month && data.year === exchangeSourceChoice.year && data.col === exchangeSourceChoice.col) {
+                     // Clicked same cell again, unselect
+                     setExchangeSourceChoice(null);
+                     return;
+                   }
+                   setExchangeTargetCell(data);
+                 }
+               }}
+             />}
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-8">
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des échanges (Pour rappel)</h3>
+            {requests.filter(r => r.status !== 'PENDING').length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
             ) : (
               <div className="space-y-3">
-                {[...requests].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(req => {
-                  const date = new Date(req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                {requests.filter(r => r.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(req => {
+                  const date = new Date(req.updated_at || req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${req.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                       <div className="flex items-start gap-4">
@@ -571,21 +1053,14 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                           </span>
                         </div>
                       </div>
-                      {req.status !== 'PENDING' && (
-                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {req.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
-                            </span>
-                            {req.updated_at && (
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                le {new Date(req.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            )}
-                          </div>
-                          {req.reason && <span className="text-xs text-slate-500 italic mt-1">{req.reason}</span>}
+                      <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${req.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {req.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
+                          </span>
                         </div>
-                      )}
+                        {req.reason && <span className="text-xs text-slate-500 italic mt-1">{req.reason}</span>}
+                      </div>
                     </div>
                   );
                 })}
@@ -740,7 +1215,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </div>
 
-          {/* Pending Abandons */}
+          {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'abandon en attente</h3>
             {abandons.filter(a => a.status === 'PENDING').length === 0 ? (
@@ -749,8 +1224,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
               <div className="space-y-4">
                 {abandons.filter(a => a.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(ab => {
                   const date = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const isSelected = selectedAbandonRequest?.id === ab.id;
                   return (
-                  <div key={ab.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between bg-white shadow-sm">
+                  <div 
+                    key={ab.id} 
+                    onClick={() => setSelectedAbandonRequest(isSelected ? null : ab)}
+                    className={`cursor-pointer border ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400 bg-yellow-50' : 'border-slate-200 bg-white hover:border-rose-300'} rounded-xl p-4 flex items-center justify-between shadow-sm transition-all`}
+                  >
                     <div className="flex items-center gap-6">
                       <div className="flex flex-col items-center">
                         <div className="text-[10px] font-black text-slate-400 uppercase mb-1">Demandeur</div>
@@ -762,16 +1242,16 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                         <div className="text-[9px] font-black text-rose-500 uppercase mb-1">Garde à abandonner</div>
                         <div className="text-sm font-bold text-slate-800">
                            {ab.requester_choice 
-                             ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
-                             : ab.shift_snapshot 
-                               ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
-                               : 'Garde supprimée'}
+                              ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
+                              : ab.shift_snapshot 
+                                ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
+                                : 'Garde supprimée'}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       <button onClick={() => handleAbandonAction(ab.id, 'REJECTED')} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
-                       <button onClick={() => handleAbandonAction(ab.id, 'APPROVED')} className="px-4 py-2 bg-green-500 text-white hover:bg-green-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Prise en compte</button>
+                       <button onClick={(e) => { e.stopPropagation(); handleAbandonAction(ab.id, 'REJECTED'); }} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
+                       <button onClick={(e) => { e.stopPropagation(); handleAbandonAction(ab.id, 'APPROVED'); }} className="px-4 py-2 bg-rose-500 text-white hover:bg-rose-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Accepter</button>
                     </div>
                   </div>
                 )})}
@@ -779,44 +1259,65 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </div>
 
-          {/* History Logs */}
-          <div>
-            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des abandons</h3>
-            {abandons.length === 0 ? (
-              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique.</div>
+          {/* Abandon Planning Grid */}
+          <div className="flex flex-col h-[70vh] mt-8 border-t border-slate-100 pt-8">
+             {PlanningPanel && <PlanningPanel 
+               choices={choices || []} 
+               setChoices={() => {}} 
+               users={users} 
+               activeRound={activeRound} 
+               columnConfigs={columnConfigs} 
+               headerConfigs={headerConfigs} 
+               supabase={supabase} 
+               globalClosures={globalClosures} 
+               overrideAdminMode={true}
+               highlightCells={[
+                 confirmAbandonChoice,
+                 selectedAbandonRequest?.requester_choice ? { row: selectedAbandonRequest.requester_choice.row, month: selectedAbandonRequest.requester_choice.month - 1, year: selectedAbandonRequest.requester_choice.year, col: selectedAbandonRequest.requester_choice.col } : null,
+                 selectedAbandonRequest?.shift_snapshot ? { row: selectedAbandonRequest.shift_snapshot.row, month: selectedAbandonRequest.shift_snapshot.month - 1, year: selectedAbandonRequest.shift_snapshot.year, col: selectedAbandonRequest.shift_snapshot.col } : null
+               ].filter(Boolean)}
+               onCellClick={(data: any) => {
+                 if (confirmAbandonChoice && confirmAbandonChoice.row === data.row && confirmAbandonChoice.col === data.col && confirmAbandonChoice.month === data.month && confirmAbandonChoice.year === data.year) {
+                   setConfirmAbandonChoice(null);
+                   return;
+                 }
+                 if (data.assigned) {
+                   setConfirmAbandonChoice(data.assigned);
+                 }
+               }}
+             />}
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-8">
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des abandons (Pour rappel)</h3>
+            {abandons.filter(a => a.status !== 'PENDING').length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
             ) : (
               <div className="space-y-3">
-                {[...abandons].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(ab => {
-                  const date = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                {abandons.filter(a => a.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(ab => {
+                  const date = new Date(ab.updated_at || ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${ab.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                       <div className="flex items-start gap-4">
                         <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-bold text-slate-700">Demande initiée par {ab.requester_trigram}</span>
+                        <div className="flex flex-col gap-1 w-full">
+                          <span className="font-bold text-slate-700">Abandon initié par {ab.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
-                          Garde [{ab.requester_choice 
-                            ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
-                            : ab.shift_snapshot 
-                              ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
-                              : 'supprimée'}]
+                            Garde [{ab.requester_choice 
+                              ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
+                              : ab.shift_snapshot 
+                                ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
+                                : 'supprimée'}]
                           </span>
-                        </div>
-                      </div>
-                      {ab.status !== 'PENDING' && (
-                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${ab.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {ab.status === 'APPROVED' ? 'Traité' : 'Abandon refusé'}
-                            </span>
-                            {ab.updated_at && (
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                le {new Date(ab.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${ab.status === 'APPROVED' ? 'bg-rose-100 text-rose-700' : 'bg-red-100 text-red-700'}`}>
+                                {ab.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'}
                               </span>
-                            )}
+                            </div>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -828,6 +1329,149 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
 
       {activeTab === 'TAKES' && (
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+          
+          {/* Compteur Medecin (Takes) */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <button 
+              onClick={() => setIsCounterExpandedTakes(!isCounterExpandedTakes)}
+              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
+            >
+              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Ajouts)</h3>
+              <div className="flex items-center gap-4">
+                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDateTakes.getFullYear() === 1970 ? 'début' : counterResetDateTakes.toLocaleDateString('fr-FR')}</span>
+                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpandedTakes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </button>
+            {isCounterExpandedTakes && (
+              <div className="p-6 border-t border-slate-200 bg-white">
+                <div className="flex justify-end mb-6">
+                  <button 
+                    onClick={async () => {
+                      const adminUser = users.find(u => u.role === 'ADMIN');
+                      if (!adminUser) return alert("Utilisateur admin non trouvé.");
+                      
+                      const pwd = window.prompt("Pour réinitialiser le compteur d'ajouts, veuillez saisir le mot de passe administrateur :");
+                      if (pwd === null) return;
+                      if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
+                      
+                      try {
+                        const { error } = await supabase.from('logs').insert([{ action: 'RESET_TAKE_COUNTER', details: {} }]);
+                        if (error) throw error;
+                        fetchUsersAndLogs();
+                        alert("Compteur réinitialisé avec succès.");
+                      } catch (err) {
+                        console.error(err);
+                        alert("Erreur lors de la réinitialisation.");
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm"
+                  >
+                    Réinitialiser le compteur
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Titulaires */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
+                    <div className="flex flex-col gap-2">
+                       {(() => {
+                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                           const matchedTakes = takes.filter(t => {
+                             if (t.requester_trigram !== user.trigram || t.status !== 'APPROVED') return false;
+                             const actionDate = new Date(t.updated_at || t.created_at);
+                             return actionDate > counterResetDateTakes;
+                           });
+                           return { user, count: matchedTakes.length, matchedTakes };
+                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+
+                         if (userCounts.length === 0) {
+                           return <div className="text-xs text-slate-500 italic py-1">Aucun ajout comptabilisé.</div>;
+                         }
+
+                         return userCounts.map(({ user, count, matchedTakes }) => (
+                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                             <div 
+                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+                               onClick={() => setExpandedUserTrigramTakes(expandedUserTrigramTakes === user.trigram ? null : user.trigram)}
+                             >
+                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                 {user.trigram}
+                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramTakes === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">{count}</span>
+                             </div>
+                             {expandedUserTrigramTakes === user.trigram && (
+                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
+                                 {matchedTakes.map((tk, idx) => (
+                                   <div key={tk.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Ajout validé le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ));
+                       })()}
+                    </div>
+                  </div>
+
+                  {/* Remplaçants */}
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
+                    <div className="flex flex-col gap-2">
+                       {(() => {
+                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                           const matchedTakes = takes.filter(t => {
+                             if (t.requester_trigram !== user.trigram || t.status !== 'APPROVED') return false;
+                             const actionDate = new Date(t.updated_at || t.created_at);
+                             return actionDate > counterResetDateTakes;
+                           });
+                           return { user, count: matchedTakes.length, matchedTakes };
+                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+
+                         if (userCounts.length === 0) {
+                           return <div className="text-xs text-slate-500 italic py-1">Aucun ajout comptabilisé.</div>;
+                         }
+
+                         return userCounts.map(({ user, count, matchedTakes }) => (
+                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
+                             <div 
+                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+                               onClick={() => setExpandedUserTrigramTakes(expandedUserTrigramTakes === user.trigram ? null : user.trigram)}
+                             >
+                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                                 {user.trigram}
+                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramTakes === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                               </span>
+                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">{count}</span>
+                             </div>
+                             {expandedUserTrigramTakes === user.trigram && (
+                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
+                                 {matchedTakes.map((tk, idx) => (
+                                   <div key={tk.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Ajout validé le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ));
+                       })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'ajout en attente</h3>
             {takes.filter(t => t.status === 'PENDING').length === 0 ? (
@@ -836,8 +1480,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
               <div className="space-y-4">
                 {takes.filter(t => t.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(tk => {
                   const date = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const isSelected = selectedTakeRequest?.id === tk.id;
                   return (
-                  <div key={tk.id} className="border border-slate-200 rounded-xl p-4 flex items-center justify-between bg-white shadow-sm">
+                  <div 
+                    key={tk.id} 
+                    onClick={() => setSelectedTakeRequest(isSelected ? null : tk)}
+                    className={`cursor-pointer border ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400 bg-yellow-50' : 'border-slate-200 bg-white hover:border-teal-300'} rounded-xl p-4 flex items-center justify-between shadow-sm transition-all`}
+                  >
                     <div className="flex items-center gap-6">
                       <div className="flex flex-col items-center">
                         <div className="text-[10px] font-black text-slate-400 uppercase mb-1">Demandeur</div>
@@ -853,8 +1502,8 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                       <button onClick={() => handleTakeAction(tk.id, 'REJECTED')} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
-                       <button onClick={() => handleTakeAction(tk.id, 'APPROVED')} className="px-4 py-2 bg-teal-500 text-white hover:bg-teal-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Accepter</button>
+                       <button onClick={(e) => { e.stopPropagation(); handleTakeAction(tk.id, 'REJECTED'); }} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
+                       <button onClick={(e) => { e.stopPropagation(); handleTakeAction(tk.id, 'APPROVED'); }} className="px-4 py-2 bg-teal-500 text-white hover:bg-teal-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Accepter</button>
                     </div>
                   </div>
                 )})}
@@ -862,42 +1511,189 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
             )}
           </div>
 
-          <div>
-            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des ajouts</h3>
-            {takes.length === 0 ? (
-              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique.</div>
+          {/* Take Planning Grid */}
+          <div className="flex flex-col h-[70vh] mt-8 border-t border-slate-100 pt-8">
+             {PlanningPanel && <PlanningPanel 
+               choices={choices || []} 
+               setChoices={() => {}} 
+               users={users} 
+               activeRound={activeRound} 
+               columnConfigs={columnConfigs} 
+               headerConfigs={headerConfigs} 
+               supabase={supabase} 
+               globalClosures={globalClosures} 
+               overrideAdminMode={true}
+               highlightCells={[
+                 confirmTakeCell,
+                 selectedTakeRequest ? { row: selectedTakeRequest.target_row, month: selectedTakeRequest.target_month, year: selectedTakeRequest.target_year, col: selectedTakeRequest.target_col } : null
+               ].filter(Boolean)}
+               onCellClick={(data: any) => {
+                 if (confirmTakeCell && confirmTakeCell.row === data.row && confirmTakeCell.col === data.col && confirmTakeCell.month === data.month && confirmTakeCell.year === data.year) {
+                   setConfirmTakeCell(null);
+                   return;
+                 }
+                 if (!data.assigned) {
+                   setConfirmTakeCell(data);
+                 } else {
+                   alert("Veuillez sélectionner une case vide pour ajouter un médecin.");
+                 }
+               }}
+             />}
+          </div>
+
+          <div className="mt-8 border-t border-slate-100 pt-8">
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des ajouts (Pour rappel)</h3>
+            {takes.filter(t => t.status !== 'PENDING').length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
             ) : (
               <div className="space-y-3">
-                {[...takes].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(tk => {
-                  const date = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                {takes.filter(t => t.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(tk => {
+                  const date = new Date(tk.updated_at || tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${tk.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                       <div className="flex items-start gap-4">
                         <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-bold text-slate-700">Demande initiée par {tk.requester_trigram}</span>
+                        <div className="flex flex-col gap-1 w-full">
+                          <span className="font-bold text-slate-700">Ajout initié par {tk.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
                           Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
                           </span>
-                        </div>
-                      </div>
-                      {tk.status !== 'PENDING' && (
-                        <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${tk.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                              {tk.status === 'APPROVED' ? 'Accepté' : 'Refusé'}
-                            </span>
-                            {tk.updated_at && (
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                le {new Date(tk.updated_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${tk.status === 'APPROVED' ? 'bg-teal-100 text-teal-700' : 'bg-red-100 text-red-700'}`}>
+                                {tk.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'}
                               </span>
-                            )}
+                            </div>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'HISTORIQUE' && (
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+          <div>
+            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique complet</h3>
+            <HistoryFiltersUI />
+            {filteredHistory.length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  {paginatedHistory.map((item, index) => {
+                    const { type, data, date } = item;
+                    const formattedDate = date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    
+                    return (
+                      <div key={`hist-${index}-${date.getTime()}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
+                        <div className="flex items-start gap-4">
+                          <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{formattedDate}</span>
+                          <div className="flex flex-col gap-1 w-full">
+                            
+                            {/* EXCHANGE RENDER */}
+                            {type === 'EXCHANGE' && (
+                              <>
+                                <span className="font-bold text-slate-700">Échange initié par {data.requester_trigram}</span>
+                                <span className="text-slate-500 text-xs">
+                                  Cède [{formatRequestDate(data.requester_choice?.row, data.requester_choice?.month, data.requester_choice?.year, data.requester_choice?.col, data.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(data.target_row, data.target_month, data.target_year, data.target_col, data.target_col_label, false, columnConfigs)}]
+                                </span>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
+                                    {data.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+
+                            {/* ABANDON RENDER */}
+                            {type === 'ABANDON' && (
+                              <>
+                                <span className="font-bold text-slate-700">Abandon initié par {data.requester_trigram}</span>
+                                <span className="text-slate-500 text-xs">
+                                  Garde [{data.requester_choice 
+                                    ? formatRequestDate(data.requester_choice.row, data.requester_choice.month, data.requester_choice.year, data.requester_choice.col, data.requester_choice.colLabel, true, columnConfigs)
+                                    : data.shift_snapshot 
+                                      ? formatRequestDate(data.shift_snapshot.row, data.shift_snapshot.month, data.shift_snapshot.year, data.shift_snapshot.col, data.shift_snapshot.colLabel, true, columnConfigs)
+                                      : 'supprimée'}]
+                                </span>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-rose-100 text-rose-700' : 'bg-red-100 text-red-700'}`}>
+                                    {data.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+
+                            {/* TAKE RENDER */}
+                            {type === 'TAKE' && (
+                              <>
+                                <span className="font-bold text-slate-700">Ajout initié par {data.requester_trigram}</span>
+                                <span className="text-slate-500 text-xs">
+                                  Garde [{formatRequestDate(data.target_row, data.target_month, data.target_year, data.target_col, data.target_col_label, false, columnConfigs)}]
+                                </span>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-teal-100 text-teal-700' : 'bg-red-100 text-red-700'}`}>
+                                    {data.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+
+                            {/* ADMIN RENDER */}
+                            {type === 'ADMIN' && (
+                              <>
+                                <span className="font-bold text-slate-700">Action Administrateur ({data.action})</span>
+                                {data.details && (
+                                  <span className="text-slate-500 text-xs">
+                                    {data.details.user && `Médecin : ${data.details.user} `}
+                                    {data.details.date && `| Date : ${data.details.date} `}
+                                    {data.details.col && `| Colonne id : ${data.details.col}`}
+                                  </span>
+                                )}
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md bg-purple-100 text-purple-700">
+                                    Action Manuelle
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {/* Pagination Controls */}
+                {totalHistoryPages > 1 && (
+                  <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-4 mt-6">
+                    <span className="text-sm font-bold text-slate-500">
+                      Page {historyPage} sur {totalHistoryPages} ({filteredHistory.length} résultats)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+                        disabled={historyPage === 1}
+                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-black uppercase disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                      >
+                        Précédent
+                      </button>
+                      <button 
+                        onClick={() => setHistoryPage(p => Math.min(totalHistoryPages, p + 1))}
+                        disabled={historyPage === totalHistoryPages}
+                        className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-black uppercase disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                      >
+                        Suivant
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1265,6 +2061,181 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase }) => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up for Abandon Confirmation */}
+      {confirmAbandonChoice && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-900 p-6 flex items-center justify-between">
+              <h3 className="text-white text-lg font-black uppercase tracking-tight">Confirmer l'abandon</h3>
+            </div>
+            <div className="p-6 space-y-4 text-center">
+              <p className="text-sm font-medium text-slate-600">
+                Êtes-vous sûr de vouloir abandonner la garde suivante ?
+              </p>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 inline-block text-left w-full space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Médecin</span>
+                  <span className="text-sm font-black text-slate-800">{confirmAbandonChoice.userTrigram || confirmAbandonChoice.user_trigram}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Date</span>
+                  <span className="text-sm font-bold text-slate-800">{String(confirmAbandonChoice.row).padStart(2, '0')}/{String(confirmAbandonChoice.month + 1).padStart(2, '0')}/{confirmAbandonChoice.year}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
+                  <span className="text-sm font-bold text-slate-800 text-right">
+                    Col {confirmAbandonChoice.col} - {columnConfigs?.find((c: any) => c.column_id === confirmAbandonChoice.col)?.custom_label || COLUMNS.find(c => c.id === confirmAbandonChoice.col)?.label}
+                    <br/>
+                    <span className="text-xs text-slate-500 font-medium">({columnConfigs?.find((c: any) => c.column_id === confirmAbandonChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === confirmAbandonChoice.col)?.timeRange})</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button 
+                onClick={() => setConfirmAbandonChoice(null)}
+                className="flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={() => handleAdminAbandon(confirmAbandonChoice)}
+                className="flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-white bg-red-500 hover:bg-red-600 shadow-md shadow-red-200 transition-colors"
+              >
+                Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up for Admin Add (Take) Confirmation */}
+      {confirmTakeCell && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-900 p-6 flex items-center justify-between">
+              <h3 className="text-white text-lg font-black uppercase tracking-tight">Ajouter un médecin</h3>
+            </div>
+            <div className="p-6 space-y-4 text-center">
+              <p className="text-sm font-medium text-slate-600">
+                Sélectionnez le médecin à ajouter pour cette garde :
+              </p>
+              
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 inline-block text-left w-full space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Date</span>
+                  <span className="text-sm font-bold text-slate-800">{String(confirmTakeCell.row).padStart(2, '0')}/{String(confirmTakeCell.month + 1).padStart(2, '0')}/{confirmTakeCell.year}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
+                  <span className="text-sm font-bold text-slate-800 text-right">
+                    Col {confirmTakeCell.col} - {columnConfigs?.find((c: any) => c.column_id === confirmTakeCell.col)?.custom_label || COLUMNS.find(c => c.id === confirmTakeCell.col)?.label}
+                    <br/>
+                    <span className="text-xs text-slate-500 font-medium">({columnConfigs?.find((c: any) => c.column_id === confirmTakeCell.col)?.custom_time_range || COLUMNS.find(c => c.id === confirmTakeCell.col)?.timeRange})</span>
+                  </span>
+                </div>
+              </div>
+
+              <select
+                className="w-full mt-4 p-3 border border-slate-200 rounded-xl text-sm font-bold bg-white"
+                value={takeTargetUser}
+                onChange={(e) => setTakeTargetUser(e.target.value)}
+              >
+                <option value="">-- Choisir un médecin --</option>
+                {users?.filter(u => u.trigram !== 'ADMIN').sort((a, b) => a.trigram.localeCompare(b.trigram)).map(u => (
+                  <option key={`take-${u.trigram}`} value={u.trigram}>{u.trigram} {u.role === 'SUBSTITUTE' ? '(Remplaçant)' : ''}</option>
+                ))}
+              </select>
+
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button 
+                onClick={() => { setConfirmTakeCell(null); setTakeTargetUser(''); }}
+                className="flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={handleAdminTake}
+                disabled={!takeTargetUser}
+                className="flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-white bg-teal-500 hover:bg-teal-600 disabled:opacity-50 shadow-md shadow-teal-200 transition-colors"
+              >
+                Ajouter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up for Admin Exchange Confirmation */}
+      {exchangeTargetCell && exchangeSourceChoice && (
+        <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="bg-slate-900 p-6 flex items-center justify-between">
+              <h3 className="text-white text-lg font-black uppercase tracking-tight">Confirmer l'échange</h3>
+            </div>
+            <div className="p-6 space-y-4 text-center">
+              <p className="text-sm font-medium text-slate-600">
+                Vous êtes sur le point de déplacer/échanger ce médecin :
+              </p>
+              
+              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 inline-block text-left w-full space-y-2">
+                 <div className="flex justify-between">
+                  <span className="text-[10px] uppercase font-black text-orange-400">Origine</span>
+                  <span className="text-sm font-black text-slate-800">{exchangeSourceChoice.userTrigram || exchangeSourceChoice.user_trigram}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Date</span>
+                  <span className="text-sm font-bold text-slate-800">{String(exchangeSourceChoice.row).padStart(2, '0')}/{String(exchangeSourceChoice.month + 1).padStart(2, '0')}/{exchangeSourceChoice.year}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
+                  <span className="text-sm font-bold text-slate-800 text-right">
+                    Col {exchangeSourceChoice.col} - {columnConfigs?.find((c: any) => c.column_id === exchangeSourceChoice.col)?.custom_label || COLUMNS.find(c => c.id === exchangeSourceChoice.col)?.label}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-slate-300">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mx-auto transform rotate-90"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+              </div>
+
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 inline-block text-left w-full space-y-2">
+                 <div className="flex justify-between">
+                  <span className="text-[10px] uppercase font-black text-blue-400">Destination</span>
+                  <span className="text-sm font-black text-slate-800">{exchangeTargetCell.assigned?.userTrigram || exchangeTargetCell.assigned?.user_trigram || 'Case Vide'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Date</span>
+                  <span className="text-sm font-bold text-slate-800">{String(exchangeTargetCell.row).padStart(2, '0')}/{String(exchangeTargetCell.month + 1).padStart(2, '0')}/{exchangeTargetCell.year}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
+                  <span className="text-sm font-bold text-slate-800 text-right">
+                    Col {exchangeTargetCell.col} - {columnConfigs?.find((c: any) => c.column_id === exchangeTargetCell.col)?.custom_label || COLUMNS.find(c => c.id === exchangeTargetCell.col)?.label}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button 
+                onClick={() => { setExchangeSourceChoice(null); setExchangeTargetCell(null); }}
+                className="flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={handleAdminExchange}
+                className="flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest text-white bg-blue-500 hover:bg-blue-600 shadow-md shadow-blue-200 transition-colors"
+              >
+                Valider
+              </button>
             </div>
           </div>
         </div>
