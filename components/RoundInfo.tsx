@@ -100,6 +100,37 @@ export const RoundInfo: React.FC<Props> = ({ round, stepInstruction }) => {
                             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
                         </svg>
                     </div>
+
+                    {/* Combinaisons / Équations */}
+                    <div>
+                        <strong className="text-emerald-300">Combinaisons possibles :</strong>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {(() => {
+                                let eqOptions: string[] = [];
+                                const t = round?.title?.toUpperCase() || '';
+                                if (t.includes('NUIT')) {
+                                    eqOptions = ["1 GC (44/45) + 2 B + 1 N", "1 GC (44/45) + 1 B + 2 N", "1 GC (44/45) + 3 N", "1 GC (46) + 1 B", "1 GC (46) + 1 N"];
+                                } else if (t.includes('SAMEDI')) {
+                                    eqOptions = ["1 GC + 1 B + 1 N", "1 GC + 2 N"];
+                                } else if (t.includes('VISITE')) {
+                                    eqOptions = ["2 GC + 1 B"];
+                                } else if (t.includes('SUPP')) {
+                                    eqOptions = ["2 GC + 2 B (Avec Visite)", "0 GC + 1 B (Sans Visite)"];
+                                } else if (t.includes('REMPLAÇANT') || t.includes('REMPLACANT')) {
+                                    eqOptions = ["1 GC + 2 B"];
+                                } else if (t.includes('BONUS')) {
+                                    eqOptions = ["1 B"];
+                                } else {
+                                    eqOptions = ["1 GC + 1 B + 1 N", "2 GC", "1 B"];
+                                }
+                                return eqOptions.map((eq, idx) => (
+                                    <span key={idx} className="px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 text-xs font-medium border border-emerald-500/30">
+                                        {eq}
+                                    </span>
+                                ));
+                            })()}
+                        </div>
+                    </div>
                     
                     {round.step_normal_active && (
                        <div>
