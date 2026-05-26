@@ -1867,18 +1867,18 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-4 px-4">
                     <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
                     <div className="h-px bg-slate-200 flex-1"></div>
-                    <button 
-                        onClick={() => {
-                           window.dispatchEvent(new CustomEvent('trigger-ai-proposal'));
-                        }}
-                        className={`flex items-center gap-2 ${trigram.toUpperCase() === 'TES' ? 'px-4' : 'px-3'} py-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl hover:bg-indigo-200 transition-colors text-sm font-black shadow-sm`}
-                        title="Générer planning IA"
-                    >
-                        <Bot className="w-4 h-4" />
-                        {trigram.toUpperCase() === 'TES' && (
+                    {trigram.toUpperCase() === 'TES' && (
+                        <button 
+                            onClick={() => {
+                               window.dispatchEvent(new CustomEvent('trigger-ai-proposal'));
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl hover:bg-indigo-200 transition-colors text-sm font-black shadow-sm"
+                            title="Générer planning IA"
+                        >
+                            <Bot className="w-4 h-4" />
                             <span className="hidden sm:inline">Générer planning complet IA</span>
-                        )}
-                    </button>
+                        </button>
+                    )}
                     <button 
                         onClick={() => exportToICS(month, year, choices, dynamicColumns, trigram.toUpperCase())}
                         className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors text-sm font-bold shadow-sm"
@@ -2396,7 +2396,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {viewMode === ViewMode.APP && (
+      {viewMode === ViewMode.APP && trigram.toUpperCase() === 'TES' && (
         <ChatAssistant 
           supabase={supabase}
           trigram={trigram}
