@@ -1401,19 +1401,36 @@ const App: React.FC = () => {
 
   if (viewMode === ViewMode.LOGIN) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 text-slate-900">
-        <form onSubmit={(e) => handleLogin(e, ViewMode.APP)} className="bg-white p-12 rounded-[60px] shadow-2xl w-full max-w-sm space-y-8 border-t-[12px] border-slate-900">
+      <div className="min-h-screen bg-slate-100 flex flex-col xl:flex-row items-center justify-center p-6 gap-12 text-slate-900 overflow-y-auto">
+        <form onSubmit={(e) => handleLogin(e, ViewMode.APP)} className="bg-white p-10 md:p-12 rounded-[50px] md:rounded-[60px] shadow-2xl w-full max-w-sm space-y-8 border-t-[12px] border-slate-900 shrink-0">
           <div className="text-center"><h1 className="text-4xl font-black tracking-tighter uppercase mb-2">SOS 92</h1></div>
           {loginError && <div className="p-3 bg-red-50 text-red-500 rounded-2xl text-[10px] font-bold text-center uppercase">{loginError}</div>}
           <div className="space-y-4">
-            <input type="text" placeholder="Trigramme" value={trigram} onChange={e => setTrigram(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black uppercase text-center text-2xl outline-none" maxLength={3} />
-            <input type="password" placeholder="Code secret" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black text-center text-2xl outline-none" />
+            <input type="text" placeholder="Trigramme" value={trigram} onChange={e => setTrigram(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black uppercase text-center text-2xl outline-none focus:ring-4 focus:ring-slate-900/10 focus:border-slate-300 transition-all" maxLength={3} />
+            <input type="password" placeholder="Code secret" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black text-center text-2xl outline-none focus:ring-4 focus:ring-slate-900/10 focus:border-slate-300 transition-all" />
           </div>
-          <div className="flex flex-col gap-3">
-            <button type="button" onClick={(e) => handleLogin(e, ViewMode.APP)} className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm">Saisie via Planning</button>
-            <button type="button" onClick={(e) => handleLogin(e, ViewMode.LIST_INPUT)} className="w-full bg-blue-600 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all text-sm">Saisie via Liste</button>
+          <div className="flex flex-col gap-5 items-center mt-6">
+            <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm outline-none focus:ring-4 focus:ring-slate-900/20">Saisie via Planning</button>
+            <button type="button" onClick={(e) => handleLogin(e, ViewMode.LIST_INPUT)} className="text-[11px] font-bold text-slate-400 hover:text-slate-700 underline transition-colors uppercase tracking-widest outline-none focus:text-slate-700">Saisie via Liste (Téléphone)</button>
           </div>
         </form>
+
+        <div className="w-full max-w-lg shrink-0 flex flex-col gap-3">
+            <div className="text-center xl:text-left ml-2">
+                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Tutoriel Vidéo</span>
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">Comment utiliser le planning ?</h2>
+            </div>
+            <div className="aspect-video w-full rounded-[30px] overflow-hidden shadow-xl bg-slate-200 border-4 border-white relative group">
+              <iframe 
+                className="w-full h-full absolute inset-0"
+                src="https://www.youtube.com/embed/oxn6f0ObTlY" 
+                title="Tutoriel Planning SOS 92" 
+                frameBorder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                allowFullScreen>
+              </iframe>
+            </div>
+        </div>
       </div>
     );
   }
