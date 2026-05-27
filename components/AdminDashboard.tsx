@@ -13,6 +13,7 @@ interface Props {
   setRounds: React.Dispatch<React.SetStateAction<Round[]>>;
   supabase: any;
   onLogout: () => void;
+  currentUserTrigram?: string;
 }
 
 const getDefaultColor = (colorClass: string) => {
@@ -71,7 +72,7 @@ const generateAutoVersionName = async (supabase: any, activeRound: any) => {
     return `${baseName} v${maxV + 1}`;
 };
 
-export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRounds, supabase, onLogout }) => {
+export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRounds, supabase, onLogout, currentUserTrigram }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>(AdminTab.USERS);
   const [selectedRoundId, setSelectedRoundId] = useState<number>(1);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -410,14 +411,14 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
-          {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} />}
+          {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
         </div>
       </main>
     </div>
   );
 };
 
-const LogsTabPanel = ({ supabase }: any) => {
+const LogsTabPanel = ({ supabase, currentUserTrigram }: any) => {
   const [subTab, setSubTab] = useState<'CONNECTIONS' | 'MOVEMENTS' | 'WISHES'>('CONNECTIONS');
 
   return (
@@ -443,20 +444,56 @@ const LogsTabPanel = ({ supabase }: any) => {
           </button>
        </div>
 
-       {subTab === 'CONNECTIONS' && <ConnectionLogsSubPanel supabase={supabase} />}
+       {subTab === 'CONNECTIONS' && <ConnectionLogsSubPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
        {subTab === 'MOVEMENTS' && <MovementLogsSubPanel supabase={supabase} />}
        {subTab === 'WISHES' && <WishesLogsSubPanel supabase={supabase} />}
     </div>
   );
 };
 
-const ConnectionLogsSubPanel = ({ supabase }: any) => {
+const ConnectionLogsSubPanel = ({ supabase, currentUserTrigram }: any) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterTrigram, setFilterTrigram] = useState('');
   const [filterMode, setFilterMode] = useState<string>('ALL');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
+
+  const [activeSessionsModal, setActiveSessionsModal] = useState(false);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [checkingSessions, setCheckingSessions] = useState(false);
+
+  const fetchActiveSessions = async () => {
+    setCheckingSessions(true);
+    const { data, error } = await supabase.from('connection_logs').select('*').is('logout_time', null).order('login_time', { ascending: false });
+    if (!error && data) {
+      setActiveSessions(data);
+    }
+    setActiveSessionsModal(true);
+    setCheckingSessions(false);
+  };
+
+  const disconnectAllOthers = async () => {
+    if (!currentUserTrigram) {
+        alert("Impossible de déterminer votre session actuelle.");
+        return;
+    }
+    const confirm = window.confirm("Déconnecter toutes les autres sessions actives ?");
+    if (!confirm) return;
+
+    const idsToUpdate = activeSessions
+      .filter(s => s.user_trigram !== currentUserTrigram)
+      .map(s => s.id);
+
+    if (idsToUpdate.length > 0) {
+      await supabase.from('connection_logs').update({ logout_time: new Date().toISOString() }).in('id', idsToUpdate);
+      alert(`${idsToUpdate.length} session(s) déconnectée(s).`);
+      fetchActiveSessions();
+      fetchLogs();
+    } else {
+      alert("Aucune autre session à déconnecter.");
+    }
+  };
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -577,9 +614,42 @@ const ConnectionLogsSubPanel = ({ supabase }: any) => {
               <option value="LIST_INPUT">Liste</option>
               <option value="ADMIN">Admin</option>
             </select>
+            <button disabled={checkingSessions} onClick={fetchActiveSessions} className="px-3 py-2 bg-indigo-100 text-indigo-700 font-bold uppercase text-[10px] tracking-widest rounded-xl hover:bg-indigo-200 transition-colors" title="Tester les sessions actives">
+                {checkingSessions ? '...' : 'Actifs ?'}
+            </button>
             <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
         </div>
       </div>
+
+      {activeSessionsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+            <div className="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-black uppercase tracking-tighter text-slate-800 text-lg">Sessions Actives</h3>
+                    <button onClick={() => setActiveSessionsModal(false)} className="text-slate-400 hover:text-slate-700">✖</button>
+                </div>
+                
+                <button onClick={disconnectAllOthers} className="w-full mb-4 px-4 py-3 bg-red-100 text-red-700 font-black uppercase text-xs tracking-widest rounded-xl hover:bg-red-200 transition-colors">
+                    Déconnecter tous (sauf vous)
+                </button>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {activeSessions.length === 0 ? (
+                        <div className="text-center text-slate-500 text-xs py-4">Aucune session active détectée.</div>
+                    ) : (
+                        activeSessions.map(s => (
+                            <div key={s.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                <span className="font-bold text-slate-800">{s.user_trigram}</span>
+                                <span className="text-[10px] text-slate-500 font-bold px-2 py-1 bg-green-100 text-green-700 rounded-md">
+                                    {s.user_trigram === currentUserTrigram ? 'Vous' : 'En ligne'}
+                                </span>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
 
       {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

@@ -1455,7 +1455,7 @@ const App: React.FC = () => {
   }
 
   if (viewMode === ViewMode.ADMIN) {
-    return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={handleLogout} />;
+    return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} />;
   }
 
   if (viewMode === ViewMode.LOGIN) {
