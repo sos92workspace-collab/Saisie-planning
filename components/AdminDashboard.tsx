@@ -432,14 +432,8 @@ const EnlargeableChart = ({ title, children, isScrollable = false }: { title: st
         >
           🗖
         </button>
-        <div className={`flex-1 min-h-[12rem] ${isScrollable ? "overflow-x-auto overflow-y-hidden" : ""}`}>
-          {isScrollable ? (
-              <div style={{ width: 'max(100%, 800px)', height: '100%' }}>
-                 {children}
-              </div>
-          ) : (
-              children
-          )}
+        <div className="flex-1 min-h-[14rem]">
+           {children}
         </div>
       </div>
 
@@ -458,7 +452,7 @@ const EnlargeableChart = ({ title, children, isScrollable = false }: { title: st
             </div>
             <div className={`flex-1 min-h-0 ${isScrollable ? "overflow-x-auto overflow-y-hidden" : ""}`}>
                  {isScrollable ? (
-                     <div style={{ width: 'max(100%, 1200px)', height: '100%' }}>
+                     <div style={{ width: 'max(100%, 1500px)', height: '100%' }}>
                          {children}
                      </div>
                  ) : (
@@ -710,7 +704,7 @@ const ConnectionLogsSubPanel = ({ supabase, currentUserTrigram }: any) => {
                   <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartDataTri}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="name" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
+                          <XAxis dataKey="name" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} />
