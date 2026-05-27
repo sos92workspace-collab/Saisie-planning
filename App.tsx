@@ -789,6 +789,9 @@ const App: React.FC = () => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         recordLogout();
+      } else if (document.visibilityState === 'visible' && sessionId) {
+        // Clear the logout time / register return
+        supabase.from('connection_logs').update({ logout_time: null }).eq('id', sessionId).then(() => {});
       }
     };
     window.addEventListener('visibilitychange', handleVisibilityChange);

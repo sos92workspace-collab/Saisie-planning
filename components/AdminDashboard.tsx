@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
 import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, GuardType, Site, UserRole, ColumnDefinition, ShiftDefinition, ShiftGlobalSettings } from '../types';
 import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap } from '../constants';
 import { MatrixHeader } from './MatrixHeader';
@@ -419,10 +420,12 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
 const ConnectionLogsPanel = ({ supabase }: any) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [filterTrigram, setFilterTrigram] = useState('');
+  const [filterMode, setFilterMode] = useState<string>('ALL');
 
   const fetchLogs = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('connection_logs').select('*').order('login_time', { ascending: false }).limit(200);
+    const { data, error } = await supabase.from('connection_logs').select('*').order('login_time', { ascending: false }).limit(500);
     if (!error && data) {
       setLogs(data);
     }
@@ -433,14 +436,96 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
     fetchLogs();
   }, []);
 
+  const filteredLogs = useMemo(() => {
+    return logs.filter(l => {
+      const matchTri = filterTrigram === '' || l.user_trigram.toLowerCase().includes(filterTrigram.toLowerCase());
+      const matchMode = filterMode === 'ALL' || l.view_mode === filterMode;
+      return matchTri && matchMode;
+    });
+  }, [logs, filterTrigram, filterMode]);
+
+  const chartDataTri = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredLogs.forEach(l => {
+      counts[l.user_trigram] = (counts[l.user_trigram] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 15);
+  }, [filteredLogs]);
+
+  const chartDataTime = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredLogs.forEach(l => {
+      const date = new Date(l.login_time).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      counts[date] = (counts[date] || 0) + 1;
+    });
+    // Reverse because data is loaded desc, we want asc for chart
+    return Object.entries(counts).reverse()
+      .map(([date, count]) => ({ date, Connexions: count }));
+  }, [filteredLogs]);
+
   return (
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-2">
             <span className="text-2xl">📊</span> Historique log
         </h2>
-        <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
+        <div className="flex flex-wrap items-center gap-3">
+            <input 
+              type="text" 
+              placeholder="Filtrer trigramme..." 
+              value={filterTrigram} 
+              onChange={e => setFilterTrigram(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+            />
+            <select 
+              value={filterMode} 
+              onChange={e => setFilterMode(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+            >
+              <option value="ALL">Tous les modes</option>
+              <option value="APP">Planning</option>
+              <option value="LIST_INPUT">Liste</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+            <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
+        </div>
       </div>
+
+      {!loading && filteredLogs.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Connexions par Trigramme (Top 15)</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartDataTri}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="name" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution des connexions</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataTime}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Connexions" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {loading ? (
           <div className="text-slate-500 text-sm py-4">Chargement des logs...</div>
@@ -450,6 +535,7 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
                   <th className="p-3">Trigramme</th>
+                  <th className="p-3">Mode</th>
                   <th className="p-3">Connexion</th>
                   <th className="p-3">Déconnexion</th>
                   <th className="p-3">Durée</th>
@@ -457,11 +543,11 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
                 </tr>
               </thead>
               <tbody>
-                {logs.length === 0 ? (
+                {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-4 text-center text-slate-400 text-sm">Aucun log trouvé.</td>
+                    <td colSpan={6} className="p-4 text-center text-slate-400 text-sm">Aucun log trouvé.</td>
                   </tr>
-                ) : logs.map((l: any) => {
+                ) : filteredLogs.map((l: any) => {
                   const loginTime = new Date(l.login_time);
                   const logoutTime = l.logout_time ? new Date(l.logout_time) : null;
                   
@@ -482,6 +568,7 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
                   return (
                     <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs">
                       <td className="p-3 font-bold text-slate-800">{l.user_trigram}</td>
+                      <td className="p-3 font-bold text-slate-500">{l.view_mode || '-'}</td>
                       <td className="p-3 text-slate-600">{formatTime(loginTime)}</td>
                       <td className="p-3 text-slate-600">{logoutTime ? formatTime(logoutTime) : '-'}</td>
                       <td className="p-3">
