@@ -418,7 +418,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   );
 };
 
-const EnlargeableChart = ({ title, children, isScrollable = false }: { title: string, children: React.ReactNode, isScrollable?: boolean }) => {
+const EnlargeableChart = ({ title, children, isScrollable = false, dataLength = 0 }: { title: string, children: React.ReactNode, isScrollable?: boolean, dataLength?: number }) => {
   const [isEnlarged, setIsEnlarged] = useState(false);
 
   return (
@@ -432,8 +432,14 @@ const EnlargeableChart = ({ title, children, isScrollable = false }: { title: st
         >
           🗖
         </button>
-        <div className="flex-1 min-h-[14rem]">
-           {children}
+        <div className={`flex-1 min-h-[14rem] ${isScrollable ? "overflow-x-auto overflow-y-hidden" : ""}`}>
+          {isScrollable ? (
+              <div style={{ minWidth: dataLength > 0 ? `${Math.max(100, dataLength * 25)}px` : 'max(100%, 800px)', height: '100%' }}>
+                 {children}
+              </div>
+          ) : (
+              children
+          )}
         </div>
       </div>
 
@@ -452,7 +458,7 @@ const EnlargeableChart = ({ title, children, isScrollable = false }: { title: st
             </div>
             <div className={`flex-1 min-h-0 ${isScrollable ? "overflow-x-auto overflow-y-hidden" : ""}`}>
                  {isScrollable ? (
-                     <div style={{ width: 'max(100%, 1500px)', height: '100%' }}>
+                     <div style={{ minWidth: dataLength > 0 ? `${Math.max(100, dataLength * 40)}px` : 'max(100%, 1500px)', height: '100%' }}>
                          {children}
                      </div>
                  ) : (
@@ -700,33 +706,33 @@ const ConnectionLogsSubPanel = ({ supabase, currentUserTrigram }: any) => {
 
       {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <EnlargeableChart title="Connexions par Trigramme" isScrollable={true}>
+              <EnlargeableChart title="Connexions par Trigramme" isScrollable={true} dataLength={chartDataTri.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={chartDataTri}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="name" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="name" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Bar dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]} />
                       </BarChart>
                   </ResponsiveContainer>
               </EnlargeableChart>
-              <EnlargeableChart title="Évolution des connexions">
+              <EnlargeableChart title="Évolution des connexions" isScrollable={true} dataLength={chartDataTime.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataTime}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Connexions" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
                       </LineChart>
                   </ResponsiveContainer>
               </EnlargeableChart>
-              <EnlargeableChart title="Temps Moyen (Min)">
+              <EnlargeableChart title="Temps Moyen (Min)" isScrollable={true} dataLength={chartDataDuration.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataDuration}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Temps moyen (min)" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
@@ -932,33 +938,33 @@ const MovementLogsSubPanel = ({ supabase }: any) => {
 
       {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <EnlargeableChart title="Évolution : Échanges">
+              <EnlargeableChart title="Évolution : Échanges" isScrollable={true} dataLength={chartDataEvolution.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataEvolution}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Échanges" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
                       </LineChart>
                   </ResponsiveContainer>
               </EnlargeableChart>
-              <EnlargeableChart title="Évolution : Abandons">
+              <EnlargeableChart title="Évolution : Abandons" isScrollable={true} dataLength={chartDataEvolution.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataEvolution}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Abandons" stroke="#ea580c" strokeWidth={3} dot={{r: 4, fill: '#ea580c', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
                       </LineChart>
                   </ResponsiveContainer>
               </EnlargeableChart>
-              <EnlargeableChart title="Évolution : Ajouts">
+              <EnlargeableChart title="Évolution : Ajouts" isScrollable={true} dataLength={chartDataEvolution.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataEvolution}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Ajouts" stroke="#4f46e5" strokeWidth={3} dot={{r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
@@ -1125,33 +1131,33 @@ const WishesLogsSubPanel = ({ supabase }: any) => {
 
       {!loading && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <EnlargeableChart title="Évolution : En attente">
+              <EnlargeableChart title="Évolution : En attente" isScrollable={true} dataLength={chartDataEvolution.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataEvolution}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="En attente" stroke="#f59e0b" strokeWidth={3} dot={{r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
                       </LineChart>
                   </ResponsiveContainer>
               </EnlargeableChart>
-              <EnlargeableChart title="Évolution : Validés">
+              <EnlargeableChart title="Évolution : Validés" isScrollable={true} dataLength={chartDataEvolution.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataEvolution}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Validés" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
                       </LineChart>
                   </ResponsiveContainer>
               </EnlargeableChart>
-              <EnlargeableChart title="Évolution : Refusés">
+              <EnlargeableChart title="Évolution : Refusés" isScrollable={true} dataLength={chartDataEvolution.length}>
                   <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={chartDataEvolution}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                          <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} interval={0} />
                           <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                           <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                           <Line type="monotone" dataKey="Refusés" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
