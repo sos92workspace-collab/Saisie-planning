@@ -410,18 +410,53 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
-          {activeTab === AdminTab.CONNECTION_LOGS && <ConnectionLogsPanel supabase={supabase} />}
+          {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} />}
         </div>
       </main>
     </div>
   );
 };
 
-const ConnectionLogsPanel = ({ supabase }: any) => {
+const LogsTabPanel = ({ supabase }: any) => {
+  const [subTab, setSubTab] = useState<'CONNECTIONS' | 'MOVEMENTS' | 'WISHES'>('CONNECTIONS');
+
+  return (
+    <div className="space-y-6">
+       <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-200">
+          <button 
+            onClick={() => setSubTab('CONNECTIONS')} 
+            className={`flex-1 p-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${subTab === 'CONNECTIONS' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            Logs de connexion
+          </button>
+          <button 
+            onClick={() => setSubTab('MOVEMENTS')} 
+            className={`flex-1 p-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${subTab === 'MOVEMENTS' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            Mouvements de garde
+          </button>
+          <button 
+            onClick={() => setSubTab('WISHES')} 
+            className={`flex-1 p-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${subTab === 'WISHES' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            Vœux Médecins
+          </button>
+       </div>
+
+       {subTab === 'CONNECTIONS' && <ConnectionLogsSubPanel supabase={supabase} />}
+       {subTab === 'MOVEMENTS' && <MovementLogsSubPanel supabase={supabase} />}
+       {subTab === 'WISHES' && <WishesLogsSubPanel supabase={supabase} />}
+    </div>
+  );
+};
+
+const ConnectionLogsSubPanel = ({ supabase }: any) => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterTrigram, setFilterTrigram] = useState('');
   const [filterMode, setFilterMode] = useState<string>('ALL');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -438,11 +473,20 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
 
   const filteredLogs = useMemo(() => {
     return logs.filter(l => {
-      const matchTri = filterTrigram === '' || l.user_trigram.toLowerCase().includes(filterTrigram.toLowerCase());
+      const searchTrigrams = filterTrigram.split(';').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      const matchTri = searchTrigrams.length === 0 || searchTrigrams.some(t => l.user_trigram.toLowerCase().includes(t));
       const matchMode = filterMode === 'ALL' || l.view_mode === filterMode;
-      return matchTri && matchMode;
+      
+      let matchDate = true;
+      if (filterStartDate || filterEndDate) {
+          const logDate = l.login_time.split('T')[0];
+          if (filterStartDate && logDate < filterStartDate) matchDate = false;
+          if (filterEndDate && logDate > filterEndDate) matchDate = false;
+      }
+
+      return matchTri && matchMode && matchDate;
     });
-  }, [logs, filterTrigram, filterMode]);
+  }, [logs, filterTrigram, filterMode, filterStartDate, filterEndDate]);
 
   const chartDataTri = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -466,6 +510,35 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
       .map(([date, count]) => ({ date, Connexions: count }));
   }, [filteredLogs]);
 
+  const chartDataDuration = useMemo(() => {
+    const dailyDurations: Record<string, { totalMs: number, count: number }> = {};
+    const sortedLogs = [...filteredLogs].sort((a, b) => new Date(a.login_time).getTime() - new Date(b.login_time).getTime());
+
+    sortedLogs.forEach(l => {
+      const loginDate = new Date(l.login_time);
+      const date = loginDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      
+      let durationSeconds = 0;
+      if (l.logout_time) {
+          const diffMs = new Date(l.logout_time).getTime() - loginDate.getTime();
+          durationSeconds = diffMs / 1000;
+      } else if (l.session_duration_seconds) {
+          durationSeconds = l.session_duration_seconds;
+      }
+      
+      if (durationSeconds > 0) {
+          if (!dailyDurations[date]) dailyDurations[date] = { totalMs: 0, count: 0 };
+          dailyDurations[date].totalMs += durationSeconds;
+          dailyDurations[date].count += 1;
+      }
+    });
+
+    return Object.entries(dailyDurations).map(([date, data]) => {
+      const avgMinutes = Math.round((data.totalMs / data.count) / 60);
+      return { date, 'Temps moyen (min)': avgMinutes };
+    });
+  }, [filteredLogs]);
+
   return (
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
@@ -475,10 +548,24 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
         <div className="flex flex-wrap items-center gap-3">
             <input 
               type="text" 
-              placeholder="Filtrer trigramme..." 
+              placeholder="Trigrammes (ex: ABC;DEF)..." 
               value={filterTrigram} 
               onChange={e => setFilterTrigram(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black min-w-[200px]"
+            />
+            <input 
+              type="date" 
+              value={filterStartDate} 
+              onChange={e => setFilterStartDate(e.target.value)}
               className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+              title="Date de début"
+            />
+            <input 
+              type="date" 
+              value={filterEndDate} 
+              onChange={e => setFilterEndDate(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+              title="Date de fin"
             />
             <select 
               value={filterMode} 
@@ -494,8 +581,8 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
         </div>
       </div>
 
-      {!loading && filteredLogs.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {!loading && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Connexions par Trigramme (Top 15)</h3>
                   <div className="h-48">
@@ -520,6 +607,20 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
                               <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
                               <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
                               <Line type="monotone" dataKey="Connexions" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Temps Moyen (Min)</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataDuration}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Temps moyen (min)" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
                           </LineChart>
                       </ResponsiveContainer>
                   </div>
@@ -577,6 +678,428 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
                           </span>
                       </td>
                       <td className="p-3 text-[10px] text-slate-400 max-w-[200px] truncate" title={l.device_info}>{l.device_info}<br/>{l.screen_resolution}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+      )}
+    </div>
+  );
+};
+
+const MovementLogsSubPanel = ({ supabase }: any) => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filterType, setFilterType] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [filterTrigram, setFilterTrigram] = useState('');
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const [exchangesRes, abandonsRes, takesRes] = await Promise.all([
+        supabase.from('exchange_requests').select('*'),
+        supabase.from('abandon_requests').select('*'),
+        supabase.from('take_requests').select('*')
+      ]);
+      
+      const combined = [
+        ...(exchangesRes.data || []).map((r: any) => ({ ...r, logType: 'Échange' })),
+        ...(abandonsRes.data || []).map((r: any) => ({ ...r, logType: 'Abandon' })),
+        ...(takesRes.data || []).map((r: any) => ({ ...r, logType: 'Ajout' }))
+      ];
+      
+      combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setLogs(combined);
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(l => {
+      const matchType = filterType === 'ALL' || l.logType === filterType;
+      const matchStatus = filterStatus === 'ALL' || l.status === filterStatus;
+      const searchTrigrams = filterTrigram.split(';').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      const matchTri = searchTrigrams.length === 0 || searchTrigrams.some(t => l.requester_trigram.toLowerCase().includes(t));
+      
+      let matchDate = true;
+      if (filterStartDate || filterEndDate) {
+          const logDate = l.created_at.split('T')[0];
+          if (filterStartDate && logDate < filterStartDate) matchDate = false;
+          if (filterEndDate && logDate > filterEndDate) matchDate = false;
+      }
+      
+      return matchType && matchStatus && matchTri && matchDate;
+    });
+  }, [logs, filterType, filterStatus, filterTrigram, filterStartDate, filterEndDate]);
+
+  const chartDataEvolution = useMemo(() => {
+    const daily: Record<string, { echanges: number, abandons: number, ajouts: number }> = {};
+    const sorted = [...filteredLogs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    sorted.forEach(l => {
+      const date = new Date(l.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      if (!daily[date]) daily[date] = { echanges: 0, abandons: 0, ajouts: 0 };
+      if (l.logType === 'Échange') daily[date].echanges++;
+      else if (l.logType === 'Abandon') daily[date].abandons++;
+      else if (l.logType === 'Ajout') daily[date].ajouts++;
+    });
+    return Object.entries(daily).map(([date, data]) => ({ date, 'Échanges': data.echanges, 'Abandons': data.abandons, 'Ajouts': data.ajouts }));
+  }, [filteredLogs]);
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'ACCEPTED') return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md">Accepté</span>;
+    if (status === 'REJECTED') return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md">Refusé</span>;
+    if (status === 'PENDING') return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md">En attente</span>;
+    return <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md">{status}</span>;
+  };
+
+  const getTypeBadge = (type: string) => {
+    if (type === 'Échange') return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md">Échange</span>;
+    if (type === 'Abandon') return <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-md">Abandon</span>;
+    if (type === 'Ajout') return <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-md">Ajout</span>;
+    return null;
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-2">
+            <span className="text-2xl">🔄</span> Mouvements de garde
+        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+            <input 
+              type="text" 
+              placeholder="Trigrammes (ex: ABC;DEF)..." 
+              value={filterTrigram} 
+              onChange={e => setFilterTrigram(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black min-w-[200px]"
+            />
+            <input 
+              type="date" 
+              value={filterStartDate} 
+              onChange={e => setFilterStartDate(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+              title="Date de début"
+            />
+            <input 
+              type="date" 
+              value={filterEndDate} 
+              onChange={e => setFilterEndDate(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+              title="Date de fin"
+            />
+            <select 
+              value={filterType} 
+              onChange={e => setFilterType(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+            >
+              <option value="ALL">Tous les types</option>
+              <option value="Échange">Échange</option>
+              <option value="Abandon">Abandon</option>
+              <option value="Ajout">Ajout</option>
+            </select>
+            <select 
+              value={filterStatus} 
+              onChange={e => setFilterStatus(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+            >
+              <option value="ALL">Tous les statuts</option>
+              <option value="PENDING">En attente</option>
+              <option value="ACCEPTED">Accepté</option>
+              <option value="REJECTED">Refusé</option>
+            </select>
+            <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
+        </div>
+      </div>
+
+      {!loading && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution : Échanges</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Échanges" stroke="#3b82f6" strokeWidth={3} dot={{r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution : Abandons</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Abandons" stroke="#ea580c" strokeWidth={3} dot={{r: 4, fill: '#ea580c', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution : Ajouts</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Ajouts" stroke="#4f46e5" strokeWidth={3} dot={{r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {loading ? (
+          <div className="text-slate-500 text-sm py-4">Chargement des mouvements...</div>
+      ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <th className="p-3">Créé le</th>
+                  <th className="p-3">Type</th>
+                  <th className="p-3">Trigramme</th>
+                  <th className="p-3">Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-slate-400 text-sm">Aucun mouvement trouvé.</td>
+                  </tr>
+                ) : filteredLogs.map((l: any) => {
+                  const createdAt = new Date(l.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <tr key={`${l.id}-${l.logType}`} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs">
+                      <td className="p-3 text-slate-600">{createdAt}</td>
+                      <td className="p-3 font-bold">{getTypeBadge(l.logType)}</td>
+                      <td className="p-3 font-bold text-slate-800">{l.requester_trigram}</td>
+                      <td className="p-3 font-bold">{getStatusBadge(l.status)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+      )}
+    </div>
+  );
+};
+
+const WishesLogsSubPanel = ({ supabase }: any) => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [filterTrigram, setFilterTrigram] = useState('');
+  const [filterStatus, setFilterStatus] = useState('ALL');
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('choices').select('*').order('submitted_at', { ascending: false }).limit(2000);
+      if (!error && data) {
+        setLogs(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(l => {
+      const searchTrigrams = filterTrigram.split(';').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+      const matchTri = searchTrigrams.length === 0 || searchTrigrams.some(t => l.user_trigram.toLowerCase().includes(t));
+      const matchStatus = filterStatus === 'ALL' || l.status === filterStatus;
+      
+      let matchDate = true;
+      if (filterStartDate || filterEndDate) {
+          const logDate = l.submitted_at ? l.submitted_at.split('T')[0] : '';
+          if (logDate) {
+              if (filterStartDate && logDate < filterStartDate) matchDate = false;
+              if (filterEndDate && logDate > filterEndDate) matchDate = false;
+          } else {
+              matchDate = false;
+          }
+      }
+      
+      return matchTri && matchStatus && matchDate;
+    });
+  }, [logs, filterTrigram, filterStatus, filterStartDate, filterEndDate]);
+
+  const chartDataEvolution = useMemo(() => {
+    const daily: Record<string, { pending: number, assigned: number, refused: number }> = {};
+    const sorted = [...filteredLogs].sort((a, b) => new Date(a.submitted_at || 0).getTime() - new Date(b.submitted_at || 0).getTime());
+    sorted.forEach(l => {
+      if (!l.submitted_at) return;
+      const date = new Date(l.submitted_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      if (!daily[date]) daily[date] = { pending: 0, assigned: 0, refused: 0 };
+      
+      if (l.status === 'PENDING') daily[date].pending++;
+      else if (l.status === 'ASSIGNED') daily[date].assigned++;
+      else if (l.status === 'REFUSED' || l.status === 'REFUSED_ALTERNATIVE') daily[date].refused++;
+    });
+    return Object.entries(daily).map(([date, data]) => ({ date, 'En attente': data.pending, 'Validés': data.assigned, 'Refusés': data.refused }));
+  }, [filteredLogs]);
+
+  const getStatusBadge = (status: string) => {
+    if (status === 'ASSIGNED') return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md">Validé</span>;
+    if (status === 'REFUSED' || status === 'REFUSED_ALTERNATIVE') return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md">Refusé</span>;
+    if (status === 'PENDING') return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-md">En attente</span>;
+    if (status === 'ARCHIVED') return <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md">Archivé</span>;
+    return <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md">{status}</span>;
+  };
+
+  const getCategoryBadge = (category: string) => {
+    if (category === 'normal') return <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md">Normal</span>;
+    if (category === 'good_bonus') return <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md">Bonus +</span>;
+    if (category === 'bad_bonus') return <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded-md">Malus</span>;
+    return <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-md">{category}</span>;
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-2">
+            <span className="text-2xl">📋</span> Vœux Médecins 
+        </h2>
+        <div className="flex flex-wrap items-center gap-3">
+            <input 
+              type="text" 
+              placeholder="Trigrammes (ex: ABC;DEF)..." 
+              value={filterTrigram} 
+              onChange={e => setFilterTrigram(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black min-w-[200px]"
+            />
+            <input 
+              type="date" 
+              value={filterStartDate} 
+              onChange={e => setFilterStartDate(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+              title="Date de début"
+            />
+            <input 
+              type="date" 
+              value={filterEndDate} 
+              onChange={e => setFilterEndDate(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+              title="Date de fin"
+            />
+            <select 
+              value={filterStatus} 
+              onChange={e => setFilterStatus(e.target.value)}
+              className="p-2 border border-slate-200 rounded-xl text-xs uppercase font-black"
+            >
+              <option value="ALL">Tous les statuts</option>
+              <option value="PENDING">En attente</option>
+              <option value="ASSIGNED">Validé</option>
+              <option value="REFUSED">Refusé</option>
+            </select>
+            <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
+        </div>
+      </div>
+
+      {!loading && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution : En attente</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="En attente" stroke="#f59e0b" strokeWidth={3} dot={{r: 4, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution : Validés</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Validés" stroke="#10b981" strokeWidth={3} dot={{r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest text-center">Évolution : Refusés</h3>
+                  <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={chartDataEvolution}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="date" tick={{fontSize: 10, fontWeight: 800}} axisLine={false} tickLine={false} />
+                              <YAxis allowDecimals={false} tick={{fontSize: 10}} axisLine={false} tickLine={false} />
+                              <Tooltip contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
+                              <Line type="monotone" dataKey="Refusés" stroke="#ef4444" strokeWidth={3} dot={{r: 4, fill: '#ef4444', strokeWidth: 2, stroke: '#fff'}} activeDot={{r: 6}} />
+                          </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {loading ? (
+          <div className="text-slate-500 text-sm py-4">Chargement des vœux...</div>
+      ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <th className="p-3">Créé le</th>
+                  <th className="p-3">Trigramme</th>
+                  <th className="p-3">Catégorie</th>
+                  <th className="p-3">Statut</th>
+                  <th className="p-3">Date ciblée</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-4 text-center text-slate-400 text-sm">Aucun vœu trouvé.</td>
+                  </tr>
+                ) : filteredLogs.map((l: any) => {
+                  const createdAt = l.submitted_at ? new Date(l.submitted_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+                  const targetDate = l.custom_date ? l.custom_date : `${l.day}/${l.month ? l.month : '-'}/${l.year || '-'}`;
+                  return (
+                    <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs">
+                      <td className="p-3 text-slate-600">{createdAt}</td>
+                      <td className="p-3 font-bold text-slate-800">{l.user_trigram}</td>
+                      <td className="p-3 font-bold">{getCategoryBadge(l.category)}</td>
+                      <td className="p-3 font-bold">{getStatusBadge(l.status)}</td>
+                      <td className="p-3 text-slate-600">{targetDate}</td>
                     </tr>
                   );
                 })}
