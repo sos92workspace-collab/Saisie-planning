@@ -437,7 +437,7 @@ const ConnectionLogsPanel = ({ supabase }: any) => {
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-2">
-            <span className="text-2xl">📊</span> Historique log (Google Analytics Style)
+            <span className="text-2xl">📊</span> Historique log
         </h2>
         <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
       </div>

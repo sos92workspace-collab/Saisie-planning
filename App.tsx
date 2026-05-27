@@ -767,16 +767,36 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const recordLogout = () => {
       if (sessionId) {
-        const payload = { logout_time: new Date().toISOString() };
-        // We use navigator.sendBeacon ideally, but it requires a full URL.
-        // Doing a synchronous fetch is deprecated but possible. Let's just try normal update
-        supabase.from('connection_logs').update(payload).eq('id', sessionId);
+        // Use fetch with keepalive to ensure the request completes even as the page unloads
+        fetch(`${supabaseUrl}/rest/v1/connection_logs?id=eq.${sessionId}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({ logout_time: new Date().toISOString() }),
+          keepalive: true
+        }).catch(() => {});
       }
     };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', recordLogout);
+    
+    // Also record on visibility switch (useful for mobile browsers or tab switching)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        recordLogout();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', recordLogout);
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [sessionId]);
 
   const handleReproduceChoices = () => {
