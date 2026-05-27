@@ -299,7 +299,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -350,7 +350,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -409,8 +409,94 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
+          {activeTab === AdminTab.CONNECTION_LOGS && <ConnectionLogsPanel supabase={supabase} />}
         </div>
       </main>
+    </div>
+  );
+};
+
+const ConnectionLogsPanel = ({ supabase }: any) => {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('connection_logs').select('*').order('login_time', { ascending: false }).limit(200);
+    if (!error && data) {
+      setLogs(data);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  return (
+    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800 flex items-center gap-2">
+            <span className="text-2xl">📊</span> Historique log (Google Analytics Style)
+        </h2>
+        <button onClick={fetchLogs} className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200" title="Actualiser">🔄</button>
+      </div>
+
+      {loading ? (
+          <div className="text-slate-500 text-sm py-4">Chargement des logs...</div>
+      ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <th className="p-3">Trigramme</th>
+                  <th className="p-3">Connexion</th>
+                  <th className="p-3">Déconnexion</th>
+                  <th className="p-3">Durée</th>
+                  <th className="p-3">Appareil & Résolution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-4 text-center text-slate-400 text-sm">Aucun log trouvé.</td>
+                  </tr>
+                ) : logs.map((l: any) => {
+                  const loginTime = new Date(l.login_time);
+                  const logoutTime = l.logout_time ? new Date(l.logout_time) : null;
+                  
+                  let duration = '-';
+                  if (logoutTime) {
+                      const diffMs = logoutTime.getTime() - loginTime.getTime();
+                      const minutes = Math.floor(diffMs / 60000);
+                      const seconds = Math.floor((diffMs % 60000) / 1000);
+                      duration = `${minutes}m ${seconds}s`;
+                  } else if (l.session_duration_seconds) {
+                      duration = `${Math.floor(l.session_duration_seconds / 60)}m ${l.session_duration_seconds % 60}s`;
+                  } else {
+                      duration = 'En cours...';
+                  }
+
+                  const formatTime = (d: Date) => d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                  return (
+                    <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50/50 text-xs">
+                      <td className="p-3 font-bold text-slate-800">{l.user_trigram}</td>
+                      <td className="p-3 text-slate-600">{formatTime(loginTime)}</td>
+                      <td className="p-3 text-slate-600">{logoutTime ? formatTime(logoutTime) : '-'}</td>
+                      <td className="p-3">
+                          <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${duration === 'En cours...' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                              {duration}
+                          </span>
+                      </td>
+                      <td className="p-3 text-[10px] text-slate-400 max-w-[200px] truncate" title={l.device_info}>{l.device_info}<br/>{l.screen_resolution}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+      )}
     </div>
   );
 };

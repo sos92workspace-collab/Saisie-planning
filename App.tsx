@@ -300,6 +300,7 @@ const LandscapeLockScreen = () => (
 
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.LOGIN);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [trigram, setTrigram] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -427,10 +428,7 @@ const App: React.FC = () => {
             await supabase.from('choices').delete().eq('user_trigram', trigram.toUpperCase()).eq('status', 'PENDING');
             
             // Reset to login to force full refresh of config
-            setViewMode(ViewMode.LOGIN);
-            setTrigram('');
-            setPassword('');
-            setChoices([]);
+            handleLogout();
             setIsDataSyncing(false);
             return;
         }
@@ -563,10 +561,7 @@ const App: React.FC = () => {
             alert("Vos choix ont bien été transmis.\n\nVous allez être déconnecté.");
         }
         
-        setViewMode(ViewMode.LOGIN);
-        setTrigram('');
-        setPassword('');
-        setChoices([]); 
+        handleLogout();
     } catch (e) {
         console.error(e);
         alert("Une erreur est survenue lors de la validation.");
@@ -733,6 +728,23 @@ const App: React.FC = () => {
     const { data: user } = await supabase.from('users').select('*').eq('trigram', cleanTri).single();
     if (user && (!user.password || user.password === password)) {
       await fetchChoices(cleanTri);
+      
+      const newSessionId = crypto.randomUUID();
+      setSessionId(newSessionId);
+      
+      try {
+        await supabase.from('connection_logs').insert([{
+            id: newSessionId,
+            user_trigram: cleanTri,
+            login_time: new Date().toISOString(),
+            view_mode: user.role === 'ADMIN' ? 'ADMIN' : targetMode,
+            device_info: navigator.userAgent,
+            screen_resolution: `${window.innerWidth}x${window.innerHeight}`
+        }]);
+      } catch (err) {
+        console.error("Failed to log connection", err);
+      }
+      
       if (user.role === 'ADMIN') {
         setViewMode(ViewMode.ADMIN);
       } else {
@@ -742,6 +754,30 @@ const App: React.FC = () => {
       setLoginError('Identifiants invalides.');
     }
   };
+
+  const handleLogout = async () => {
+    if (sessionId) {
+      await supabase.from('connection_logs').update({ logout_time: new Date().toISOString() }).eq('id', sessionId);
+    }
+    setSessionId(null);
+    setViewMode(ViewMode.LOGIN);
+    setTrigram('');
+    setPassword('');
+    setChoices([]);
+  };
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionId) {
+        const payload = { logout_time: new Date().toISOString() };
+        // We use navigator.sendBeacon ideally, but it requires a full URL.
+        // Doing a synchronous fetch is deprecated but possible. Let's just try normal update
+        supabase.from('connection_logs').update(payload).eq('id', sessionId);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [sessionId]);
 
   const handleReproduceChoices = () => {
     if (!reproductionStep) return;
@@ -1396,7 +1432,7 @@ const App: React.FC = () => {
   }
 
   if (viewMode === ViewMode.ADMIN) {
-    return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={() => setViewMode(ViewMode.LOGIN)} />;
+    return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={handleLogout} />;
   }
 
   if (viewMode === ViewMode.LOGIN) {
@@ -1452,7 +1488,7 @@ const App: React.FC = () => {
                 <p className="text-slate-400 font-bold leading-relaxed">{accessStatus.message}</p>
                 <div className="flex flex-col gap-3">
                     <button onClick={() => setIsConsultationMode(true)} className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-900/20">Consulter le planning attribué</button>
-                    <button onClick={() => setViewMode(ViewMode.LOGIN)} className="px-8 py-4 bg-white/10 text-white border border-white/20 rounded-2xl font-black uppercase tracking-widest hover:bg-white/20 transition-all">Retourner à l'accueil</button>
+                    <button onClick={handleLogout} className="px-8 py-4 bg-white/10 text-white border border-white/20 rounded-2xl font-black uppercase tracking-widest hover:bg-white/20 transition-all">Retourner à l'accueil</button>
                 </div>
             </div>
         </div>
@@ -1708,7 +1744,7 @@ const App: React.FC = () => {
                   ) : (
                       <button onClick={handleFinalValidation} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
                   ))}
-                  <button onClick={() => setViewMode(ViewMode.LOGIN)} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
+                  <button onClick={handleLogout} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
               </>
           )}
         </div>

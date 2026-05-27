@@ -86,7 +86,8 @@ export enum AdminTab {
   PLANNING = 'PLANNING',
   WISHES = 'CHOIX MÉDECIN',
   VERSIONS = 'VERSIONS',
-  EXCHANGES = 'ÉCHANGES'
+  EXCHANGES = 'ÉCHANGES',
+  CONNECTION_LOGS = 'HISTORIQUE LOG'
 }
 
 export interface Round {
