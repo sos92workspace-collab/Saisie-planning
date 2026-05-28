@@ -1747,13 +1747,22 @@ const App: React.FC = () => {
                     )}
 
                     {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && viewMode === ViewMode.APP && (
-                        <button
-                            onClick={() => setShowOccupiedMask(!showOccupiedMask)}
-                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${showOccupiedMask ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                        >
-                            <span className="hidden md:inline">Cases non demandées</span>
-                            <span className="md:hidden">Non demandées</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {showOccupiedMask && (
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-100 rounded-lg text-red-600 text-[10px] font-bold uppercase transition-all shadow-sm">
+                                    <span className="font-extrabold text-xs">✕</span>
+                                    <span className="hidden lg:inline">Case déjà prise</span>
+                                </div>
+                            )}
+                            <button
+                                title="Affiche une croix rouge sur les cases déjà demandées par d'autres"
+                                onClick={() => setShowOccupiedMask(!showOccupiedMask)}
+                                className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${showOccupiedMask ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                <span className="hidden md:inline">Cases non demandées</span>
+                                <span className="md:hidden">Non demandées</span>
+                            </button>
+                        </div>
                     )}
                 </div>
             )}
