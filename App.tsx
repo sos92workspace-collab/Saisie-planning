@@ -1751,7 +1751,7 @@ const App: React.FC = () => {
                             {showOccupiedMask && (
                                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-100 rounded-lg text-red-600 text-[10px] font-bold uppercase transition-all shadow-sm">
                                     <span className="font-extrabold text-xs">✕</span>
-                                    <span className="hidden lg:inline">Case déjà prise</span>
+                                    <span className="hidden lg:inline">Case déjà demandée</span>
                                 </div>
                             )}
                             <button
