@@ -323,6 +323,7 @@ const App: React.FC = () => {
   const [reproductionStep, setReproductionStep] = useState<AppStep | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
   const [isConsultationMode, setIsConsultationMode] = useState(false);
+  const [showOccupiedMask, setShowOccupiedMask] = useState(false);
   const [doctorProfile, setDoctorProfile] = useState<any>(() => {
      try {
         return JSON.parse(localStorage.getItem('doctor_profile_TES') || 'null');
@@ -677,10 +678,8 @@ const App: React.FC = () => {
   }, [currentRoundId, viewMode]);
 
   const fetchChoices = useCallback(async (tri: string) => {
-    // MODIFICATION ICI: On récupère les choix de l'utilisateur (PENDING/ASSIGNED) ET TOUS les choix ASSIGNED des autres
-    // La syntaxe .or() avec une virgule agit comme un OU
-    const data = await fetchAll(supabase, 'choices', q => q.neq('status', 'ARCHIVED').or(`user_trigram.eq.${tri.toUpperCase()},status.eq.ASSIGNED`));
-      
+    // On récupère absolument tous les choix pour la fonctionnalité "cases non demandées"
+    let data = await fetchAll(supabase, 'choices', q => q.neq('status', 'ARCHIVED'));
     if (data) setChoices(data.map(fromDb));
     
     const { data: unav } = await supabase.from('unavailabilities').select('*').eq('user_trigram', tri.toUpperCase());
@@ -1746,6 +1745,16 @@ const App: React.FC = () => {
                             <span className="md:hidden">Indispo</span>
                         </button>
                     )}
+
+                    {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && viewMode === ViewMode.APP && (
+                        <button
+                            onClick={() => setShowOccupiedMask(!showOccupiedMask)}
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${showOccupiedMask ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            <span className="hidden md:inline">Cases non demandées</span>
+                            <span className="md:hidden">Non demandées</span>
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -2191,6 +2200,20 @@ const App: React.FC = () => {
                                     >
                                       {/* Contenu de la case */}
                                       
+                                      {showOccupiedMask && (
+                                          (() => {
+                                              const isTakenByOthers = choices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year && c.userTrigram !== trigram.toUpperCase());
+                                              if (isTakenByOthers) {
+                                                  return (
+                                                      <div className="absolute inset-0 flex items-center justify-center z-[100] backdrop-blur-[1px] bg-white/40 border-2 border-red-500/50 pointer-events-none">
+                                                          <span className="text-red-600 font-bold text-2xl leading-none drop-shadow-md">✕</span>
+                                                      </div>
+                                                  );
+                                              }
+                                              return null;
+                                          })()
+                                      )}
+
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
                                       {!isConsultationMode && assignedList.length === 0 && hasMultiplePending && (
                                         <div className="flex flex-col items-center justify-center leading-none w-full h-full relative">
