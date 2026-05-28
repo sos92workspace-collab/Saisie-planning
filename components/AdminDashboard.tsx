@@ -3216,6 +3216,16 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         return data;
     }, [choices, filterStatus, columnFilters]);
 
+    const pendingTensionMap = useMemo(() => {
+        const counts: Record<string, number> = {};
+        const pendingChoices = choices.filter((c: any) => c.status === 'PENDING');
+        pendingChoices.forEach((c: any) => {
+            const key = `${c.year}-${c.month}-${c.row}-${c.col}`;
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        return counts;
+    }, [choices]);
+
     const sortedChoices = useMemo(() => {
         let data = [...filteredChoices];
         const { key, direction } = sortConfig;
@@ -3404,7 +3414,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             <div className="flex-1 overflow-hidden p-6">
                 {subTab === 'journal' && (
                     <div className="h-full flex flex-col">
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex justify-between items-center mb-4 flex-wrap gap-4">
                              <div className="flex gap-2 p-1 bg-slate-100 rounded-xl overflow-x-auto no-scrollbar">
                                 {[
                                     { id: 'ALL', label: 'Tout' },
@@ -3420,6 +3430,14 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                         {filter.label}
                                     </button>
                                 ))}
+                             </div>
+
+                             <div className="flex gap-3 items-center bg-white border border-slate-200 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest text-slate-500 shadow-sm">
+                                 <span className="text-slate-400 mr-2">Tension sur vœux :</span>
+                                 <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 1</div>
+                                 <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 2</div>
+                                 <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span> 3</div>
+                                 <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> 4+</div>
                              </div>
                         </div>
                         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
@@ -3463,7 +3481,26 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                 <td colSpan={7} className="p-8 text-center text-slate-400 italic text-xs">Aucun vœu trouvé.</td>
                                             </tr>
                                         ) : (
-                                            sortedChoices.map((c: any) => (
+                                            sortedChoices.map((c: any) => {
+                                                const tension = pendingTensionMap[`${c.year}-${c.month}-${c.row}-${c.col}`] || 1;
+                                                let pendingColor = 'bg-slate-100 text-slate-500';
+                                                let tensionText = 'Attente';
+                                                
+                                                if (tension === 1) {
+                                                    pendingColor = 'bg-emerald-100 text-emerald-700';
+                                                    tensionText = 'Attente (1)';
+                                                } else if (tension === 2) {
+                                                    pendingColor = 'bg-blue-100 text-blue-700';
+                                                    tensionText = 'Attente (2)';
+                                                } else if (tension === 3) {
+                                                    pendingColor = 'bg-orange-100 text-orange-700';
+                                                    tensionText = 'Attente (3)';
+                                                } else if (tension >= 4) {
+                                                    pendingColor = 'bg-red-100 text-red-700';
+                                                    tensionText = `Attente (${tension})`;
+                                                }
+
+                                                return (
                                                 <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="p-4 font-black text-slate-900">{c.userTrigram}</td>
                                                     <td className="p-4 font-medium text-slate-600">
@@ -3494,10 +3531,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                     <td className="p-4 text-center">
                                                         <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
                                                             c.status === 'ASSIGNED' ? 'bg-green-100 text-green-700' : 
-                                                            c.status === 'PENDING' ? 'bg-slate-100 text-slate-500' : 
+                                                            c.status === 'PENDING' ? pendingColor : 
                                                             'bg-red-100 text-red-700'
                                                         }`}>
-                                                            {c.status === 'ASSIGNED' ? 'Validé' : c.status === 'PENDING' ? 'Attente' : c.status}
+                                                            {c.status === 'ASSIGNED' ? 'Validé' : c.status === 'PENDING' ? tensionText : c.status}
                                                         </span>
                                                     </td>
                                                     <td className="p-4 text-right">
@@ -3518,7 +3555,8 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                         </button>
                                                     </td>
                                                 </tr>
-                                            ))
+                                                );
+                                            })
                                         )}
                                     </tbody>
                                 </table>
