@@ -69,10 +69,11 @@ export const ListView: React.FC<ListViewProps> = ({
                 alert("Veuillez sélectionner à quel choix principal cette alternative se rattache.");
                 return;
             }
+            // Add as an alternative: we pass true for isDoubleClick, or we just pass explicitPriority which ignores isDoubleClick anyway
             handleCellClick(Number(selectedDay), Number(selectedColId), selectedMonthObj.month, selectedMonthObj.year, false, Number(targetPriority));
         } else {
             // Add as a new main choice
-            handleCellClick(Number(selectedDay), Number(selectedColId), selectedMonthObj.month, selectedMonthObj.year, true);
+            handleCellClick(Number(selectedDay), Number(selectedColId), selectedMonthObj.month, selectedMonthObj.year, false);
         }
 
         // Reset form partially

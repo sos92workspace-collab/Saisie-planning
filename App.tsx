@@ -1307,7 +1307,7 @@ const App: React.FC = () => {
     let targetGroupIndex = explicitPriority !== undefined ? explicitPriority : activePriority;
     let nextSubRank = 1;
 
-    if (isDoubleClick && explicitPriority === undefined) {
+    if (!isDoubleClick && explicitPriority === undefined) {
         const userPendingChoices = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category);
         const maxGroupIndex = userPendingChoices.length > 0 ? Math.max(...userPendingChoices.map(c => c.groupIndex)) : 0;
         targetGroupIndex = maxGroupIndex + 1;
@@ -1315,7 +1315,7 @@ const App: React.FC = () => {
     } else {
         const existingInGroup = choices.filter(c => c.status === 'PENDING' && c.userTrigram === cleanTri && c.category === category && c.groupIndex === targetGroupIndex);
         if (existingInGroup.length > 0) nextSubRank = Math.max(...existingInGroup.map(c => c.subRank)) + 1;
-        if (nextSubRank > 27) { alert("Limite atteinte : Max 26 alternatives."); return; }
+        if (nextSubRank > 3) { alert("Vous ne pouvez ajouter que 2 alternatives maximum par choix."); return; }
     }
 
     const baseColDef = COLUMNS.find(c => c.id === colId);
