@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronDown, Calendar, Bot, X, ArrowRight } from 'lucide-react';
+import { ChevronDown, Calendar, Bot, X, ArrowRight, Check } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
@@ -338,6 +338,7 @@ const App: React.FC = () => {
   const [myPendingAbandons, setMyPendingAbandons] = useState<any[]>([]);
   const [myPendingTakes, setMyPendingTakes] = useState<any[]>([]);
   const [showTakeConfirmModal, setShowTakeConfirmModal] = useState(false);
+  const [showValidationPopup, setShowValidationPopup] = useState(false);
   const [isTakeSidebarOpen, setIsTakeSidebarOpen] = useState(false);
   const [isAbandonSidebarOpen, setIsAbandonSidebarOpen] = useState(false);
   
@@ -415,7 +416,12 @@ const App: React.FC = () => {
       }
   };
 
-  const handleFinalValidation = async () => {
+  const handleFinalValidationClick = () => {
+      setShowValidationPopup(true);
+  };
+
+  const executeFinalValidation = async () => {
+    setShowValidationPopup(false);
     setIsDataSyncing(true);
     try {
         // 1. Check if the active round is still the same
@@ -1783,7 +1789,7 @@ const App: React.FC = () => {
                   {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
                       <button onClick={goToNextStep} className="hidden md:block px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
                   ) : (
-                      <button onClick={handleFinalValidation} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
+                      <button onClick={handleFinalValidationClick} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
                   ))}
                   <button onClick={handleLogout} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
               </>
@@ -1880,7 +1886,7 @@ const App: React.FC = () => {
             {currentStep < AppStep.RECAP_ORDERING ? (
                 <button onClick={goToNextStep} className="flex-1 py-3.5 ml-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase active:bg-blue-700 shadow-md text-center transition-colors">Suivant</button>
             ) : (
-                <button onClick={handleFinalValidation} className="flex-1 py-3.5 ml-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase active:bg-emerald-700 shadow-md transition-colors animate-pulse text-center">Valider</button>
+                <button onClick={handleFinalValidationClick} className="flex-1 py-3.5 ml-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase active:bg-emerald-700 shadow-md transition-colors animate-pulse text-center">Valider</button>
             )}
         </div>
       )}
@@ -2499,6 +2505,146 @@ const App: React.FC = () => {
                 <div className="flex gap-4">
                     <button onClick={() => setShowTakeConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
                     <button onClick={handleTakeConfirm} className="flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-teal-500/20 transition-all flex justify-center items-center gap-2">Confirmer</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showValidationPopup && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full max-w-2xl animate-in fade-in zoom-in duration-200 my-auto">
+                <div className="bg-slate-900 text-white p-6">
+                    <h2 className="text-lg font-black uppercase tracking-widest flex items-center gap-3">
+                        <Check size={24} className="text-emerald-400" />
+                        Confirmation & Équations
+                    </h2>
+                    <p className="text-[11px] font-medium text-slate-300 mt-2">
+                        Vos choix sont prêts à être transmis. Voici un aperçu théorique de vos possibilités selon les équations d'attributions (définies dans les consignes).
+                    </p>
+                </div>
+                
+                <div className="p-6 overflow-y-auto max-h-[60vh] space-y-6">
+                    <div className="flex gap-3 flex-wrap">
+                        {(() => {
+                            const myPendingChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.status === 'PENDING');
+                            const mainGC = myPendingChoices.filter(c => c.category === 'normal' && c.subRank === 1).length;
+                            const mainB = myPendingChoices.filter(c => c.category === 'good_bonus' && c.subRank === 1).length;
+                            const mainN = myPendingChoices.filter(c => c.category === 'bad_bonus' && c.subRank === 1).length;
+
+                            return (
+                                <>
+                                    <div className="bg-slate-100 rounded-xl px-4 py-3 flex-1 min-w-[110px]">
+                                        <div className="text-[9px] font-black uppercase text-slate-500 mb-1">Souhaits Cibles (GC)</div>
+                                        <div className="text-2xl font-black text-slate-800">{mainGC}</div>
+                                    </div>
+                                    <div className="bg-blue-50 rounded-xl px-4 py-3 flex-1 min-w-[110px]">
+                                        <div className="text-[9px] font-black uppercase text-blue-600 mb-1">Souhaits Bonnes (B)</div>
+                                        <div className="text-2xl font-black text-blue-800">{mainB}</div>
+                                    </div>
+                                    <div className="bg-rose-50 rounded-xl px-4 py-3 flex-1 min-w-[110px]">
+                                        <div className="text-[9px] font-black uppercase text-rose-600 mb-1">Souhaits Normales (N)</div>
+                                        <div className="text-2xl font-black text-rose-800">{mainN}</div>
+                                    </div>
+                                </>
+                            );
+                        })()}
+                    </div>
+
+                    <div className="space-y-4">
+                        <h3 className="text-xs font-black uppercase text-slate-800 tracking-widest border-b border-slate-100 pb-2">Équations d'attribution par type de tour</h3>
+                        <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">Les totaux "potentiel max" indiquent combien de gardes de chaque type vous pourriez obtenir (calculé sur vos vœux principaux de Gardes Cibles) si les équations étaient pleinement satisfaites.</p>
+                        
+                        {(() => {
+                            const myPendingChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.status === 'PENDING');
+                            const mainGC = myPendingChoices.filter(c => c.category === 'normal' && c.subRank === 1).length;
+                            const mainB = myPendingChoices.filter(c => c.category === 'good_bonus' && c.subRank === 1).length;
+                            const mainN = myPendingChoices.filter(c => c.category === 'bad_bonus' && c.subRank === 1).length;
+                            
+                            const isNuit = activeRound?.name.toLowerCase().includes('nuit');
+                            const isSamedi = activeRound?.name.toLowerCase().includes('samedi');
+                            const isVisites = activeRound?.name.toLowerCase().includes('visites');
+                            const isGeneral = !isNuit && !isSamedi && !isVisites;
+                            
+                            return (
+                                <>
+                                    {(isNuit || isGeneral) && (
+                                    <div className="border border-slate-200 rounded-2xl p-4 bg-white relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-2">
+                                            <div className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-[9px] font-black uppercase">
+                                                Potentiel : {Math.min(mainGC, Math.floor(mainB / 2), mainN)} participation(s)
+                                            </div>
+                                        </div>
+                                        <div className="font-black uppercase text-xs tracking-widest text-slate-800 mb-2">Tour de Nuit</div>
+                                        <div className="text-[11px] font-bold text-slate-600 mb-2 font-mono bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                            1 Garde Cible (GC) + 2 Bonnes Gardes (B) + 1 Garde Normale (N)
+                                        </div>
+                                        <div className="text-[10px] uppercase font-black text-slate-500 flex flex-wrap gap-2 items-center">
+                                            <span className="opacity-70 mr-1">Maximum d'attributions:</span>
+                                            <span className="text-slate-700 px-1.5 py-0.5 bg-slate-100 rounded-md">{Math.min(mainGC, Math.floor(mainB / 2), mainN)} GC</span>
+                                            <span className="text-blue-600 px-1.5 py-0.5 bg-blue-50 rounded-md shadow-sm">{Math.min(mainGC, Math.floor(mainB / 2), mainN) * 2} B</span>
+                                            <span className="text-rose-600 px-1.5 py-0.5 bg-rose-50 rounded-md shadow-sm">{Math.min(mainGC, Math.floor(mainB / 2), mainN)} N</span>
+                                        </div>
+                                    </div>
+                                    )}
+
+                                    {(isSamedi || isGeneral) && (
+                                    <div className="border border-slate-200 rounded-2xl p-4 bg-white relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-2">
+                                            <div className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-[9px] font-black uppercase">
+                                                Potentiel : {Math.min(mainGC, mainB, mainN)} participation(s)
+                                            </div>
+                                        </div>
+                                        <div className="font-black uppercase text-xs tracking-widest text-slate-800 mb-2">Samedi Soir</div>
+                                        <div className="text-[11px] font-bold text-slate-600 mb-2 font-mono bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                            1 Garde Cible (GC) + 1 Bonne Garde (B) + 1 Garde Normale (N)
+                                        </div>
+                                        <div className="text-[10px] uppercase font-black text-slate-500 flex flex-wrap gap-2 items-center">
+                                            <span className="opacity-70 mr-1">Maximum d'attributions:</span>
+                                            <span className="text-slate-700 px-1.5 py-0.5 bg-slate-100 rounded-md">{Math.min(mainGC, mainB, mainN)} GC</span>
+                                            <span className="text-blue-600 px-1.5 py-0.5 bg-blue-50 rounded-md shadow-sm">{Math.min(mainGC, mainB, mainN)} B</span>
+                                            <span className="text-rose-600 px-1.5 py-0.5 bg-rose-50 rounded-md shadow-sm">{Math.min(mainGC, mainB, mainN)} N</span>
+                                        </div>
+                                    </div>
+                                    )}
+
+                                    {(isVisites || isGeneral) && (
+                                    <div className="border border-slate-200 rounded-2xl p-4 bg-white relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-2">
+                                            <div className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md text-[9px] font-black uppercase">
+                                                Potentiel : {Math.min(Math.floor(mainGC / 2), mainB)} participation(s)
+                                            </div>
+                                        </div>
+                                        <div className="font-black uppercase text-xs tracking-widest text-slate-800 mb-2">Tour de Visites</div>
+                                        <div className="text-[11px] font-bold text-slate-600 mb-2 font-mono bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                            2 Gardes Cibles (GC) + 1 Bonne Garde (B)
+                                        </div>
+                                        <div className="text-[10px] uppercase font-black text-slate-500 flex flex-wrap gap-2 items-center">
+                                            <span className="opacity-70 mr-1">Maximum d'attributions:</span>
+                                            <span className="text-slate-700 px-1.5 py-0.5 bg-slate-100 rounded-md">{Math.min(Math.floor(mainGC / 2), mainB) * 2} GC</span>
+                                            <span className="text-blue-600 px-1.5 py-0.5 bg-blue-50 rounded-md shadow-sm">{Math.min(Math.floor(mainGC / 2), mainB)} B</span>
+                                            <span className="text-rose-600 px-1.5 py-0.5 bg-rose-50 rounded-md shadow-sm">0 N</span>
+                                        </div>
+                                    </div>
+                                    )}
+                                </>
+                            );
+                        })()}
+                    </div>
+                </div>
+
+                <div className="p-5 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-3 justify-end items-center">
+                    <button 
+                        onClick={() => setShowValidationPopup(false)}
+                        className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-colors"
+                    >
+                        Retour
+                    </button>
+                    <button 
+                        onClick={executeFinalValidation}
+                        className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
+                    >
+                        Confirmer les choix
+                    </button>
                 </div>
             </div>
         </div>
