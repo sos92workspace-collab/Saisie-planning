@@ -2550,6 +2550,66 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
             </div>
         )}
 
+        {(() => {
+            const validMonths = monthsToDisplay.map((m: any) => `${m.year}-${m.month}`);
+            const globalActiveUsersWithCounts = users.map((u: any) => {
+                const userChoices = choices.filter((c: any) => 
+                    c.userTrigram === u.trigram && 
+                    c.status === 'ASSIGNED' &&
+                    validMonths.includes(`${c.year}-${c.month}`)
+                );
+                const uniqueChoices = userChoices.filter((a: any, index: number, self: any[]) => 
+                    index === self.findIndex((t: any) => t.row === a.row && t.col === a.col && t.month === a.month && t.year === a.year)
+                );
+                return { trigram: u.trigram, count: uniqueChoices.length, role: u.role };
+            }).filter((u: any) => u.count > 0).sort((a: any, b: any) => a.trigram.localeCompare(b.trigram));
+
+            const globalDoctorCounters = globalActiveUsersWithCounts.filter((u: any) => u.role === 'DOCTOR');
+            const globalSubstituteCounters = globalActiveUsersWithCounts.filter((u: any) => u.role === 'SUBSTITUTE');
+
+            if (globalDoctorCounters.length === 0 && globalSubstituteCounters.length === 0) return null;
+
+            return (
+                <div className="flex flex-col gap-3 p-4 mb-8 bg-sky-50 rounded-2xl border border-sky-100 shadow-sm">
+                    <div className="w-full text-xs font-black text-sky-800 uppercase tracking-widest">Compteurs globaux (sur toute la période)</div>
+                    
+                    {globalDoctorCounters.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="text-[9px] font-bold text-sky-700 uppercase tracking-widest">Titulaires</div>
+                            <div className="flex flex-wrap gap-2">
+                                {globalDoctorCounters.map((uc: any) => (
+                                    <div 
+                                        key={uc.trigram} 
+                                        onClick={() => setHighlightedTrigram(prev => prev === uc.trigram ? null : uc.trigram)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 cursor-pointer transition-all ${highlightedTrigram === uc.trigram ? 'ring-2 ring-yellow-400 scale-105 shadow-md ' : ''} bg-sky-100/50 text-sky-900 border border-sky-200 hover:bg-sky-200`}>
+                                        <span>{uc.trigram}</span>
+                                        <span className="px-2 py-0.5 rounded-md text-white bg-sky-600 shadow-sm">{uc.count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {globalSubstituteCounters.length > 0 && (
+                        <div className="space-y-2">
+                            <div className="text-[9px] font-bold text-sky-700 uppercase tracking-widest">Remplaçants</div>
+                            <div className="flex flex-wrap gap-2">
+                                {globalSubstituteCounters.map((uc: any) => (
+                                    <div 
+                                        key={uc.trigram} 
+                                        onClick={() => setHighlightedTrigram(prev => prev === uc.trigram ? null : uc.trigram)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase flex items-center gap-2 cursor-pointer transition-all ${highlightedTrigram === uc.trigram ? 'ring-2 ring-yellow-400 scale-105 shadow-md ' : ''} bg-sky-100/50 text-sky-900 border border-sky-200 hover:bg-sky-200`}>
+                                        <span>{uc.trigram}</span>
+                                        <span className="px-2 py-0.5 rounded-md text-white bg-sky-600 shadow-sm">{uc.count}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        })()}
+
         {monthsToDisplay.map(({ month, year, label }) => {
             const daysInMonth = new Date(year, month + 1, 0).getDate();
             
