@@ -153,14 +153,14 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
           <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-slate-400 hover:text-slate-600">
             <GripVertical size={16} />
           </div>
-          <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black text-white shrink-0 shadow-sm ${!isAlt ? themeColors.bg : 'bg-slate-400'}`}>
+          <div className={`w-8 h-8 rounded flex items-center justify-center text-sm font-black text-white shrink-0 shadow-sm ${!isAlt ? themeColors.bg : 'bg-slate-400'}`}>
             {!isAlt ? item.groupIndex : `${item.groupIndex}.${String.fromCharCode(95 + displaySubRank)}`}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="font-bold text-slate-700 text-xs uppercase truncate">
+            <span className="font-bold text-slate-700 text-sm uppercase truncate">
               {colDef?.label ? `${colDef.label} - colonne ${item.col}` : `Colonne ${item.col}`}
             </span>
-            <span className="text-[10px] text-slate-400 font-medium">
+            <span className="text-sm text-slate-500 font-semibold capitalize max-w-full">
               {new Date(item.year, item.month, item.row).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}
             </span>
           </div>

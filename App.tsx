@@ -2226,25 +2226,25 @@ const App: React.FC = () => {
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
                                       {!isConsultationMode && assignedList.length === 0 && hasMultiplePending && (
                                         <div className="flex flex-col items-center justify-center leading-none w-full h-full relative">
-                                            <span className="absolute top-0.5 left-0.5 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                            <span className="absolute top-0.5 left-0.5 text-[14px] md:text-[12px] font-black drop-shadow-md">
                                                 {myPendingChoices[0].groupIndex}
-                                                {myPendingChoices[0].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[0].subRank)}</span>}
+                                                {myPendingChoices[0].subRank > 1 && <span className="text-[12px] md:text-[10px] opacity-90 lowercase">.{String.fromCharCode(95 + myPendingChoices[0].subRank)}</span>}
                                             </span>
                                             
                                             {myPendingChoices.length === 2 ? (
-                                                <span className="absolute bottom-0.5 right-0.5 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                <span className="absolute bottom-0.5 right-0.5 text-[14px] md:text-[12px] font-black drop-shadow-md">
                                                     {myPendingChoices[1].groupIndex}
-                                                    {myPendingChoices[1].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[1].subRank)}</span>}
+                                                    {myPendingChoices[1].subRank > 1 && <span className="text-[12px] md:text-[10px] opacity-90 lowercase">.{String.fromCharCode(95 + myPendingChoices[1].subRank)}</span>}
                                                 </span>
                                             ) : (
                                                 <>
-                                                    <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                    <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[12px] md:text-[10px] font-black drop-shadow-md">
                                                         {myPendingChoices[1].groupIndex}
-                                                        {myPendingChoices[1].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[1].subRank)}</span>}
+                                                        {myPendingChoices[1].subRank > 1 && <span className="text-[10px] md:text-[8px] opacity-90 lowercase">.{String.fromCharCode(95 + myPendingChoices[1].subRank)}</span>}
                                                     </span>
-                                                    <span className="absolute bottom-0.5 right-0.5 text-[10px] md:text-[8px] font-black drop-shadow-md">
+                                                    <span className="absolute bottom-0.5 right-0.5 text-[12px] md:text-[10px] font-black drop-shadow-md">
                                                         {myPendingChoices[2].groupIndex}
-                                                        {myPendingChoices[2].subRank > 1 && <span className="text-[8px] md:text-[6px] opacity-80 lowercase">.{String.fromCharCode(95 + myPendingChoices[2].subRank)}</span>}
+                                                        {myPendingChoices[2].subRank > 1 && <span className="text-[10px] md:text-[8px] opacity-90 lowercase">.{String.fromCharCode(95 + myPendingChoices[2].subRank)}</span>}
                                                     </span>
                                                 </>
                                             )}
@@ -2252,8 +2252,8 @@ const App: React.FC = () => {
                                       )}
                                       {!isConsultationMode && assignedList.length === 0 && !hasMultiplePending && myPending && (
                                         <div className="flex flex-col items-center justify-center leading-none">
-                                            <span className="text-[12px] md:text-[10px] font-black">{myPending.groupIndex}</span>
-                                            {myPending.subRank > 1 && <span className="text-[9px] md:text-[7px] font-black opacity-80 lowercase">.{String.fromCharCode(95 + myPending.subRank)}</span>}
+                                            <span className="text-[18px] md:text-[16px] font-black">{myPending.groupIndex}</span>
+                                            {myPending.subRank > 1 && <span className="text-[14px] md:text-[12px] font-black opacity-90 lowercase mt-0.5">.{String.fromCharCode(95 + myPending.subRank)}</span>}
                                         </div>
                                       )}
 

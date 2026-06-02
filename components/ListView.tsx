@@ -279,16 +279,16 @@ export const ListView: React.FC<ListViewProps> = ({
                                         return (
                                             <div key={choice.id} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
                                                 <div className="flex items-center gap-4">
-                                                    <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-black text-white shrink-0 shadow-sm ${choice.subRank === 1 ? 'bg-blue-600' : 'bg-slate-400'}`}>
+                                                    <div className={`w-10 h-10 rounded flex items-center justify-center text-sm font-black text-white shrink-0 shadow-sm ${choice.subRank === 1 ? 'bg-blue-600' : 'bg-slate-400'}`}>
                                                         {choice.subRank === 1 ? choice.groupIndex : `${choice.groupIndex}.${String.fromCharCode(95 + choice.subRank)}`}
                                                     </div>
                                                     <div>
-                                                        <div className="font-bold text-slate-900 text-sm">
+                                                        <div className="font-bold text-slate-900 text-sm md:text-base">
                                                             {finalLabel ? `${finalLabel} - colonne ${choice.col}` : `Colonne ${choice.col}`}
                                                             {siteDisplay}
                                                             {timeDisplay}
                                                         </div>
-                                                        <div className="text-xs text-slate-500 font-medium capitalize">
+                                                        <div className="text-sm text-slate-500 font-semibold capitalize mt-0.5">
                                                             {dayName}
                                                         </div>
                                                     </div>
