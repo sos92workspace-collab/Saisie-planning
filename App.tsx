@@ -1714,7 +1714,7 @@ const App: React.FC = () => {
                         </>
                     )}
 
-                    {!isConsultationMode && (
+                    {!isConsultationMode && !(viewMode === ViewMode.APP) && (
                         <button 
                             onClick={() => setViewMode(viewMode === ViewMode.APP ? ViewMode.LIST_INPUT : ViewMode.APP)}
                             className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all shadow-sm whitespace-nowrap"
