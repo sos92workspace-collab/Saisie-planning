@@ -1748,14 +1748,8 @@ const App: React.FC = () => {
 
                     {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && viewMode === ViewMode.APP && (
                         <div className="flex items-center gap-2">
-                            {showOccupiedMask && (
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-100 rounded-lg text-red-600 text-[10px] font-bold uppercase transition-all shadow-sm">
-                                    <span className="font-extrabold text-xs">✕</span>
-                                    <span className="hidden lg:inline">Case déjà demandée</span>
-                                </div>
-                            )}
                             <button
-                                title="Affiche une croix rouge sur les cases déjà demandées par d'autres"
+                                title="Affiche une croix rouge sur les cases avec une demande en attente par d'autres"
                                 onClick={() => setShowOccupiedMask(!showOccupiedMask)}
                                 className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${showOccupiedMask ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                             >
@@ -1903,6 +1897,12 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-4">
+                {showOccupiedMask && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-100 rounded-lg text-red-600 text-[10px] font-bold uppercase transition-all shadow-sm">
+                        <span className="font-extrabold text-xs">✕</span>
+                        <span className="hidden lg:inline">Demande en attente</span>
+                    </div>
+                )}
                 {activeRound?.allow_choice_reproduction && currentStep > AppStep.NORMAL_SELECTION && (
                     <button onClick={() => setShowReproductionModal(true)} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-[10px] font-black uppercase hover:bg-purple-200 shadow-sm transition-all whitespace-nowrap">
                         Reproduire mes choix
@@ -2211,7 +2211,7 @@ const App: React.FC = () => {
                                       
                                       {showOccupiedMask && (
                                           (() => {
-                                              const isTakenByOthers = choices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year && c.userTrigram !== trigram.toUpperCase());
+                                              const isTakenByOthers = choices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year && c.userTrigram !== trigram.toUpperCase() && c.status === 'PENDING');
                                               if (isTakenByOthers) {
                                                   return (
                                                       <div className="absolute inset-0 flex items-center justify-center z-[100] backdrop-blur-[1px] bg-white/40 border-2 border-red-500/50 pointer-events-none">
