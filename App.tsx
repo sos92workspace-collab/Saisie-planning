@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ChevronDown, Calendar, Bot, X, ArrowRight } from 'lucide-react';
+import { ChevronDown, Calendar, Bot, X, ArrowRight, Book, ArrowLeft } from 'lucide-react';
 import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
@@ -27,6 +27,7 @@ import { UnavailabilityModal } from './components/UnavailabilityModal';
 import { ListView } from './components/ListView';
 import { ChatAssistant } from './components/ChatAssistant';
 import { DoctorProfileWizard } from './components/DoctorProfileWizard';
+import { HistoryModal } from './components/HistoryModal';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -324,6 +325,7 @@ const App: React.FC = () => {
   const [isPortrait, setIsPortrait] = useState(false);
   const [isConsultationMode, setIsConsultationMode] = useState(false);
   const [showOccupiedMask, setShowOccupiedMask] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [doctorProfile, setDoctorProfile] = useState<any>(() => {
      try {
         return JSON.parse(localStorage.getItem('doctor_profile_TES') || 'null');
@@ -1563,6 +1565,13 @@ const App: React.FC = () => {
         </div>
       )}
 
+      <HistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          supabase={supabase}
+          currentUserTrigram={trigram.toUpperCase()}
+      />
+
       {showUnavailabilityModal && monthsToDisplay.length > 0 && (
           <UnavailabilityModal 
               isOpen={showUnavailabilityModal}
@@ -1725,15 +1734,25 @@ const App: React.FC = () => {
                     )}
 
                     {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
-                        <button 
-                            onClick={() => {
-                                setIsConsultationMode(!isConsultationMode);
-                            }}
+                        <>
+                            <button 
+                                onClick={() => setShowHistoryModal(true)}
+                                className="flex items-center justify-center w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:h-auto md:w-auto md:px-4 md:py-2 border rounded-xl text-slate-500 bg-white border-slate-200 hover:bg-slate-50 transition-all shadow-sm shrink-0"
+                                title="Historique des tours"
+                            >
+                                <Book className="w-4 h-4 md:mr-2" />
+                                <span className="hidden md:inline text-[10px] font-black uppercase">Historique</span>
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    setIsConsultationMode(!isConsultationMode);
+                                }}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
                         >
                             <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
                             <span className="md:hidden">Planning</span>
                         </button>
+                        </>
                     )}
 
                     {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && (

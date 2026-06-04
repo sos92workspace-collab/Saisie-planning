@@ -159,6 +159,14 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   useEffect(() => { refreshData(); }, [refreshData]);
 
   const executeDelete = async () => {
+    if (deleteMode === 'ALL') {
+        const adminUser = users.find(u => u.role === 'ADMIN');
+        if (!adminUser) return alert("Utilisateur admin non trouvé.");
+        const pwd = window.prompt("Pour réinitialiser la base de données, veuillez saisir le mot de passe administrateur :");
+        if (pwd === null) return;
+        if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
+    }
+    
     setIsDeletingAll(true);
     try {
       if (deleteMode === 'PENDING') {
