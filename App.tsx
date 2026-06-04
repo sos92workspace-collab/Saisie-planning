@@ -1737,11 +1737,10 @@ const App: React.FC = () => {
                         <>
                             <button 
                                 onClick={() => setShowHistoryModal(true)}
-                                className="flex items-center justify-center w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:h-auto md:w-auto md:px-4 md:py-2 border rounded-xl text-slate-500 bg-white border-slate-200 hover:bg-slate-50 transition-all shadow-sm shrink-0"
-                                title="Historique des tours"
+                                className="flex items-center justify-center w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] border rounded-xl text-slate-500 bg-white border-slate-200 hover:bg-slate-50 transition-all shadow-sm shrink-0"
+                                title="Historique"
                             >
-                                <Book className="w-4 h-4 md:mr-2" />
-                                <span className="hidden md:inline text-[10px] font-black uppercase">Historique</span>
+                                <Book className="w-4 h-4" />
                             </button>
                             <button 
                                 onClick={() => {
