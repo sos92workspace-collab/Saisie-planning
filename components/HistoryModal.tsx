@@ -272,7 +272,7 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram }: 
                                     <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start justify-between min-h-[400px]">
                                         {renderColumn(hist, 'normal', 'GARDE CIBLE (GC)', Target, 'text-orange-600', 'border-orange-600', 'bg-orange-50', 'bg-orange-50/50')}
                                         {renderColumn(hist, 'good_bonus', 'BONNE GARDE (B)', Zap, 'text-emerald-600', 'border-emerald-600', 'bg-emerald-50', 'bg-emerald-50/50')}
-                                        {renderColumn(hist, 'bad_bonus', 'GARDE AU CHOIX (C)', Clock, 'text-indigo-600', 'border-indigo-600', 'bg-indigo-50', 'bg-indigo-50/50')}
+                                        {renderColumn(hist, 'bad_bonus', 'GARDE NORMALE (N)', Clock, 'text-indigo-600', 'border-indigo-600', 'bg-indigo-50', 'bg-indigo-50/50')}
                                     </div>
                                 </div>
                             </>
