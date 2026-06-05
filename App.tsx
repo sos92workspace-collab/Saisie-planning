@@ -1902,7 +1902,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto no-scrollbar">
                 <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest whitespace-nowrap">Indice Priorité :</span>
                 <div className="flex gap-1.5 pb-2 md:pb-0">
-                    {Array.from({ length: 20 }, (_, i) => i + 1).map(num => (
+                    {Array.from({ length: 50 }, (_, i) => i + 1).map(num => (
                         <button 
                             key={num} 
                             onClick={() => setActivePriority(num)}
