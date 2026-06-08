@@ -113,6 +113,20 @@ export interface Round {
   allow_takes: boolean;
 }
 
+export interface ColumnQuota {
+  column_id: number;
+  year: number;
+  month: number; // 0-indexed in JS
+  global_doctor: number;
+  global_substitute: number;
+  weekday_doctor: number;
+  weekday_substitute: number;
+  saturday_doctor: number;
+  saturday_substitute: number;
+  sunday_doctor: number;
+  sunday_substitute: number;
+}
+
 export interface ColumnConfig {
   round_id: number;
   column_id: number;

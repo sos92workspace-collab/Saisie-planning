@@ -1,5 +1,5 @@
 
-import { GuardType, Site, ColumnDefinition, Round, HeaderConfig } from './types';
+import { GuardType, Site, ColumnDefinition, Round, HeaderConfig, Choice, ColumnQuota } from './types';
 
 export const parseTimeRange = (range: string): { start: number, end: number } | null => {
   if (!range) return null;
@@ -231,3 +231,52 @@ export const COLUMNS: ColumnDefinition[] = [
   { id: 46, label: 'S/C', type: GuardType.VISIT, site: Site.NONE, timeRange: '21h-03h', colorClass: 'bg-[#d8b4fe]' }, // Purple 300
   { id: 47, label: '47', type: GuardType.OTHER, site: Site.NONE, timeRange: '01h-06h', colorClass: 'bg-white' },
 ];
+
+export const checkQuotaReached = (
+    colId: number, 
+    date: Date, 
+    role: 'DOCTOR' | 'SUBSTITUTE', 
+    allAssigned: Choice[], 
+    quotasList: ColumnQuota[] = []
+): boolean => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const quota = quotasList.find(q => q.column_id === colId && q.year === year && q.month === month);
+    if (!quota) return false;
+
+    // Filter assigned tasks for this column and role for the whole month
+    const roleAssigned = allAssigned.filter(c => c.col === colId && c.year === year && c.month === month && c.userRole === role && c.status === 'ASSIGNED');
+    
+    // Check global limit
+    const globalLimit = role === 'DOCTOR' ? quota.global_doctor : quota.global_substitute;
+    if (globalLimit !== null && globalLimit !== -1 && roleAssigned.length >= globalLimit) return true;
+
+    // Determine day type
+    const dayOfWeek = date.getDay();
+    const isSun = isPublicHoliday(date) || dayOfWeek === 0;
+    const isSat = !isSun && dayOfWeek === 6;
+    const isWeek = !isSun && !isSat;
+
+    const dayTypeLimit = role === 'DOCTOR' ? 
+        (isSun ? quota.sunday_doctor : isSat ? quota.saturday_doctor : quota.weekday_doctor) : 
+        (isSun ? quota.sunday_substitute : isSat ? quota.saturday_substitute : quota.weekday_substitute);
+
+    if (dayTypeLimit !== null && dayTypeLimit !== -1) {
+        // Count just this day type
+        let typeCount = 0;
+        roleAssigned.forEach(c => {
+            const cDate = new Date(c.year, c.month, c.row);
+            const cDay = cDate.getDay();
+            const cSun = isPublicHoliday(cDate) || cDay === 0;
+            const cSat = !cSun && cDay === 6;
+            const cWeek = !cSun && !cSat;
+            
+            if (isSun && cSun) typeCount++;
+            else if (isSat && cSat) typeCount++;
+            else if (isWeek && cWeek) typeCount++;
+        });
+        if (typeCount >= dayTypeLimit) return true;
+    }
+
+    return false;
+};

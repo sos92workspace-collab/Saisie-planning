@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from 'recharts';
-import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, GuardType, Site, UserRole, ColumnDefinition, ShiftDefinition, ShiftGlobalSettings } from '../types';
-import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap } from '../constants';
+import { AdminTab, UserProfile, Round, Choice, ColumnConfig, HeaderConfig, GuardType, Site, UserRole, ColumnDefinition, ShiftDefinition, ShiftGlobalSettings, ColumnQuota } from '../types';
+import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOverlap, checkQuotaReached } from '../constants';
 import { MatrixHeader } from './MatrixHeader';
 import { VersionsPanel } from './VersionsPanel';
 import { ExchangeRules } from './ExchangeRules';
@@ -87,6 +87,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   }, [supabase]);
   const [allChoices, setAllChoices] = useState<Choice[]>([]);
   const [columnConfigs, setColumnConfigs] = useState<ColumnConfig[]>([]);
+  const [quotas, setQuotas] = useState<ColumnQuota[]>([]);
   const [headerConfigs, setHeaderConfigs] = useState<HeaderConfig[]>([]);
   const [shiftDefinitions, setShiftDefinitions] = useState<ShiftDefinition[]>([]);
   const [shiftGlobalSettings, setShiftGlobalSettings] = useState<ShiftGlobalSettings | null>(null);
@@ -147,6 +148,8 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
       if (sd) setShiftDefinitions(sd);
       const { data: sgs } = await supabase.from('shift_global_settings').select('*').eq('id', 1).single();
       if (sgs) setShiftGlobalSettings(sgs);
+      const { data: quotasData } = await supabase.from('column_quotas').select('*');
+      if (quotasData) setQuotas(quotasData.map(q => ({ ...q, month: q.month !== null ? q.month - 1 : null })));
       const gc = await fetchAll(supabase, 'global_closures');
       if (gc) setGlobalClosures(gc.map((g: any) => ({ ...g, month: g.month !== null ? g.month - 1 : null })));
     } catch (e) {
@@ -415,7 +418,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               logAction={logAction}
             />
           )}
-          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
+          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
@@ -2265,7 +2268,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   );
 };
 
-export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells }: any) => {
+export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells }: any) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
@@ -2374,6 +2377,15 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
               return;
           }
       }
+
+      const cellDateObj = new Date(editingCell.year, editingCell.month, editingCell.row, 0, 0, 0);
+      const isQuotaReached = checkQuotaReached(editingCell.col, cellDateObj, user.role || 'DOCTOR', choices, quotas);
+      
+      if (isQuotaReached) {
+          const confirmed = window.confirm(`⚠️ Le quota est atteint pour les ${user.role === 'DOCTOR' ? 'Titulaires' : 'Remplaçants'}. Êtes-vous sûr de vouloir attribuer cette garde ?\n\nSi vous confirmez, la case indiquera qu'un quota est dépassé.`);
+          if (!confirmed) return;
+      }
+
 
       const pending = choices.find((c: any) => c.row === editingCell.row && c.col === editingCell.col && c.month === editingCell.month && c.year === editingCell.year && c.userTrigram === cleanTri);
 
@@ -2740,6 +2752,9 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                 const isHighlightedCell = allHighlights.some((hc: any) => hc && hc.row === day && hc.col === col.id && hc.month === month && hc.year === year);
                                                 
                                                 const assigned = choices.find((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
+                                                const isQuotaDoctorReached = checkQuotaReached(col.id, date, 'DOCTOR', choices, quotas);
+                                                const isQuotaSubReached = checkQuotaReached(col.id, date, 'SUBSTITUTE', choices, quotas);
+                                                const isQuotaReachedAdmin = isQuotaDoctorReached || isQuotaSubReached;
                                                 
                                                 let bgColor = col.customColor || '#FFFFFF';
                                                 
@@ -2754,6 +2769,8 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                     } else {
                                                         bgColor = col.customColor || '#FFFFFF';
                                                     }
+                                                } else if (isQuotaReachedAdmin) {
+                                                    bgColor = '#fee2e2'; // red-100
                                                 } else {
                                                     // Cellule libre - 70% d'opacité
                                                     bgColor = col.customColor ? `${col.customColor}B3` : '#FFFFFFB3';
@@ -2770,10 +2787,11 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                 return (
                                                     <td 
                                                         key={col.id} 
+                                                        title={isQuotaDoctorReached && isQuotaSubReached ? "Quotas atteints (Titulaires et Remplaçants)" : isQuotaDoctorReached ? "Quota Titulaires atteint" : isQuotaSubReached ? "Quota Remplaçants atteint" : ""}
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmVlMmUyIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNlZjQ0NDQiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
@@ -2783,6 +2801,11 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                             </svg>
                                                         )}
                                                         {!isClosed && assigned && <span className="text-[14px] md:text-[11px] font-black text-slate-900 block leading-none tracking-tighter drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
+                                                        {!isClosed && isQuotaReachedAdmin && (
+                                                            <span className="absolute bottom-0 right-0 text-[6px] md:text-[5px] font-bold text-red-600 bg-white/80 px-0.5 leading-none pointer-events-none rounded-tl-sm z-10">
+                                                                {isQuotaDoctorReached && isQuotaSubReached ? 'QM/QR' : isQuotaDoctorReached ? 'QM' : 'QR'}
+                                                            </span>
+                                                        )}
                                                     </td>
                                                 );
                                             })}

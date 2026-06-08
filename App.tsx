@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { ChevronDown, Calendar, Bot, X, ArrowRight, Book, ArrowLeft } from 'lucide-react';
-import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday } from './constants';
-import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings } from './types';
+import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, checkQuotaReached } from './constants';
+import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings, ColumnQuota } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 
 const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined, is1IndexedMonth: boolean = false, columnConfigs: ColumnConfig[] = []) => {
@@ -307,6 +307,7 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.NORMAL_SELECTION);
   const [choices, setChoices] = useState<Choice[]>([]);
+  const [quotas, setQuotas] = useState<ColumnQuota[]>([]);
   const prevChoicesCountRef = useRef<number>(-1);
   const prevCategoryRef = useRef<string>('');
   const clickTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -713,6 +714,9 @@ const App: React.FC = () => {
     // Load exchange rules
     const { data: rulesData } = await supabase.from('exchange_rules').select('*');
     if (rulesData) setExchangeRules(rulesData);
+    
+    const { data: quotasData } = await supabase.from('column_quotas').select('*');
+    if (quotasData) setQuotas(quotasData.map(q => ({ ...q, month: q.month !== null ? q.month - 1 : null })));
     
     const { data: modesData } = await supabase.from('exchange_modes').select('*');
     if (modesData) {
@@ -2033,6 +2037,8 @@ const App: React.FC = () => {
                                   
                                   const open = isColOpen(col.id, currentStep, day, month, year) && !isClosed;
                                   const isBlocked = isBlockedByUnavailability(day, col.id, month, year);
+                                  const cellDateObj = new Date(year, month, day, 0, 0, 0);
+                                  const isQuotaReachedUser = checkQuotaReached(col.id, cellDateObj, currentUser?.role || 'DOCTOR', choices, quotas);
                                   
                                   // Récupérer une garde validée (ASSIGNED) sur cette case
                                   const rawAssignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
@@ -2061,7 +2067,6 @@ const App: React.FC = () => {
                                   
                                   const pendingAbandon = myPendingAbandons.find(ab => ab.status === 'PENDING' && ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
 
-                                  const cellDateObj = new Date(year, month, day, 0, 0, 0);
                                   const cellDiffHours = (cellDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
                                   const isLessThan48h = cellDiffHours < 48;
 
@@ -2174,6 +2179,9 @@ const App: React.FC = () => {
                                   } else if (!open) { 
                                       bgColor = '#f1f5f9'; // slate-100 for grayed out closed cells
                                       cellStyles += " opacity-40 cursor-not-allowed";
+                                  } else if (isQuotaReachedUser && !isConsultationMode) {
+                                      bgColor = '#fee2e2'; // red-100
+                                      cellStyles += " opacity-80 cursor-not-allowed cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmVlMmUyIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNlZjQ0NDQiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
                                   } else { 
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
@@ -2195,10 +2203,15 @@ const App: React.FC = () => {
                                   return (
                                     <td 
                                       key={col.id} 
+                                      title={isQuotaReachedUser && !isConsultationMode && !myPending && !isAssignedToMe ? "Quota atteint" : ""}
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
                                           if (exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
+                                          if (isQuotaReachedUser && !isConsultationMode && !myPending && !isAssignedToMe && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE') {
+                                              alert("⚠️ ACTION BLOQUÉE : Le quota mensuel pour ce type de jour est déjà atteint. Vous ne pouvez plus demander cette garde.");
+                                              return;
+                                          }
                                           const cellKey = `${day}-${col.id}`;
                                           const existingTimeout = clickTimeoutsRef.current.get(cellKey);
                                           if (existingTimeout) {
@@ -2213,6 +2226,10 @@ const App: React.FC = () => {
                                       onDoubleClick={(e) => {
                                           e.preventDefault();
                                           if (isConsultationMode || assignedList.length > 0) return;
+                                          if (isQuotaReachedUser && !myPending && !isAssignedToMe && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE') {
+                                              alert("⚠️ ACTION BLOQUÉE : Le quota mensuel pour ce type de jour est déjà atteint. Vous ne pouvez plus demander cette garde.");
+                                              return;
+                                          }
                                           const cellKey = `${day}-${col.id}`;
                                           const existingTimeout = clickTimeoutsRef.current.get(cellKey);
                                           if (existingTimeout) {
