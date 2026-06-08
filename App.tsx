@@ -489,11 +489,11 @@ const App: React.FC = () => {
                 a.year === choice.year
             );
 
-            const choiceTimeRange = choice.colTimeRange || COLUMNS.find(c => c.id === choice.col)?.timeRange;
+            const choiceTimeRange = columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_time_range || COLUMNS.find(c => c.id === choice.col)?.timeRange;
             
             if (choiceTimeRange) {
                 for (const assigned of myAssignedSameDay) {
-                    const assignedTimeRange = assigned.colTimeRange || COLUMNS.find(c => c.id === assigned.col)?.timeRange;
+                    const assignedTimeRange = columnConfigs.find((c: any) => c.column_id === assigned.col)?.custom_time_range || COLUMNS.find(c => c.id === assigned.col)?.timeRange;
                     if (assignedTimeRange && doRangesOverlap(choiceTimeRange, assignedTimeRange, maxOverlapMinutes)) {
                         isValid = false;
                         break;
@@ -1038,7 +1038,7 @@ const App: React.FC = () => {
               
               let overlapFound = false;
               for (const assignedChoice of assignedSameDay) {
-                  const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
+                  const existingTimeRange = columnConfigs.find((c: any) => c.column_id === assignedChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
                   if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
                       overlapFound = true;
                       break;
@@ -1225,7 +1225,7 @@ const App: React.FC = () => {
 
         setSelectedTargetChoice({
             id: `empty-take-${row}-${month}-${year}-${colId}`,
-            row, col: colId, month, year, colLabel, colType: colDef?.type || '', colTimeRange: colDef?.timeRange || '',
+            row, col: colId, month, year, colLabel, colType: colConfig?.custom_type || colDef?.type || '', colTimeRange: colConfig?.custom_time_range || colDef?.timeRange || '',
             userId: currentUser?.id || '', userTrigram: trigram.toUpperCase(), status: 'PENDING', submittedAt: '', roundId: currentRoundId, category: 'normal'
         });
         setShowTakeConfirmModal(true);
@@ -1334,7 +1334,7 @@ const App: React.FC = () => {
         const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && c.status === 'ASSIGNED');
         
         for (const assignedChoice of assignedSameDay) {
-            const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
+            const existingTimeRange = columnConfigs.find((c: any) => c.column_id === assignedChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
             if (existingTimeRange && doRangesOverlap(finalTimeRange, existingTimeRange, maxOverlapMinutes)) {
                 alert(`⚠️ ACTION BLOQUÉE : Une garde vous a déjà été attribuée sur des horaires incompatibles (${existingTimeRange}).`);
                 return;

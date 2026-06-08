@@ -2368,7 +2368,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
       );
 
       for (const assignedChoice of assigned) {
-          const existingTimeRange = assignedChoice.colTimeRange || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
+          const existingTimeRange = columnConfigs.find((c: any) => c.column_id === assignedChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
           if (existingTimeRange && doRangesOverlap(editingCell.row, finalTimeRange, assignedChoice.row, existingTimeRange, maxOverlapMinutes)) {
               alert(`⚠️ ACTION BLOQUÉE : Le Dr ${cleanTri} a déjà une garde attribuée sur des horaires incompatibles (${existingTimeRange}).`);
               return;
