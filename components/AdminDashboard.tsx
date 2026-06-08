@@ -2857,6 +2857,60 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     const [compareData, setCompareData] = useState<any[] | null>(null);
     const [compareMonthYear, setCompareMonthYear] = useState<string>('ALL');
     const [resolvedCompareCells, setResolvedCompareCells] = useState<Record<string, boolean>>({});
+
+    const handleRefreshPriorities = async () => {
+        if (!activeRound) return;
+        const confirmed = window.confirm("Êtes-vous sûr de vouloir recalculer les priorités (réindexer de 1 à N) pour tous les vœux en attente de tous les médecins ?");
+        if (!confirmed) return;
+
+        const pendingChoices = choices.filter((c: any) => c.status === 'PENDING' && c.roundId === activeRound.id);
+        const choicesByUser: Record<string, any[]> = {};
+        for (const choice of pendingChoices) {
+            if (!choicesByUser[choice.userTrigram]) choicesByUser[choice.userTrigram] = [];
+            choicesByUser[choice.userTrigram].push(choice);
+        }
+
+        const updates: any[] = [];
+        const updatedChoicesLocally = [...choices];
+
+        for (const trigram in choicesByUser) {
+            const userChoices = choicesByUser[trigram];
+            const groups: Record<number, any[]> = {};
+            for (const choice of userChoices) {
+                if (!groups[choice.groupIndex]) groups[choice.groupIndex] = [];
+                groups[choice.groupIndex].push(choice);
+            }
+            
+            const sortedGroupIndices = Object.keys(groups).map(k => parseInt(k, 10)).sort((a, b) => a - b);
+            
+            let newGroupIndex = 1;
+            for (const oldGroupIndex of sortedGroupIndices) {
+                const groupChoices = groups[oldGroupIndex];
+                for (const choice of groupChoices) {
+                    if (choice.groupIndex !== newGroupIndex) {
+                        updates.push({ id: choice.id, group_index: newGroupIndex });
+                        const idx = updatedChoicesLocally.findIndex(c => c.id === choice.id);
+                        if(idx !== -1) updatedChoicesLocally[idx] = { ...updatedChoicesLocally[idx], groupIndex: newGroupIndex };
+                    }
+                }
+                newGroupIndex++;
+            }
+        }
+
+        if (updates.length > 0) {
+            const { error } = await supabase.from('choices').upsert(updates);
+            if (error) {
+                console.error("Erreur lors de la réindexation", error);
+                alert("Erreur lors de la mise à jour");
+                return;
+            }
+            setChoices(updatedChoicesLocally);
+            logAction("REINDEX_PRIORITIES", { count: updates.length });
+            alert(`Priorités réindexées avec succès pour ${updates.length} choix en attente.`);
+        } else {
+            alert("Aucune réindexation nécessaire.");
+        }
+    };
     const [isCompareFullscreen, setIsCompareFullscreen] = useState(false);
     const [showCompareCounters, setShowCompareCounters] = useState(false);
 
@@ -3742,7 +3796,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                 )}
 
                 {subTab === 'data' && (
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 h-full">
+                    <div className="grid grid-cols-1 xl:grid-cols-4 gap-8 h-full">
                         {/* EXPORT SECTION */}
                         <div className="bg-white p-8 rounded-[40px] border shadow-sm flex flex-col justify-center items-center text-center space-y-6">
                             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 mb-2">
@@ -3826,6 +3880,22 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                     </div>
                                 </label>
                                 <p className="text-[10px] text-slate-400 mt-3 font-bold uppercase tracking-wide text-center">Format requis : 4D (CSV/TXT)</p>
+                            </div>
+                        </div>
+
+                        {/* MAINTENANCE SECTION */}
+                        <div className="bg-white p-8 rounded-[40px] border shadow-sm flex flex-col justify-center items-center text-center space-y-6">
+                            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center text-rose-600 mb-2">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 0 0 16.59 2.59M2.5 22v-6h6M21.87 8.43a9 9 0 0 0-16.59-2.59"/></svg>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Maintenance</h3>
+                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Actualiser l'ordre de priorité (1 à N) pour les vœux en attente de chaque médecin.</p>
+                            </div>
+                            <div className="w-full max-w-md">
+                                <button onClick={handleRefreshPriorities} className="w-full py-4 bg-rose-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-rose-600 transition-all shadow-lg shadow-rose-900/20">
+                                    Actualiser Priorités
+                                </button>
                             </div>
                         </div>
                     </div>
