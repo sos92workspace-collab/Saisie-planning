@@ -2261,13 +2261,6 @@ const App: React.FC = () => {
                                           })()
                                       )}
 
-                                      {/* Quota atteint (vide) */}
-                                      {!isClosed && assignedList.length === 0 && isQuotaReachedApp && (
-                                          <span className="absolute inset-0 flex items-center justify-center text-[14px] md:text-[12px] font-black text-slate-500 bg-white/60 pointer-events-none z-10 text-center uppercase">
-                                              {isQuotaDoctorReached && isQuotaSubReached ? 'QM / QR' : isQuotaDoctorReached ? 'QM' : 'QR'}
-                                          </span>
-                                      )}
-
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
                                       {!isConsultationMode && assignedList.length === 0 && hasMultiplePending && (
                                         <div className="flex flex-col items-center justify-center leading-none w-full h-full relative">
