@@ -2791,7 +2791,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmVlMmUyIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNlZjQ0NDQiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
@@ -2802,8 +2802,8 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                         )}
                                                         {!isClosed && assigned && <span className="text-[14px] md:text-[11px] font-black text-slate-900 block leading-none tracking-tighter drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
                                                         {!isClosed && !assigned && isQuotaReachedAdmin && (
-                                                            <span className="absolute inset-0 flex items-center justify-center text-[11px] md:text-[9px] font-black text-red-600 bg-white/60 pointer-events-none rounded-tl-sm z-10">
-                                                                {isQuotaDoctorReached && isQuotaSubReached ? 'QM/QR' : isQuotaDoctorReached ? 'QM' : 'QR'}
+                                                            <span className="absolute inset-0 flex items-center justify-center text-[14px] md:text-[12px] font-black text-slate-500 bg-white/60 pointer-events-none z-10 text-center uppercase">
+                                                                {isQuotaDoctorReached && isQuotaSubReached ? 'QM / QR' : isQuotaDoctorReached ? 'QM' : 'QR'}
                                                             </span>
                                                         )}
                                                     </td>

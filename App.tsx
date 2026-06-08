@@ -2038,7 +2038,10 @@ const App: React.FC = () => {
                                   const open = isColOpen(col.id, currentStep, day, month, year) && !isClosed;
                                   const isBlocked = isBlockedByUnavailability(day, col.id, month, year);
                                   const cellDateObj = new Date(year, month, day, 0, 0, 0);
-                                  const isQuotaReachedUser = checkQuotaReached(col.id, cellDateObj, currentUser?.role || 'DOCTOR', choices, quotas);
+                                  const isQuotaDoctorReached = checkQuotaReached(col.id, cellDateObj, 'DOCTOR', choices, quotas);
+                                  const isQuotaSubReached = checkQuotaReached(col.id, cellDateObj, 'SUBSTITUTE', choices, quotas);
+                                  const isQuotaReachedUser = currentUser?.role === 'DOCTOR' ? isQuotaDoctorReached : isQuotaSubReached;
+                                  const isQuotaReachedApp = isQuotaDoctorReached || isQuotaSubReached;
                                   
                                   // Récupérer une garde validée (ASSIGNED) sur cette case
                                   const rawAssignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
@@ -2180,8 +2183,8 @@ const App: React.FC = () => {
                                       bgColor = '#f1f5f9'; // slate-100 for grayed out closed cells
                                       cellStyles += " opacity-40 cursor-not-allowed";
                                   } else if (isQuotaReachedUser && !isConsultationMode) {
-                                      bgColor = '#fee2e2'; // red-100
-                                      cellStyles += " opacity-80 cursor-not-allowed cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmVlMmUyIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNlZjQ0NDQiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
+                                      bgColor = '#f8fafc'; // slate-50
+                                      cellStyles += " opacity-80 cursor-not-allowed cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
                                   } else { 
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
@@ -2256,6 +2259,13 @@ const App: React.FC = () => {
                                               }
                                               return null;
                                           })()
+                                      )}
+
+                                      {/* Quota atteint (vide) */}
+                                      {!isClosed && assignedList.length === 0 && isQuotaReachedApp && (
+                                          <span className="absolute inset-0 flex items-center justify-center text-[14px] md:text-[12px] font-black text-slate-500 bg-white/60 pointer-events-none z-10 text-center uppercase">
+                                              {isQuotaDoctorReached && isQuotaSubReached ? 'QM / QR' : isQuotaDoctorReached ? 'QM' : 'QR'}
+                                          </span>
                                       )}
 
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
