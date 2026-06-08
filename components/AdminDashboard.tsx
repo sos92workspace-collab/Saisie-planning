@@ -2801,8 +2801,8 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                             </svg>
                                                         )}
                                                         {!isClosed && assigned && <span className="text-[14px] md:text-[11px] font-black text-slate-900 block leading-none tracking-tighter drop-shadow-sm relative z-10">{assigned.userTrigram}</span>}
-                                                        {!isClosed && isQuotaReachedAdmin && (
-                                                            <span className="absolute bottom-0 right-0 text-[6px] md:text-[5px] font-bold text-red-600 bg-white/80 px-0.5 leading-none pointer-events-none rounded-tl-sm z-10">
+                                                        {!isClosed && !assigned && isQuotaReachedAdmin && (
+                                                            <span className="absolute inset-0 flex items-center justify-center text-[11px] md:text-[9px] font-black text-red-600 bg-white/60 pointer-events-none rounded-tl-sm z-10">
                                                                 {isQuotaDoctorReached && isQuotaSubReached ? 'QM/QR' : isQuotaDoctorReached ? 'QM' : 'QR'}
                                                             </span>
                                                         )}
