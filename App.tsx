@@ -1143,6 +1143,10 @@ const App: React.FC = () => {
           const isAlreadyTargetedByMe = myPendingExchanges.some(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
           if (isAlreadyTargetedByMe) return;
 
+          // Check if quota allows it
+          const isQuotaReached = checkQuotaReached(col.id, targetDate, currentUser?.role || 'DOCTOR', choices, quotas);
+          if (isQuotaReached) return;
+
           possibleTargets.push({
             id: `empty-${day}-${month}-${year}-${col.id}`,
             row: day,
@@ -1156,7 +1160,7 @@ const App: React.FC = () => {
     });
 
     setPossibleTargetChoices(possibleTargets);
-  }, [choices, exchangeRules, exchangeModes, trigram, currentRoundId, globalClosures, monthsToDisplay, dynamicColumns, isColOpen, currentStep, myPendingExchanges]);
+  }, [choices, exchangeRules, exchangeModes, trigram, currentRoundId, globalClosures, monthsToDisplay, dynamicColumns, isColOpen, currentStep, myPendingExchanges, quotas, currentUser]);
 
   const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false, explicitPriority?: number) => {
     if (exchangeMode !== 'INACTIVE') {
@@ -1383,21 +1387,55 @@ const App: React.FC = () => {
          await supabase.from('exchange_requests').delete().eq('id', existingPending.id);
       }
 
-      const { error } = await supabase.from('exchange_requests').insert({
-        round_id: currentRoundId,
-        requester_trigram: trigram.toUpperCase(),
-        requester_choice_id: selectedOwnChoice.id,
-        target_row: selectedTargetChoice.row,
-        target_col: selectedTargetChoice.col,
-        target_month: selectedTargetChoice.month,
-        target_year: selectedTargetChoice.year,
-        target_col_label: selectedTargetChoice.colLabel,
-        status: 'PENDING'
-      });
-      
-      if (error) throw error;
-      
-      alert("Votre demande d'échange a été envoyée à l'administrateur.");
+      const isAutoValidate = activeRound?.auto_validate_exchanges;
+
+      if (isAutoValidate) {
+          const { data, error } = await supabase.rpc('process_auto_exchange', {
+              p_round_id: currentRoundId,
+              p_requester_trigram: trigram.toUpperCase(),
+              p_requester_choice_id: selectedOwnChoice.id,
+              p_target_row: selectedTargetChoice.row,
+              p_target_col: selectedTargetChoice.col,
+              p_target_month: selectedTargetChoice.month,
+              p_target_year: selectedTargetChoice.year,
+              p_target_col_label: selectedTargetChoice.colLabel
+          });
+
+          if (error) {
+              console.error(error);
+              alert("Erreur lors de l'échange automatique : " + error.message);
+              return;
+          }
+
+          if (data && data.success === false) {
+              alert(data.error || "L'échange automatique n'a pas pu aboutir.");
+              return;
+          }
+
+          if (data && data.status === 'APPROVED') {
+              alert("Votre échange a été validé automatiquement avec succès !");
+              // Refresh full choices since it was updated directly
+              const { data: newChoices } = await supabase.from('choices').select('*');
+              if (newChoices) setChoices(newChoices);
+          } else {
+              alert("Votre demande d'échange a été envoyée à l'administrateur.");
+          }
+      } else {
+          const { error } = await supabase.from('exchange_requests').insert({
+            round_id: currentRoundId,
+            requester_trigram: trigram.toUpperCase(),
+            requester_choice_id: selectedOwnChoice.id,
+            target_row: selectedTargetChoice.row,
+            target_col: selectedTargetChoice.col,
+            target_month: selectedTargetChoice.month,
+            target_year: selectedTargetChoice.year,
+            target_col_label: selectedTargetChoice.colLabel,
+            status: 'PENDING'
+          });
+          
+          if (error) throw error;
+          alert("Votre demande d'échange a été envoyée à l'administrateur.");
+      }
       
       // Refresh my pending exchanges
       const { data: myExchanges } = await supabase.from('exchange_requests')
@@ -1527,7 +1565,10 @@ const App: React.FC = () => {
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6">
                 <h3 className="text-xl font-black uppercase text-slate-900 mb-4">Confirmer l'échange</h3>
                 <p className="text-sm text-slate-600 mb-6">
-                    Vous êtes sur le point de proposer un échange :
+                    {activeRound?.auto_validate_exchanges ? 
+                       "Vous êtes sur le point de procéder à un échange automatique :" : 
+                       "Vous êtes sur le point de proposer un échange :"
+                    }
                 </p>
                 <div className="space-y-4 mb-8">
                     <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl">
@@ -2206,7 +2247,11 @@ const App: React.FC = () => {
                                   return (
                                     <td 
                                       key={col.id} 
-                                      title={isQuotaReachedUser && !isConsultationMode && !myPending && !isAssignedToMe ? "Quota atteint" : ""}
+                                      title={
+                                          (!isConsultationMode && isBlocked) ? "Indisponibilité" : (
+                                              isQuotaReachedUser && !isConsultationMode && !myPending && !isAssignedToMe ? "Quota atteint" : undefined
+                                          )
+                                      }
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
@@ -2243,7 +2288,6 @@ const App: React.FC = () => {
                                       }}
                                       className={cellStyles} 
                                       style={{ background: bgColor }}
-                                      title={(!isConsultationMode && isBlocked) ? "Indisponibilité" : undefined}
                                     >
                                       {/* Contenu de la case */}
                                       

@@ -110,6 +110,7 @@ export interface Round {
   maxOverlapMinutes?: number;
   allow_choice_reproduction: boolean;
   allow_exchanges: boolean;
+  auto_validate_exchanges: boolean;
   allow_takes: boolean;
 }
 

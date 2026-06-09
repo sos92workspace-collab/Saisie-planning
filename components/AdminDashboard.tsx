@@ -1597,6 +1597,22 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
 
   const isExchangesAllowed = allRounds.every(r => r.allow_exchanges);
   const isTakesAllowed = allRounds.every(r => r.allow_takes);
+  const isAutoValidateExchanges = allRounds.every(r => r.auto_validate_exchanges);
+
+  const toggleAutoValidate = async () => {
+    if (isUpdating) return;
+    const newState = !isAutoValidateExchanges;
+    setIsUpdating(true);
+    try {
+        await supabase.from('rounds').update({ auto_validate_exchanges: newState }).neq('id', 0);
+        await refreshRounds();
+        logAction('AUTO_VALIDATION_ECHANGES', { etat: newState ? 'ACTIVÉ' : 'DÉSACTIVÉ' });
+    } catch (e) {
+        console.error("Erreur auto validation échanges:", e);
+    } finally {
+        setIsUpdating(false);
+    }
+  };
 
   const toggleExchanges = async () => {
     if (isUpdating) return;
@@ -1861,6 +1877,18 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                  </label>
              </div>
 
+             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
+
+             <div className="flex flex-col">
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest" title="Validation automatique des échanges sans admin">Auto-validation (Échanges)</label>
+                 <label className="flex items-center gap-3 cursor-pointer">
+                     <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isAutoValidateExchanges ? 'bg-indigo-500' : 'bg-slate-200'}`} onClick={toggleAutoValidate}>
+                         <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isAutoValidateExchanges ? 'translate-x-6' : ''}`}></div>
+                     </div>
+                     <span className={`text-xs font-bold ${isAutoValidateExchanges ? 'text-indigo-600' : 'text-slate-400'}`}>{isAutoValidateExchanges ? 'ACTIVÉE' : 'DÉSACTIVÉE'}</span>
+                 </label>
+             </div>
+             
              <div className="hidden md:block w-px h-10 bg-slate-200"></div>
 
              <div className="flex flex-col">

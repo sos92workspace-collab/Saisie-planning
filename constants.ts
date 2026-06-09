@@ -138,6 +138,7 @@ const generateDefaultRounds = (): Round[] => {
       instructions_good_bonus: "",
       allow_choice_reproduction: false,
       allow_exchanges: true,
+      auto_validate_exchanges: false,
       allow_takes: true
     });
   }
