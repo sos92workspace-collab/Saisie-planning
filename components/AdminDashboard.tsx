@@ -2926,9 +2926,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         }
 
         if (updates.length > 0) {
-            const { error } = await supabase.from('choices').upsert(updates);
-            if (error) {
-                console.error("Erreur lors de la réindexation", error);
+            const results = await Promise.all(updates.map(u => supabase.from('choices').update({ group_index: u.group_index }).eq('id', u.id)));
+            const hasError = results.some(r => r.error);
+            if (hasError) {
+                console.error("Erreur lors de la réindexation", results.find(r => r.error)?.error);
                 alert("Erreur lors de la mise à jour");
                 return;
             }
