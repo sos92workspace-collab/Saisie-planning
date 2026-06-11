@@ -2939,12 +2939,15 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             let newGroupIndex = 1;
             for (const oldGroupIndex of sortedGroupIndices) {
                 const groupChoices = groups[oldGroupIndex];
+                groupChoices.sort((a: any, b: any) => a.subRank - b.subRank);
+                let newSubRank = 1;
                 for (const choice of groupChoices) {
-                    if (choice.groupIndex !== newGroupIndex) {
-                        updates.push({ id: choice.id, group_index: newGroupIndex });
+                    if (choice.groupIndex !== newGroupIndex || choice.subRank !== newSubRank) {
+                        updates.push({ id: choice.id, group_index: newGroupIndex, sub_rank: newSubRank });
                         const idx = updatedChoicesLocally.findIndex(c => c.id === choice.id);
-                        if(idx !== -1) updatedChoicesLocally[idx] = { ...updatedChoicesLocally[idx], groupIndex: newGroupIndex };
+                        if(idx !== -1) updatedChoicesLocally[idx] = { ...updatedChoicesLocally[idx], groupIndex: newGroupIndex, subRank: newSubRank };
                     }
+                    newSubRank++;
                 }
                 newGroupIndex++;
             }
@@ -2952,7 +2955,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
 
         if (choicesToDeleteIds.length > 0 || updates.length > 0) {
             if (updates.length > 0) {
-                const results = await Promise.all(updates.map(u => supabase.from('choices').update({ group_index: u.group_index }).eq('id', u.id)));
+                const results = await Promise.all(updates.map(u => supabase.from('choices').update({ group_index: u.group_index, sub_rank: u.sub_rank }).eq('id', u.id)));
                 const hasError = results.some(r => r.error);
                 if (hasError) {
                     console.error("Erreur lors de la réindexation", results.find(r => r.error)?.error);
