@@ -50,6 +50,10 @@
 
         /* Styles pour l'impression A4 Paysage */
         @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
             @page {
                 size: A4 landscape;
                 margin: 10mm;
