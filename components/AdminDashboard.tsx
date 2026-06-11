@@ -2888,18 +2888,43 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
 
     const handleRefreshPriorities = async () => {
         if (!activeRound) return;
-        const confirmed = window.confirm("Êtes-vous sûr de vouloir recalculer les priorités (réindexer de 1 à N) pour tous les vœux en attente de tous les médecins ?");
+        const confirmed = window.confirm("Êtes-vous sûr de vouloir supprimer tous les vœux QM en attente et recalculer les priorités (réindexer de 1 à N) pour les vœux restants de chaque médecin ?");
         if (!confirmed) return;
 
         const pendingChoices = choices.filter((c: any) => c.status === 'PENDING' && c.roundId === activeRound.id);
-        const choicesByUser: Record<string, any[]> = {};
+        
+        const choicesToDeleteIds: string[] = [];
+        const choicesToKeep: any[] = [];
+
         for (const choice of pendingChoices) {
+            const userRole = users.find((u: any) => u.trigram === choice.userTrigram)?.role || 'DOCTOR';
+            const choiceDate = new Date(choice.year, choice.month, choice.row, 0, 0, 0);
+            const isQM = quotas && quotas.length > 0 && checkQuotaReached(choice.col, choiceDate, userRole, choices, quotas);
+
+            if (isQM) {
+                choicesToDeleteIds.push(choice.id);
+            } else {
+                choicesToKeep.push(choice);
+            }
+        }
+
+        if (choicesToDeleteIds.length > 0) {
+            const { error: deleteError } = await supabase.from('choices').delete().in('id', choicesToDeleteIds);
+            if (deleteError) {
+                console.error("Erreur lors de la suppression des vœux QM", deleteError);
+                alert("Erreur lors de la suppression des vœux QM");
+                return;
+            }
+        }
+
+        const choicesByUser: Record<string, any[]> = {};
+        for (const choice of choicesToKeep) {
             if (!choicesByUser[choice.userTrigram]) choicesByUser[choice.userTrigram] = [];
             choicesByUser[choice.userTrigram].push(choice);
         }
 
         const updates: any[] = [];
-        const updatedChoicesLocally = [...choices];
+        let updatedChoicesLocally = choices.filter((c: any) => !choicesToDeleteIds.includes(c.id));
 
         for (const trigram in choicesByUser) {
             const userChoices = choicesByUser[trigram];
@@ -2925,19 +2950,21 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             }
         }
 
-        if (updates.length > 0) {
-            const results = await Promise.all(updates.map(u => supabase.from('choices').update({ group_index: u.group_index }).eq('id', u.id)));
-            const hasError = results.some(r => r.error);
-            if (hasError) {
-                console.error("Erreur lors de la réindexation", results.find(r => r.error)?.error);
-                alert("Erreur lors de la mise à jour");
-                return;
+        if (choicesToDeleteIds.length > 0 || updates.length > 0) {
+            if (updates.length > 0) {
+                const results = await Promise.all(updates.map(u => supabase.from('choices').update({ group_index: u.group_index }).eq('id', u.id)));
+                const hasError = results.some(r => r.error);
+                if (hasError) {
+                    console.error("Erreur lors de la réindexation", results.find(r => r.error)?.error);
+                    alert("Erreur lors de la mise à jour");
+                    return;
+                }
             }
             setChoices(updatedChoicesLocally);
-            logAction("REINDEX_PRIORITIES", { count: updates.length });
-            alert(`Priorités réindexées avec succès pour ${updates.length} choix en attente.`);
+            logAction("REINDEX_PRIORITIES", { count: updates.length, deletedQM: choicesToDeleteIds.length });
+            alert(`${choicesToDeleteIds.length} vœux QM supprimés. Priorités réindexées avec succès pour ${updates.length} choix en attente.`);
         } else {
-            alert("Aucune réindexation nécessaire.");
+            alert("Aucune suppression QM ni réindexation nécessaire.");
         }
     };
     const [isCompareFullscreen, setIsCompareFullscreen] = useState(false);
@@ -3930,7 +3957,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                             </div>
                             <div>
                                 <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Maintenance</h3>
-                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Actualiser l'ordre de priorité (1 à N) pour les vœux en attente de chaque médecin.</p>
+                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Supprimer les vœux en attente dont le quota (QM) est atteint et actualiser l'ordre de priorité (1 à N) pour les vœux restants.</p>
                             </div>
                             <div className="w-full max-w-md">
                                 <button onClick={handleRefreshPriorities} className="w-full py-4 bg-rose-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-rose-600 transition-all shadow-lg shadow-rose-900/20">
