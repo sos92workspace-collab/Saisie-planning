@@ -280,17 +280,37 @@ const exportToICS = (month: number, year: number, choices: Choice[], columns: an
 };
 
 export const handlePrintMonth = (year: number, month: number) => {
-    document.body.classList.add('print-month-mode');
     const containerId = `month-container-${year}-${month}`;
     const container = document.getElementById(containerId);
-    if (container) {
-        container.classList.add('print-container');
-    }
+    if (!container) return;
+
+    // Create a printable wrapper
+    const printWrapper = document.createElement('div');
+    printWrapper.id = 'print-wrapper';
+    
+    // Clone the container
+    const clone = container.cloneNode(true) as HTMLElement;
+    clone.classList.remove('print-hidden-in-month');
+    
+    // Remove any buttons inside clone that have print-hidden-in-month
+    const hiddenElements = clone.querySelectorAll('.print-hidden-in-month');
+    hiddenElements.forEach(el => el.remove());
+
+    printWrapper.appendChild(clone);
+    document.body.appendChild(printWrapper);
+
+    // Hide original root
+    const root = document.getElementById('root');
+    if (root) root.style.display = 'none';
+
+    document.body.classList.add('print-month-mode');
+
     setTimeout(() => {
         window.print();
         setTimeout(() => {
             document.body.classList.remove('print-month-mode');
-            if (container) container.classList.remove('print-container');
+            if (root) root.style.display = '';
+            printWrapper.remove();
         }, 1000);
     }, 100);
 };
