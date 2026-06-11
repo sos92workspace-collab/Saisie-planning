@@ -2227,8 +2227,8 @@ const App: React.FC = () => {
                                       bgColor = '#f1f5f9'; // slate-100 for grayed out closed cells
                                       cellStyles += " opacity-40 cursor-not-allowed";
                                   } else if (isQuotaReachedUser) {
-                                      bgColor = '#f8fafc'; // slate-50
-                                      cellStyles += " opacity-80 cursor-not-allowed cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
+                                      bgColor = '#ffffff'; // explicitly white
+                                      cellStyles += " cursor-not-allowed cursor-help"; 
                                   } else { 
                                       bgColor = col.customColor || '#FFFFFF'; 
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
@@ -2241,7 +2241,10 @@ const App: React.FC = () => {
                                       }
                                   }
 
-                                  if (isWeekendGuard) {
+                                  const isColoredCase = exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE' || myPending || hasMultiplePending || assignedList.length > 0 || (!isConsultationMode && isBlocked);
+                                  const skipWeekendGradient = (isClosed || !open || (isQuotaReachedUser && !isColoredCase));
+
+                                  if (isWeekendGuard && !skipWeekendGradient) {
                                       bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
                                   }
 
@@ -2306,6 +2309,12 @@ const App: React.FC = () => {
                                               }
                                               return null;
                                           })()
+                                      )}
+
+                                      {!isColoredCase && isQuotaReachedUser && !isClosed && open && (
+                                          <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+                                              <span className="text-[18px] md:text-[14px] font-black text-slate-800">Q</span>
+                                          </div>
                                       )}
 
                                       {/* Cas 1 : Mon vœu en attente (sans assignation par dessus) */}
