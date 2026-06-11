@@ -2112,8 +2112,8 @@ const App: React.FC = () => {
                               <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isWeekend ? 'bg-red-50/30' : ''}`}>
                                 <td className={`sticky left-0 border-r border-b border-slate-200 text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${rowHeaderBg}`}>
                                     <div className="flex items-center justify-center gap-1">
-                                        <span className="text-[10px] md:text-[8px] font-normal opacity-70">{dayName}</span>
-                                        <span className="text-[12px] md:text-[10px]">{day}</span>
+                                        <span className="text-[12px] md:text-[10px] font-normal opacity-70">{dayName}</span>
+                                        <span className="text-[14px] md:text-[12px]">{day}</span>
                                     </div>
                                 </td>
                                 {dynamicColumns.map(col => {
