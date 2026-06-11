@@ -5,6 +5,7 @@ import { COLUMNS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, doRangesOver
 import { MatrixHeader } from './MatrixHeader';
 import { VersionsPanel } from './VersionsPanel';
 import { ExchangeRules } from './ExchangeRules';
+import { handlePrintMonth } from '../App';
 
 interface Props {
   users: UserProfile[];
@@ -2694,9 +2695,19 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
             const substituteCounters = activeUsersWithCounts.filter((u: any) => u.role === 'SUBSTITUTE');
 
             return (
-                <div key={`${year}-${month}`} className="space-y-4 mb-8">
+                <div key={`${year}-${month}`} id={`month-container-${year}-${month}`} className="space-y-4 mb-8 print-hidden-in-month">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
+                            <button 
+                                onClick={() => handlePrintMonth(year, month)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors text-xs font-bold shadow-sm print-hidden-in-month"
+                                title="Imprimer ce mois"
+                            >
+                                <span className="text-sm leading-none">🖨️</span>
+                                <span className="hidden sm:inline">Imprimer</span>
+                            </button>
+                        </div>
                         <div className="flex flex-wrap gap-2 text-xs font-bold uppercase tracking-widest">
                             <div className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 flex items-center gap-2">
                                 <span>Occupées: {occupiedCells}</span>

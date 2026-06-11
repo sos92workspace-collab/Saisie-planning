@@ -47,6 +47,36 @@
             animation: proposal-flash 0.5s ease-in-out infinite;
             border-radius: 4px;
         }
+
+        /* Styles pour l'impression A4 Paysage */
+        @media print {
+            body.print-month-mode * {
+                visibility: hidden;
+            }
+            body.print-month-mode .print-container, 
+            body.print-month-mode .print-container * {
+                visibility: visible;
+            }
+            body.print-month-mode .print-container {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            body.print-month-mode .print-hidden-in-month {
+                display: none !important;
+            }
+            @page {
+                size: A4 landscape;
+                margin: 5mm;
+            }
+            body.print-month-mode {
+                background-color: white;
+            }
+            body.print-month-mode .custom-scrollbar {
+                overflow: visible !important;
+            }
+        }
     </style>
 <script type="importmap">
 {

@@ -279,6 +279,22 @@ const exportToICS = (month: number, year: number, choices: Choice[], columns: an
     }
 };
 
+export const handlePrintMonth = (year: number, month: number) => {
+    document.body.classList.add('print-month-mode');
+    const containerId = `month-container-${year}-${month}`;
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.classList.add('print-container');
+    }
+    setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+            document.body.classList.remove('print-month-mode');
+            if (container) container.classList.remove('print-container');
+        }, 1000);
+    }, 100);
+};
+
 // --- COMPONENT: Landscape Lock Screen ---
 const LandscapeLockScreen = () => (
   <div className="fixed inset-0 z-[9999] bg-slate-900 text-white flex flex-col items-center justify-center p-8 text-center">
@@ -2020,7 +2036,7 @@ const App: React.FC = () => {
               }).map(col => col.id);
 
               return (
-                <div key={`${year}-${month}`} className="space-y-4">
+                <div key={`${year}-${month}`} id={`month-container-${year}-${month}`} className="space-y-4 print-hidden-in-month">
                   <div className="flex items-center gap-4 px-4">
                     <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{label}</h2>
                     <div className="h-px bg-slate-200 flex-1"></div>
@@ -2029,16 +2045,26 @@ const App: React.FC = () => {
                             onClick={() => {
                                window.dispatchEvent(new CustomEvent('trigger-ai-proposal'));
                             }}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl hover:bg-indigo-200 transition-colors text-sm font-black shadow-sm"
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl hover:bg-indigo-200 transition-colors text-sm font-black shadow-sm print-hidden-in-month"
                             title="Générer planning IA"
                         >
                             <Bot className="w-4 h-4" />
                             <span className="hidden sm:inline">Générer planning complet IA</span>
                         </button>
                     )}
+                    {(viewMode === ViewMode.APP || isConsultationMode) && (
+                        <button 
+                            onClick={() => handlePrintMonth(year, month)}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors text-sm font-bold shadow-sm print-hidden-in-month"
+                            title="Imprimer ce mois"
+                        >
+                            <span className="text-lg leading-none">🖨️</span>
+                            <span className="hidden sm:inline">Imprimer</span>
+                        </button>
+                    )}
                     <button 
                         onClick={() => exportToICS(month, year, choices, dynamicColumns, trigram.toUpperCase())}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors text-sm font-bold shadow-sm"
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-colors text-sm font-bold shadow-sm print-hidden-in-month"
                     >
                         <Calendar className="w-4 h-4" />
                         <span className="hidden sm:inline">Exporter mes gardes</span>
@@ -2188,9 +2214,6 @@ const App: React.FC = () => {
                                       } else if (assignedList.length > 0) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-100 text-slate-900";
-                                      } else if (isBlocked) {
-                                          bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #94a3b8 calc(50% - 1.5px), #94a3b8 calc(50% + 1.5px), transparent calc(50% + 1.5px)), #f1f5f9`;
-                                          cellStyles += " opacity-60";
                                       } else if (isClosed) {
                                           bgColor = '#f1f5f9'; // slate-100 for global closures
                                           cellStyles += " opacity-40";
@@ -2237,15 +2260,15 @@ const App: React.FC = () => {
                                       cellStyles += " hover:bg-blue-50 cursor-pointer opacity-70";
                                   }
 
-                                  if (!isConsultationMode && isBlocked) {
-                                      bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #94a3b8 calc(50% - 1.5px), #94a3b8 calc(50% + 1.5px), transparent calc(50% + 1.5px)), ${bgColor}`;
-                                      if (!myPending && !hasMultiplePending) {
+                                  if (isBlocked) {
+                                      bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #ef4444 calc(50% - 1.5px), #ef4444 calc(50% + 1.5px), transparent calc(50% + 1.5px)), ${bgColor}`;
+                                      if (!isConsultationMode && !myPending && !hasMultiplePending) {
                                           cellStyles = cellStyles.replace('cursor-pointer', 'cursor-not-allowed');
                                       }
                                   }
 
                                   const isColoredCase = exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE' || myPending || hasMultiplePending || assignedList.length > 0 || isBlocked;
-                                  const skipWeekendGradient = (isClosed || !open || (isQuotaReachedUser && !isColoredCase));
+                                  const skipWeekendGradient = (isClosed || (isQuotaReachedUser && !isColoredCase));
 
                                   if (isWeekendGuard && !skipWeekendGradient) {
                                       bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
@@ -2314,9 +2337,15 @@ const App: React.FC = () => {
                                           })()
                                       )}
 
-                                      {!isColoredCase && isQuotaReachedUser && !isClosed && open && (
+                                      {!isColoredCase && isQuotaReachedUser && !isClosed && (
                                           <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
                                               <span className="text-[18px] md:text-[14px] font-black text-slate-800">Q</span>
+                                          </div>
+                                      )}
+
+                                      {isBlocked && (
+                                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                              <span className="text-red-500 font-bold text-xl md:text-2xl leading-none">✕</span>
                                           </div>
                                       )}
 
