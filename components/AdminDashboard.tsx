@@ -419,7 +419,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
             />
           )}
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
-          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} />}
+          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} quotas={quotas} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
           {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
@@ -2864,7 +2864,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
   );
 };
 
-const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction, users }: any) => {
+const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction, users, quotas }: any) => {
     const [subTab, setSubTab] = useState<'journal' | 'data' | 'history'>('journal');
     const [showExportModal, setShowExportModal] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'REFUSED'>('ALL');
@@ -3674,6 +3674,10 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                     tensionText = `Attente (${tension})`;
                                                 }
 
+                                                const userRole = users.find((u: any) => u.trigram === c.userTrigram)?.role || 'DOCTOR';
+                                                const choiceDate = new Date(c.year, c.month, c.row, 0, 0, 0);
+                                                const isQM = c.status === 'PENDING' && quotas && quotas.length > 0 && checkQuotaReached(c.col, choiceDate, userRole, choices, quotas);
+
                                                 return (
                                                 <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="p-4 font-black text-slate-900">{c.userTrigram}</td>
@@ -3703,13 +3707,20 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                         </span>
                                                     </td>
                                                     <td className="p-4 text-center">
-                                                        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
-                                                            c.status === 'ASSIGNED' ? 'bg-green-100 text-green-700' : 
-                                                            c.status === 'PENDING' ? pendingColor : 
-                                                            'bg-red-100 text-red-700'
-                                                        }`}>
-                                                            {c.status === 'ASSIGNED' ? 'Validé' : c.status === 'PENDING' ? tensionText : c.status}
-                                                        </span>
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
+                                                                c.status === 'ASSIGNED' ? 'bg-green-100 text-green-700' : 
+                                                                c.status === 'PENDING' ? pendingColor : 
+                                                                'bg-red-100 text-red-700'
+                                                            }`}>
+                                                                {c.status === 'ASSIGNED' ? 'Validé' : c.status === 'PENDING' ? tensionText : c.status}
+                                                            </span>
+                                                            {isQM && (
+                                                                <span className="px-2 py-1 rounded text-[10px] font-black uppercase bg-fuchsia-100 text-fuchsia-700" title="Quota Mensuel Atteint">
+                                                                    QM
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="p-4 text-right">
                                                         <button 
