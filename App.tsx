@@ -2191,6 +2191,9 @@ const App: React.FC = () => {
                                       } else if (isClosed) {
                                           bgColor = '#f1f5f9'; // slate-100 for global closures
                                           cellStyles += " opacity-40";
+                                      } else if (isQuotaReachedUser) {
+                                          bgColor = '#f8fafc'; // slate-50
+                                          cellStyles += " opacity-80 cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
                                       } else {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-70";
@@ -2223,7 +2226,7 @@ const App: React.FC = () => {
                                   } else if (!open) { 
                                       bgColor = '#f1f5f9'; // slate-100 for grayed out closed cells
                                       cellStyles += " opacity-40 cursor-not-allowed";
-                                  } else if (isQuotaReachedUser && !isConsultationMode) {
+                                  } else if (isQuotaReachedUser) {
                                       bgColor = '#f8fafc'; // slate-50
                                       cellStyles += " opacity-80 cursor-not-allowed cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
                                   } else { 
@@ -2249,7 +2252,7 @@ const App: React.FC = () => {
                                       key={col.id} 
                                       title={
                                           (!isConsultationMode && isBlocked) ? "Indisponibilité" : (
-                                              isQuotaReachedUser && !isConsultationMode && !myPending && !isAssignedToMe ? "Quota atteint" : undefined
+                                              isQuotaReachedUser && !myPending && !isAssignedToMe ? "Quota atteint" : undefined
                                           )
                                       }
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
