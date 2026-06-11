@@ -2188,12 +2188,15 @@ const App: React.FC = () => {
                                       } else if (assignedList.length > 0) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-100 text-slate-900";
+                                      } else if (isBlocked) {
+                                          bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #94a3b8 calc(50% - 1.5px), #94a3b8 calc(50% + 1.5px), transparent calc(50% + 1.5px)), #f1f5f9`;
+                                          cellStyles += " opacity-60";
                                       } else if (isClosed) {
                                           bgColor = '#f1f5f9'; // slate-100 for global closures
                                           cellStyles += " opacity-40";
                                       } else if (isQuotaReachedUser) {
-                                          bgColor = '#f8fafc'; // slate-50
-                                          cellStyles += " opacity-80 cursor-help bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"; 
+                                          bgColor = '#ffffff'; // explicitly white
+                                          cellStyles += " cursor-help"; 
                                       } else {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-70";
@@ -2235,13 +2238,13 @@ const App: React.FC = () => {
                                   }
 
                                   if (!isConsultationMode && isBlocked) {
-                                      bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #ef4444 calc(50% - 1.5px), #ef4444 calc(50% + 1.5px), transparent calc(50% + 1.5px)), ${bgColor}`;
+                                      bgColor = `linear-gradient(to bottom left, transparent calc(50% - 1.5px), #94a3b8 calc(50% - 1.5px), #94a3b8 calc(50% + 1.5px), transparent calc(50% + 1.5px)), ${bgColor}`;
                                       if (!myPending && !hasMultiplePending) {
                                           cellStyles = cellStyles.replace('cursor-pointer', 'cursor-not-allowed');
                                       }
                                   }
 
-                                  const isColoredCase = exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE' || myPending || hasMultiplePending || assignedList.length > 0 || (!isConsultationMode && isBlocked);
+                                  const isColoredCase = exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE' || myPending || hasMultiplePending || assignedList.length > 0 || isBlocked;
                                   const skipWeekendGradient = (isClosed || !open || (isQuotaReachedUser && !isColoredCase));
 
                                   if (isWeekendGuard && !skipWeekendGradient) {
