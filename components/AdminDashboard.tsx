@@ -2899,10 +2899,11 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
 
     const handleRefreshPriorities = async () => {
         if (!activeRound) return;
-        const confirmed = window.confirm("Êtes-vous sûr de vouloir supprimer tous les vœux QM en attente et recalculer les priorités (réindexer de 1 à N) pour les vœux restants de chaque médecin ?");
+        const confirmed = window.confirm("Êtes-vous sûr de vouloir supprimer tous les vœux en attente incompatibles (QM ou conflit d'horaires) et recalculer les priorités (réindexer de 1 à N) pour les vœux restants de chaque médecin ?");
         if (!confirmed) return;
 
         const pendingChoices = choices.filter((c: any) => c.status === 'PENDING' && c.roundId === activeRound.id);
+        const maxOverlapMinutes = activeRound.maxOverlapMinutes || 0;
         
         const choicesToDeleteIds: string[] = [];
         const choicesToKeep: any[] = [];
@@ -2910,9 +2911,32 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         for (const choice of pendingChoices) {
             const userRole = users.find((u: any) => u.trigram === choice.userTrigram)?.role || 'DOCTOR';
             const choiceDate = new Date(choice.year, choice.month, choice.row, 0, 0, 0);
+            
+            // Check QM
             const isQM = quotas && quotas.length > 0 && checkQuotaReached(choice.col, choiceDate, userRole, choices, quotas);
 
-            if (isQM) {
+            // Check Time Conflict
+            let hasTimeConflict = false;
+            const choiceTimeRange = columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_time_range || COLUMNS.find(c => c.id === choice.col)?.timeRange;
+
+            if (choiceTimeRange) {
+                const userAssignedOrValidated = choices.filter((c: any) => 
+                    c.userTrigram === choice.userTrigram && 
+                    (c.status === 'ASSIGNED' || c.status === 'VALIDATED') && 
+                    c.month === choice.month && 
+                    c.year === choice.year
+                );
+                
+                for (const assignedChoice of userAssignedOrValidated) {
+                    const existingTimeRange = columnConfigs.find((c: any) => c.column_id === assignedChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
+                    if (existingTimeRange && doRangesOverlap(choice.row, choiceTimeRange, assignedChoice.row, existingTimeRange, maxOverlapMinutes)) {
+                        hasTimeConflict = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isQM || hasTimeConflict) {
                 choicesToDeleteIds.push(choice.id);
             } else {
                 choicesToKeep.push(choice);
@@ -2922,8 +2946,8 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
         if (choicesToDeleteIds.length > 0) {
             const { error: deleteError } = await supabase.from('choices').delete().in('id', choicesToDeleteIds);
             if (deleteError) {
-                console.error("Erreur lors de la suppression des vœux QM", deleteError);
-                alert("Erreur lors de la suppression des vœux QM");
+                console.error("Erreur lors de la suppression des vœux incompatibles", deleteError);
+                alert("Erreur lors de la suppression des vœux incompatibles");
                 return;
             }
         }
@@ -2976,9 +3000,9 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
             }
             setChoices(updatedChoicesLocally);
             logAction("REINDEX_PRIORITIES", { count: updates.length, deletedQM: choicesToDeleteIds.length });
-            alert(`${choicesToDeleteIds.length} vœux QM supprimés. Priorités réindexées avec succès pour ${updates.length} choix en attente.`);
+            alert(`${choicesToDeleteIds.length} vœux incompatibles supprimés. Priorités réindexées avec succès pour ${updates.length} choix en attente.`);
         } else {
-            alert("Aucune suppression QM ni réindexation nécessaire.");
+            alert("Aucune suppression ni réindexation nécessaire.");
         }
     };
     const [isCompareFullscreen, setIsCompareFullscreen] = useState(false);
@@ -3971,7 +3995,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                             </div>
                             <div>
                                 <h3 className="text-xl font-black uppercase tracking-tight text-slate-900">Maintenance</h3>
-                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Supprimer les vœux en attente dont le quota (QM) est atteint et actualiser l'ordre de priorité (1 à N) pour les vœux restants.</p>
+                                <p className="text-slate-400 text-sm font-medium mt-2 max-w-xs mx-auto">Supprimer les vœux en attente incompatibles (quota QM atteint ou conflit d'horaires) et actualiser l'ordre de priorité (1 à N) pour les vœux restants.</p>
                             </div>
                             <div className="w-full max-w-md">
                                 <button onClick={handleRefreshPriorities} className="w-full py-4 bg-rose-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-rose-600 transition-all shadow-lg shadow-rose-900/20">

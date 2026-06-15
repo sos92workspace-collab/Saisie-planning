@@ -246,7 +246,7 @@ export const checkQuotaReached = (
     if (!quota) return false;
 
     // Filter assigned tasks for this column and role for the whole month
-    const roleAssigned = allAssigned.filter(c => c.col === colId && c.year === year && c.month === month && c.userRole === role && c.status === 'ASSIGNED');
+    const roleAssigned = allAssigned.filter(c => c.col === colId && c.year === year && c.month === month && c.userRole === role && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
     
     // Check global limit
     const globalLimit = role === 'DOCTOR' ? quota.global_doctor : quota.global_substitute;
