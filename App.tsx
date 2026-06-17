@@ -917,24 +917,27 @@ const App: React.FC = () => {
     if ((viewMode === ViewMode.APP || viewMode === ViewMode.LIST_INPUT) && (!currentUser || !shiftGlobalSettings)) return false;
 
     if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
-        // Applique les mêmes paramètres généraux (Titulaires) pour tous, y compris les remplaçants
-        const isTargetActive = 
-            (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_doctor_normal_active :
-             step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_good_active :
-             step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false);
+        const isSubstitute = currentUser.role === 'SUBSTITUTE';
+        const isTargetActive = isSubstitute
+            ? (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_substitute_normal_active :
+               step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_good_active :
+               step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_bad_active : false)
+            : (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_doctor_normal_active :
+               step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_good_active :
+               step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false);
         
         if (isTargetActive && shiftDefinitions.length > 0) {
             const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
             for (const shift of matchingShifts) {
                 // Count how many guards are taken for this specific day within this shift range
-                // MODIFIED: Count ALL ASSIGNED or VALIDATED, ignore role, ignore PENDING
+                // Count ALL ASSIGNED or VALIDATED, ignore role, ignore PENDING
                 const takenCount = choices.filter(c => 
                     c.row === day && c.month === month && c.year === year &&
                     c.col >= shift.start_col && c.col <= shift.end_col &&
                     (c.status === 'ASSIGNED' || c.status === 'VALIDATED')
                 ).length;
                 
-                const max = shiftGlobalSettings.target_doctor_max;
+                const max = isSubstitute ? shiftGlobalSettings.target_substitute_max : shiftGlobalSettings.target_doctor_max;
                 if (takenCount >= max) return false;
             }
         }
