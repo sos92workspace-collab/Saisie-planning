@@ -2128,7 +2128,7 @@ const App: React.FC = () => {
                             const rowHeaderBg = isHoveredRow ? 'bg-blue-100 text-blue-800' : (isWeekend ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900');
                             
                             return (
-                              <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isWeekend ? 'bg-red-50/30' : ''}`}>
+                              <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isWeekend ? 'bg-red-100/50' : ''}`}>
                                 <td className={`sticky left-0 border-r border-b border-slate-200 text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${rowHeaderBg}`}>
                                     <div className="flex items-center justify-center gap-1">
                                         <span className="text-[12px] md:text-[10px] font-normal opacity-70">{dayName}</span>
@@ -2163,7 +2163,7 @@ const App: React.FC = () => {
                                   const isAssignedToMe = assignedList.some(a => a.userTrigram === trigram.toUpperCase());
                                   const isAssignedToOther = assignedList.length > 0 && !isAssignedToMe;
                                   
-                                  let cellStyles = "border-r border-b border-slate-200 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
+                                  let cellStyles = "border-r border-b border-slate-200 relative text-center transition-all min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] ";
                                   if (isCrosshair) cellStyles += "after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none ";
                                   let bgColor = '#FFFFFF';
                                   
@@ -2310,7 +2310,7 @@ const App: React.FC = () => {
                                   const skipWeekendGradient = (isClosed || (isQuotaReachedUser && !isColoredCase));
 
                                   if (isWeekendGuard && !skipWeekendGradient) {
-                                      bgColor = `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.15)), ${bgColor}`;
+                                      bgColor = `linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)), ${bgColor}`;
                                   }
 
                                   if(assignedList.length > 0 && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";

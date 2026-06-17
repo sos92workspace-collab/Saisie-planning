@@ -276,7 +276,7 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ supabase, logActio
                                     const rowHeaderBg = isHoveredRow ? 'bg-blue-100 text-blue-800' : (isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900');
                                     
                                     return (
-                                        <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                        <tr key={day} className={`h-10 md:h-8 hover:bg-slate-50/50 ${isOffDay ? 'bg-red-100/50' : ''}`}>
                                             <td className={`sticky left-0 border-r border-b border-slate-200 text-center z-10 w-20 md:w-16 h-10 md:h-8 font-black ${rowHeaderBg}`}>
                                                 <div className="flex items-center justify-center gap-1">
                                                     <span className="text-[10px] md:text-[8px] font-normal opacity-70">{dayName}</span>
@@ -292,7 +292,7 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ supabase, logActio
                                                 const assignedList = choices.filter((ch: any) => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
                                                 const isAssignedToHighlighted = highlightedTrigram && assignedList.some((a: any) => (a.userTrigram || a.user_trigram) === highlightedTrigram);
                                                 
-                                                let cellStyles = "border-r border-b border-slate-200 relative text-center transition-all min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] ";
+                                                let cellStyles = "border-r border-b border-slate-200 relative text-center transition-all min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] ";
                                                 if (isCrosshair) cellStyles += "after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none ";
                                                 let bgColor = '#FFFFFF';
                                                 

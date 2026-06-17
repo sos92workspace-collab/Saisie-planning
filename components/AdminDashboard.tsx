@@ -2774,7 +2774,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                     const rowHeaderBg = isHoveredRow ? 'bg-blue-100 text-blue-800' : (isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900');
                                     
                                     return (
-                                        <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                        <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-100/50' : ''}`}>
                                             <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-5 font-black ${rowHeaderBg}`}>
                                                 <div className="flex items-center justify-center gap-0.5">
                                                     <span className="text-[7px] font-normal opacity-70">{dayName}</span>
@@ -2816,7 +2816,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                 }
                                                 
                                                 if (isWeekendGuard) {
-                                                    bgColor = `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), ${bgColor}`;
+                                                    bgColor = `linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)), ${bgColor}`;
                                                 }
                                                 
                                                 const style: React.CSSProperties = {
@@ -2830,7 +2830,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
@@ -4308,7 +4308,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                 const rowHeaderBg = isOffDay ? 'bg-red-100 text-red-600' : 'bg-white text-slate-900';
 
                                                 return (
-                                                    <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-50/30' : ''}`}>
+                                                    <tr key={day} className={`h-5 hover:bg-slate-50 ${isOffDay ? 'bg-red-100/50' : ''}`}>
                                                         <td className={`sticky left-0 border-r border-b text-center z-10 w-20 md:w-16 h-5 font-black ${rowHeaderBg}`}>
                                                             <div className="flex items-center justify-center gap-0.5">
                                                                 <span className="text-[7px] font-normal opacity-70">{dayName}</span>
@@ -4369,7 +4369,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                             };
 
                                                             return (
-                                                                <td key={col.id} onClick={handleCellClick} className={`border-r border-b border-slate-200 text-center relative min-w-[70px] w-[70px] md:min-w-[44px] md:w-[44px] align-middle overflow-hidden bg-white`}>
+                                                                <td key={col.id} onClick={handleCellClick} className={`border-r border-b border-slate-200 text-center relative min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] align-middle overflow-hidden bg-white`}>
                                                                     <div className={`absolute inset-0 flex items-center justify-center ${cellClasses}`}>
                                                                         {textContent}
                                                                         {state !== 'MATCH' && state !== 'EMPTY' && !isResolved && <div className={`absolute top-0 right-0 w-4 h-4 -mr-2 -mt-2 rotate-45 opacity-20 ${state==='EXTRA'?'bg-blue-500':state==='MISSING'?'bg-red-500':'bg-orange-500'}`}></div>}

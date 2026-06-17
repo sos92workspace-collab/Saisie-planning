@@ -17,7 +17,7 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
   return (
     <thead className="sticky top-0 z-40 shadow-md bg-white">
       {/* Single Row: Date & Columns */}
-      <tr className="bg-white text-slate-900 text-xs md:text-[10px] font-bold border-b border-slate-200 h-8">
+      <tr className="bg-white text-slate-900 text-xs md:text-[10px] font-bold border-b border-slate-200">
         <th className="sticky left-0 z-50 w-20 md:w-16 bg-white border-r border-slate-200 uppercase tracking-tighter shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs md:text-[11px] align-middle">
             Date
         </th>
@@ -40,10 +40,18 @@ export const MatrixHeader: React.FC<Props> = ({ columns, isEditClosuresMode, onC
           else if (isColClosedForStep) textClass = 'text-slate-400';
 
           return (
-          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-200 min-w-[60px] w-[60px] md:min-w-[28px] md:w-[28px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer' : ''} ${bgClass}`}>
-            <div className={`flex flex-col leading-none py-0.5 h-full justify-center ${isEditClosuresMode ? '' : 'cursor-help'}`}>
-              <span className={`text-[10px] md:text-[8px] font-normal mb-0.5 ${isColClosedForStep ? 'text-slate-300' : 'text-slate-400'}`}>{col.id}</span>
-              <span className={`font-black text-[12px] md:text-[10px] ${textClass}`}>{col.label}</span>
+          <th key={col.id} onClick={() => isEditClosuresMode && onColumnClick && month !== undefined && year !== undefined && onColumnClick(col.id, month, year)} className={`group border-r border-slate-200 min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] text-center p-0 align-middle transition-all relative ${isEditClosuresMode ? 'cursor-pointer' : ''} ${bgClass}`}>
+            <div className={`flex flex-col h-full leading-none justify-stretch ${isEditClosuresMode ? '' : 'cursor-help'}`}>
+              {/* Upper subdivision: Col number */}
+              <div className="border-b border-slate-200/80 py-1 bg-slate-50/50 flex items-center justify-center font-mono font-black text-xs md:text-[10px] text-slate-500 tracking-tight">
+                {col.id}
+              </div>
+              {/* Lower subdivision: Col title */}
+              <div className="py-2.5 flex items-center justify-center flex-1 bg-white overflow-hidden">
+                <span className={`font-black whitespace-nowrap ${textClass} ${col.label.length > 3 ? 'text-[11px] md:text-[8.5px] tracking-tighter' : 'text-sm md:text-[11px] tracking-tight'}`}>
+                  {col.label}
+                </span>
+              </div>
             </div>
             
             {/* Tooltip on Hover - Positioned BELOW (top-full) to avoid being cut off */}
