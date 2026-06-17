@@ -499,7 +499,7 @@ const App: React.FC = () => {
         const { data: sd } = await supabase.from('shift_definitions').select('*');
         const { data: sgs } = await supabase.from('shift_global_settings').select('*').eq('id', 1).single();
         const { data: unav } = await supabase.from('unavailabilities').select('*').eq('user_trigram', trigram.toUpperCase());
-        const assigned = await fetchAll(supabase, 'choices', q => q.eq('status', 'ASSIGNED').eq('round_id', currentRoundId));
+        const assigned = await fetchAll(supabase, 'choices', q => q.in('status', ['ASSIGNED', 'VALIDATED']).eq('round_id', currentRoundId));
         
         const latestGlobalClosures = gc ? gc.map((g: any) => ({ ...g, month: g.month !== null ? g.month - 1 : null })) : [];
         const latestUnavailabilities = unav ? unav.map((u: any) => ({
@@ -523,7 +523,8 @@ const App: React.FC = () => {
                 a.userTrigram === trigram.toUpperCase() && 
                 a.row === choice.row && 
                 a.month === choice.month && 
-                a.year === choice.year
+                a.year === choice.year &&
+                (a.status === 'ASSIGNED' || a.status === 'VALIDATED')
             );
 
             const choiceTimeRange = columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_time_range || COLUMNS.find(c => c.id === choice.col)?.timeRange;
@@ -916,28 +917,24 @@ const App: React.FC = () => {
     if ((viewMode === ViewMode.APP || viewMode === ViewMode.LIST_INPUT) && (!currentUser || !shiftGlobalSettings)) return false;
 
     if (currentUser && currentUser.role !== 'ADMIN' && shiftGlobalSettings) {
-        const isDoctor = currentUser.role === 'DOCTOR';
-        const isTargetActive = isDoctor ? 
+        // Applique les mêmes paramètres généraux (Titulaires) pour tous, y compris les remplaçants
+        const isTargetActive = 
             (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_doctor_normal_active :
              step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_good_active :
-             step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false)
-            : 
-            (step === AppStep.NORMAL_SELECTION ? shiftGlobalSettings.target_substitute_normal_active :
-             step === AppStep.GOOD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_good_active :
-             step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_substitute_bad_active : false);
+             step === AppStep.BAD_BONUS_SELECTION ? shiftGlobalSettings.target_doctor_bad_active : false);
         
         if (isTargetActive && shiftDefinitions.length > 0) {
             const matchingShifts = shiftDefinitions.filter(s => colId >= s.start_col && colId <= s.end_col);
             for (const shift of matchingShifts) {
                 // Count how many guards are taken for this specific day within this shift range
-                // MODIFIED: Count ALL ASSIGNED, ignore role, ignore PENDING
+                // MODIFIED: Count ALL ASSIGNED or VALIDATED, ignore role, ignore PENDING
                 const takenCount = choices.filter(c => 
                     c.row === day && c.month === month && c.year === year &&
                     c.col >= shift.start_col && c.col <= shift.end_col &&
-                    c.status === 'ASSIGNED'
+                    (c.status === 'ASSIGNED' || c.status === 'VALIDATED')
                 ).length;
                 
-                const max = isDoctor ? shiftGlobalSettings.target_doctor_max : shiftGlobalSettings.target_substitute_max;
+                const max = shiftGlobalSettings.target_doctor_max;
                 if (takenCount >= max) return false;
             }
         }
@@ -1200,7 +1197,7 @@ const App: React.FC = () => {
 
   const handleCellClick = useCallback(async (row: number, colId: number, month: number, year: number, isDoubleClick: boolean = false, explicitPriority?: number) => {
     if (exchangeMode !== 'INACTIVE') {
-        const clickedAssigned = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        const clickedAssigned = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
 
         if (exchangeMode === 'SELECT_OWN') {
             if (clickedAssigned && clickedAssigned.userTrigram === trigram.toUpperCase()) {
@@ -1245,7 +1242,7 @@ const App: React.FC = () => {
     }
 
     if (takeMode === 'SELECT_TARGET') {
-        const isAssigned = choices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        const isAssigned = choices.some(c => c.row === row && c.col === colId && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
         if (isAssigned) {
             alert("Cette garde est déjà assignée.");
             return;
@@ -1283,7 +1280,7 @@ const App: React.FC = () => {
     
     if (existing) {
        if (isDoubleClick) return;
-       if (existing.status === 'ASSIGNED') {
+       if (existing.status === 'ASSIGNED' || existing.status === 'VALIDATED') {
            alert("Impossible de modifier une garde validée. Veuillez contacter l'administrateur.");
            return;
        }
@@ -1333,7 +1330,7 @@ const App: React.FC = () => {
 
     // Removed strict blocking for unavailabilities as per user request
     // Only block if cell is ALREADY assigned to someone else
-    const assignedToOther = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED' && c.userTrigram !== cleanTri);
+    const assignedToOther = choices.find(c => c.row === row && c.col === colId && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED') && c.userTrigram !== cleanTri);
     if (assignedToOther) {
         return; 
     }
@@ -1375,7 +1372,7 @@ const App: React.FC = () => {
 
     if (baseColDef) {
         // Check specifically for overlaps with ALREADY ASSIGNED shifts for the SAME user
-        const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && c.status === 'ASSIGNED');
+        const assignedSameDay = choices.filter(c => c.userTrigram === cleanTri && c.row === row && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
         
         for (const assignedChoice of assignedSameDay) {
             const existingTimeRange = columnConfigs.find((c: any) => c.column_id === assignedChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === assignedChoice.col)?.timeRange;
@@ -1715,6 +1712,44 @@ const App: React.FC = () => {
       )}
 
       {!isConsultationMode && <RoundInfo round={activeRound} stepInstruction={currentStepInstruction} />}
+
+      {/* Barre de navigation dédiée (Desktop) */}
+      {exchangeMode === 'INACTIVE' && viewMode !== ViewMode.LOGIN && (
+          <div className="bg-slate-50/80 backdrop-blur-sm border-b px-6 py-2.5 items-center justify-between z-40 shrink-0 hidden md:flex shadow-sm">
+              <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[11px] shadow-inner border ${currentUser?.role === 'SUBSTITUTE' ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                        {trigram.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                        <div className="text-[12px] font-black uppercase text-slate-900 leading-none mb-1">{trigram.toUpperCase()}</div>
+                        <div className={`text-[8px] font-black uppercase tracking-widest leading-none ${currentUser?.role === 'SUBSTITUTE' ? 'text-orange-600' : 'text-blue-600'}`}>
+                          {currentUser?.role === 'SUBSTITUTE' ? 'Remplaçant' : 'Titulaire'}
+                        </div>
+                    </div>
+                  </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                  {!isConsultationMode && currentStep > AppStep.NORMAL_SELECTION && (
+                     <button onClick={goToPrevStep} className="px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
+                  )}
+
+                  {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
+                      <button onClick={goToNextStep} className="px-8 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-md whitespace-nowrap transition-colors">Suivant</button>
+                  ) : (
+                      <button onClick={handleFinalValidation} className="px-8 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-md whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
+                  ))}
+                  
+                  <div className="w-px h-6 bg-slate-200 mx-2"></div>
+                  
+                  <button onClick={handleLogout} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-2" title="Déconnexion">
+                      <span className="text-[10px] font-black uppercase">Quitter</span>
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg>
+                  </button>
+              </div>
+          </div>
+      )}
       
       <header className="bg-white border-b px-4 h-[72px] flex items-center justify-between z-30 shrink-0 shadow-sm overflow-x-auto">
         <div className="flex items-center gap-6">
@@ -1862,23 +1897,7 @@ const App: React.FC = () => {
 
           {exchangeMode === 'INACTIVE' && (
               <>
-                  <div className="text-right hidden sm:block">
-                    <div className="text-[12px] font-black uppercase text-slate-900">{trigram.toUpperCase()}</div>
-                    <div className={`text-[7px] font-black uppercase tracking-widest ${currentUser?.role === 'SUBSTITUTE' ? 'text-orange-600' : 'text-blue-600'}`}>
-                      {currentUser?.role === 'SUBSTITUTE' ? 'Remplaçant' : 'Titulaire'}
-                    </div>
-                  </div>
-                  
-                  {!isConsultationMode && currentStep > AppStep.NORMAL_SELECTION && (
-                     <button onClick={goToPrevStep} className="hidden md:block px-6 py-2 bg-white text-slate-600 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all whitespace-nowrap">Précédent</button>
-                  )}
-
-                  {!isConsultationMode && (currentStep < AppStep.RECAP_ORDERING ? (
-                      <button onClick={goToNextStep} className="hidden md:block px-6 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase hover:bg-blue-700 shadow-lg whitespace-nowrap">Suivant</button>
-                  ) : (
-                      <button onClick={handleFinalValidation} className="hidden md:block px-6 py-2 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 shadow-lg whitespace-nowrap transition-all animate-pulse">Valider mes choix</button>
-                  ))}
-                  <button onClick={handleLogout} className="p-2 text-slate-300 hover:text-red-500"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
+                  <button onClick={handleLogout} className="p-2 text-slate-300 hover:text-red-500 md:hidden flex items-center gap-2 ml-2"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
               </>
           )}
         </div>
@@ -2131,7 +2150,7 @@ const App: React.FC = () => {
                                   const isQuotaReachedApp = isQuotaDoctorReached || isQuotaSubReached;
                                   
                                   // Récupérer une garde validée (ASSIGNED) sur cette case
-                                  const rawAssignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && ch.status === 'ASSIGNED');
+                                  const rawAssignedList = choices.filter(ch => ch.row === day && ch.col === col.id && ch.month === month && ch.year === year && (ch.status === 'ASSIGNED' || ch.status === 'VALIDATED'));
                                   const assignedList = rawAssignedList.filter((a, index, self) => 
                                       index === self.findIndex((t) => t.userTrigram === a.userTrigram)
                                   );

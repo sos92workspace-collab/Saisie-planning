@@ -420,7 +420,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
             />
           )}
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
-          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} quotas={quotas} />}
+          {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} quotas={quotas} columnConfigs={columnConfigs} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
           {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
@@ -2875,7 +2875,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
   );
 };
 
-const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction, users, quotas }: any) => {
+const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound, logAction, users, quotas, columnConfigs }: any) => {
     const [subTab, setSubTab] = useState<'journal' | 'data' | 'history'>('journal');
     const [showExportModal, setShowExportModal] = useState(false);
     const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'ASSIGNED' | 'REFUSED'>('ALL');
@@ -2896,6 +2896,7 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
     const [compareData, setCompareData] = useState<any[] | null>(null);
     const [compareMonthYear, setCompareMonthYear] = useState<string>('ALL');
     const [resolvedCompareCells, setResolvedCompareCells] = useState<Record<string, boolean>>({});
+    const [confirmModalData, setConfirmModalData] = useState<any | null>(null);
 
     const handleRefreshPriorities = async () => {
         if (!activeRound) return;
@@ -3788,21 +3789,32 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                                         </div>
                                                     </td>
                                                     <td className="p-4 text-right">
-                                                        <button 
-                                                            onClick={async () => {
-                                                                if(!window.confirm(c.status === 'ASSIGNED' ? "Supprimer cette garde attribuée ?" : "Supprimer ce vœu ?")) return;
-                                                                await supabase.from('choices').delete().eq('id', c.id);
-                                                                setChoices((prev: any[]) => prev.filter((x: any) => x.id !== c.id));
-                                                                if (c.status === 'ASSIGNED') {
-                                                                    logAction('SUPPRESSION_GARDE', { user: c.userTrigram, date: `${c.row}/${c.month+1}/${c.year}`, col: c.col });
-                                                                } else {
-                                                                    logAction('SUPPRESSION_VOEU', { user: c.userTrigram, date: `${c.row}/${c.month+1}/${c.year}`, col: c.col });
-                                                                }
-                                                            }}
-                                                            className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                        >
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            {c.status === 'PENDING' && (
+                                                                <button 
+                                                                    onClick={() => setConfirmModalData(c)}
+                                                                    className="p-2 text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                                                    title="Attribuer cette garde"
+                                                                >
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                                                </button>
+                                                            )}
+                                                            <button 
+                                                                onClick={async () => {
+                                                                    if(!window.confirm(c.status === 'ASSIGNED' ? "Supprimer cette garde attribuée ?" : "Supprimer ce vœu ?")) return;
+                                                                    await supabase.from('choices').delete().eq('id', c.id);
+                                                                    setChoices((prev: any[]) => prev.filter((x: any) => x.id !== c.id));
+                                                                    if (c.status === 'ASSIGNED') {
+                                                                        logAction('SUPPRESSION_GARDE', { user: c.userTrigram, date: `${c.row}/${c.month+1}/${c.year}`, col: c.col });
+                                                                    } else {
+                                                                        logAction('SUPPRESSION_VOEU', { user: c.userTrigram, date: `${c.row}/${c.month+1}/${c.year}`, col: c.col });
+                                                                    }
+                                                                }}
+                                                                className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                            >
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                                 );
@@ -4069,6 +4081,94 @@ const WishesPanel = ({ choices, setChoices, supabase, onRequestHelp, activeRound
                                 className="flex-1 py-3 px-4 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20"
                             >
                                 Confirmer l'import
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Pop-up de confirmation d'attribution */}
+            {confirmModalData && (
+                <div className="fixed inset-0 z-[150] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+                        {/* Header */}
+                        <div className="bg-emerald-50 p-6 border-b border-emerald-100 flex items-center gap-4">
+                            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 shrink-0 shadow-inner">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-emerald-900 uppercase tracking-tight">Attribuer la garde</h3>
+                                <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-wide">Validation et affectation d'un vœu</p>
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-4">
+                            <p className="text-xs font-bold text-slate-600 leading-relaxed">
+                                Êtes-vous sûr de vouloir attribuer définitivement cette garde au médecin ? Cette action changera le statut du vœu en <span className="text-emerald-600 font-black uppercase">Validé</span>.
+                            </p>
+
+                            {/* Info Card */}
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/60 space-y-3 shadow-inner">
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 text-[10px]">
+                                    <span className="font-bold text-slate-400 uppercase tracking-wider">Médecin</span>
+                                    <span className="font-black text-slate-800 text-xs bg-white border px-2 py-0.5 rounded-lg shadow-sm uppercase">{confirmModalData.userTrigram}</span>
+                                </div>
+
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 text-[10px]">
+                                    <span className="font-bold text-slate-400 uppercase tracking-wider">Priorité (Tri)</span>
+                                    <span className="font-black text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg text-[10px]">
+                                        Rang {confirmModalData.groupIndex}.{confirmModalData.subRank}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60 text-[10px]">
+                                    <span className="font-bold text-slate-400 uppercase tracking-wider text-right">Date</span>
+                                    <span className="font-bold text-slate-700 text-right">
+                                        {new Date(confirmModalData.year, confirmModalData.month, confirmModalData.row).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </span>
+                                </div>
+
+                                <div className="flex justify-between items-center text-[10px]">
+                                    <span className="font-bold text-slate-400 uppercase tracking-wider">Créneau</span>
+                                    <span className="font-bold text-slate-700 flex items-center gap-1.5 justify-end">
+                                        <span className="font-black text-slate-800">Col {confirmModalData.col}</span>
+                                        {confirmModalData.colLabel && (
+                                            <span className="px-2 py-0.5 bg-slate-200/60 rounded text-[9px] text-slate-500 font-black">{confirmModalData.colLabel}</span>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                            <button 
+                                onClick={() => setConfirmModalData(null)} 
+                                className="px-5 py-2 text-slate-500 hover:text-slate-800 text-[10px] font-black uppercase tracking-wider transition-colors hover:bg-slate-100 rounded-xl"
+                            >
+                                Annuler
+                            </button>
+                            <button 
+                                onClick={async () => {
+                                    const targetChoice = confirmModalData;
+                                    const { error } = await supabase.from('choices').update({ status: 'ASSIGNED' }).eq('id', targetChoice.id);
+                                    if (error) {
+                                        console.error("Erreur d'attribution", error);
+                                        alert("Une erreur est survenue lors de l'attribution de la garde.");
+                                    } else {
+                                        setChoices((prev: any[]) => prev.map((x: any) => x.id === targetChoice.id ? { ...x, status: 'ASSIGNED' } : x));
+                                        logAction('VALIDATION_GARDE', { 
+                                            user: targetChoice.userTrigram, 
+                                            date: `${targetChoice.row}/${targetChoice.month + 1}/${targetChoice.year}`, 
+                                            col: targetChoice.col 
+                                        });
+                                    }
+                                    setConfirmModalData(null);
+                                }} 
+                                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shadow-md shadow-emerald-600/10"
+                            >
+                                Confirmer
                             </button>
                         </div>
                     </div>

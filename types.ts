@@ -26,7 +26,7 @@ export interface ColumnDefinition {
 }
 
 export type ChoiceCategory = 'normal' | 'good_bonus' | 'bad_bonus';
-export type ChoiceStatus = 'PENDING' | 'ASSIGNED' | 'REFUSED' | 'REFUSED_ALTERNATIVE' | 'ARCHIVED';
+export type ChoiceStatus = 'PENDING' | 'ASSIGNED' | 'REFUSED' | 'REFUSED_ALTERNATIVE' | 'ARCHIVED' | 'VALIDATED';
 
 export interface Choice {
   id: string;

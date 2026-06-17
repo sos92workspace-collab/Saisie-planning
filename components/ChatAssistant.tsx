@@ -265,7 +265,7 @@ export const ChatAssistant: React.FC<Props> = ({
           } else if (t.includes('SUPP')) {
               eqOptions = ["2 GC + 2 B (Avec Visite)", "0 GC + 1 B (Sans Visite)"];
           } else if (t.includes('REMPLAÇANT') || t.includes('REMPLACANT')) {
-              eqOptions = ["1 GC + 2 B"];
+              eqOptions = ["1 CG + 1 B + 1 N"];
           } else if (t.includes('BONUS')) {
               eqOptions = ["1 B"];
           } else {
@@ -488,7 +488,7 @@ Pour CHAQUE choix principal d'une catégorie (chaque 'priority' unique au sein d
           setPreferredType(userText);
           
           let catsToProcess: string[] = [];
-          if (selectedEquation.includes('GC')) catsToProcess.push('normal');
+          if (selectedEquation.includes('GC') || selectedEquation.includes('CG')) catsToProcess.push('normal');
           if (selectedEquation.includes('B') && !selectedEquation.includes('1 B')) catsToProcess.push('good_bonus'); 
           if (selectedEquation.includes('B') && selectedEquation.includes('1 B')) catsToProcess.push('good_bonus');
           if (selectedEquation.includes('N')) catsToProcess.push('bad_bonus');
@@ -904,7 +904,7 @@ Pour CHAQUE choix principal d'une catégorie (chaque 'priority' unique au sein d
       // D'abord vérifier si c'est une réponse de Q_PREF_RANKING
       if (step === 'Q_PREF_RANKING') {
           let currentCat = '';
-          if (selectedEquation.includes('GC') && !userRankings['normal']) currentCat = 'normal';
+          if ((selectedEquation.includes('GC') || selectedEquation.includes('CG')) && !userRankings['normal']) currentCat = 'normal';
           else if (selectedEquation.includes('B') && !userRankings['good_bonus']) currentCat = 'good_bonus';
           else if (selectedEquation.includes('N') && !userRankings['bad_bonus']) currentCat = 'bad_bonus';
           
