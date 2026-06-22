@@ -388,7 +388,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} logAction={logAction} />}
           {activeTab === AdminTab.CONFIG && (
             <ConfigPanel 
