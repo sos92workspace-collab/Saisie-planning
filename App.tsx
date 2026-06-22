@@ -1526,7 +1526,7 @@ const App: React.FC = () => {
 
   if (isInitialLoading && viewMode === ViewMode.LOGIN) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6">
+      <div className="h-[100dvh] flex flex-col items-center justify-center bg-slate-900 text-white p-6">
         <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
         <h1 className="text-xl font-black uppercase tracking-[0.3em] animate-pulse">SOS 92</h1>
       </div>
@@ -1539,7 +1539,7 @@ const App: React.FC = () => {
 
   if (viewMode === ViewMode.LOGIN) {
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col xl:flex-row items-center justify-center p-6 gap-12 text-slate-900 overflow-y-auto">
+      <div className="min-h-[100dvh] bg-slate-100 flex flex-col xl:flex-row items-center justify-center p-6 gap-12 text-slate-900 overflow-y-auto">
         <form onSubmit={(e) => handleLogin(e, ViewMode.APP)} className="bg-white p-10 md:p-12 rounded-[50px] md:rounded-[60px] shadow-2xl w-full max-w-sm space-y-8 border-t-[12px] border-slate-900 shrink-0">
           <div className="text-center"><h1 className="text-4xl font-black tracking-tighter uppercase mb-2">SOS 92</h1></div>
           {loginError && <div className="p-3 bg-red-50 text-red-500 rounded-2xl text-[10px] font-bold text-center uppercase">{loginError}</div>}
@@ -1580,7 +1580,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden font-sans text-slate-900 relative">
+    <div className="flex flex-col h-[100dvh] bg-white overflow-hidden font-sans text-slate-900 relative">
       {isDataSyncing && <div className="absolute top-0 left-0 w-full h-1 bg-blue-600 z-[100] animate-pulse"></div>}
       
       {!accessStatus.allowed && !isConsultationMode && (
@@ -1987,7 +1987,7 @@ const App: React.FC = () => {
 
       {/* Mobile Bottom Navigation */}
       {!isConsultationMode && viewMode !== ViewMode.LOGIN && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 flex justify-between items-center z-[90] shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)] pb-safe">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex justify-between items-center z-[90] shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)]">
             {currentStep > AppStep.NORMAL_SELECTION ? (
                 <button onClick={goToPrevStep} className="flex-1 py-3.5 mr-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase active:bg-slate-200 transition-colors text-center shadow-sm">Précédent</button>
             ) : <div className="flex-1 mr-2"></div>}

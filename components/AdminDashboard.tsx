@@ -263,7 +263,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row overflow-hidden font-sans text-slate-900 relative">
+    <div className="h-[100dvh] bg-slate-100 flex flex-col md:flex-row overflow-hidden font-sans text-slate-900 relative">
       {showDeleteModal && (
         <div className="fixed inset-0 z-[150] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
