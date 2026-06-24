@@ -86,7 +86,7 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
     const dbClosures = await fetchAll(supabase, 'archived_global_closures');
     
     if (dbClosures) {
-       setArchivedClosures(dbClosures);
+       setArchivedClosures(dbClosures.map((c: any) => ({ ...c, month: c.month !== null ? c.month - 1 : null })));
     }
     
     if (data) {
@@ -182,10 +182,11 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
             quotas={quotas} 
             headerConfigs={headerConfigs} 
             supabase={supabase} 
-            globalClosures={archivedClosures.map((c: any) => ({ ...c, month: c.month - 1 }))} 
-            setGlobalClosures={() => {}} 
+            globalClosures={archivedClosures} 
+            setGlobalClosures={setArchivedClosures} 
             logAction={logAction} 
             tableName="archived_choices"
+            closuresTableName="archived_global_closures"
             overrideAdminMode={true}
             overrideMonthsToDisplay={overrideMonthsToDisplay}
           />
@@ -2563,7 +2564,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   );
 };
 
-export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells, tableName = 'choices', overrideMonthsToDisplay, onArchiveCurrent }: any) => {
+export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells, tableName = 'choices', closuresTableName = 'global_closures', overrideMonthsToDisplay, onArchiveCurrent }: any) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
@@ -2609,10 +2610,10 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
       if (isEditClosuresMode) {
           const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
           if (existing) {
-              await supabase.from('global_closures').delete().eq('id', existing.id);
+              await supabase.from(closuresTableName).delete().eq('id', existing.id);
               setGlobalClosures((prev: any[]) => prev.filter(gc => gc.id !== existing.id));
           } else {
-              const { data, error } = await supabase.from('global_closures').insert({ col_id: colId, row, month: month + 1, year }).select();
+              const { data, error } = await supabase.from(closuresTableName).insert({ col_id: colId, row, month: month + 1, year }).select();
               if (data && !error) setGlobalClosures((prev: any[]) => [...prev, { ...data[0], month: data[0].month - 1 }]);
           }
           return;
@@ -2731,7 +2732,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
       if (closedDays.length === daysInMonth) {
           // All days are closed -> Open them all (delete all)
           const idsToDelete = closedDays.map(gc => gc.id);
-          await supabase.from('global_closures').delete().in('id', idsToDelete);
+          await supabase.from(closuresTableName).delete().in('id', idsToDelete);
           setGlobalClosures((prev: any[]) => prev.filter(gc => !idsToDelete.includes(gc.id)));
       } else {
           // Not all days are closed -> Close the missing ones
@@ -2741,7 +2742,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                   missingDays.push({ col_id: colId, row: d, month: month + 1, year });
               }
           }
-          const { data, error } = await supabase.from('global_closures').insert(missingDays).select();
+          const { data, error } = await supabase.from(closuresTableName).insert(missingDays).select();
           if (data && !error) {
               const formattedData = data.map((d: any) => ({ ...d, month: d.month - 1 }));
               setGlobalClosures((prev: any[]) => [...prev, ...formattedData]);
@@ -2791,30 +2792,34 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                 <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{overrideAdminMode ? 'Planning (Sélectionnez une garde)' : 'Planning Global'}</h2>
                 <p className="text-xs font-bold text-slate-400 mt-1">{overrideAdminMode ? 'Cliquez sur une case pour confirmer l\'abandon.' : 'Gérez les attributions ou fermez des cases pour tous les tours.'}</p>
             </div>
-            {!overrideAdminMode && (
-                <div className="flex gap-3">
-                    {onArchiveCurrent && (
+            <div className="flex gap-3">
+                {!overrideAdminMode && (
+                    <>
+                        {onArchiveCurrent && (
+                            <button 
+                                onClick={onArchiveCurrent}
+                                className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white border border-orange-100"
+                            >
+                                Terminer le choix
+                            </button>
+                        )}
                         <button 
-                            onClick={onArchiveCurrent}
-                            className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white border border-orange-100"
+                            onClick={handleCreateVersion}
+                            className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"
                         >
-                            Terminer le choix
+                            Créer une version
                         </button>
-                    )}
-                    <button 
-                        onClick={handleCreateVersion}
-                        className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"
-                    >
-                        Créer une version
-                    </button>
+                    </>
+                )}
+                {isAdminMode && (
                     <button 
                         onClick={() => setIsEditClosuresMode(!isEditClosuresMode)}
                         className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${isEditClosuresMode ? 'bg-red-600 text-white shadow-red-200 hover:bg-red-700' : 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800'}`}
                     >
                         {isEditClosuresMode ? 'Terminer la fermeture' : 'Fermer des cases'}
                     </button>
-                </div>
-            )}
+                )}
+            </div>
         </div>
 
         {/* Assignment Modal */}
