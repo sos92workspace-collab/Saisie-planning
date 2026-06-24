@@ -73,6 +73,129 @@ const generateAutoVersionName = async (supabase: any, activeRound: any) => {
     return `${baseName} v${maxV + 1}`;
 };
 
+const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs, supabase, logAction, refreshMainData }: any) => {
+  const [archivedChoices, setArchivedChoices] = useState<Choice[]>([]);
+  const [archivedClosures, setArchivedClosures] = useState<any[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<{month: number, year: number, label: string}[]>([]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchArchived = async () => {
+    setLoading(true);
+    const data = await fetchAll(supabase, 'archived_choices');
+    const dbClosures = await fetchAll(supabase, 'archived_global_closures');
+    
+    if (dbClosures) {
+       setArchivedClosures(dbClosures);
+    }
+    
+    if (data) {
+      const parsed = data.map((db: any) => ({
+        id: db.id, row: db.row, col: db.col, month: db.month - 1, year: db.year,
+        groupIndex: db.group_index, subRank: db.sub_rank, category: db.category,
+        userTrigram: db.user_trigram, userRole: db.user_role || 'DOCTOR',
+        status: db.status || 'ASSIGNED',
+        submittedAt: db.submitted_at, roundId: db.round_id,
+        colLabel: db.col_label, colType: db.col_type, colTimeRange: db.col_time_range
+      }));
+      setArchivedChoices(parsed);
+      
+      // Determine unique months
+      const uniqueDates = new Map<string, {month: number, year: number, label: string}>();
+      parsed.forEach((c: any) => {
+          const key = `${c.year}-${c.month}`;
+          if (!uniqueDates.has(key)) {
+              const d = new Date(c.year, c.month, 1);
+              uniqueDates.set(key, { month: c.month, year: c.year, label: d.toLocaleString('fr-FR', { month: 'long', year: 'numeric' }) });
+          }
+      });
+      const sortedMonths = Array.from(uniqueDates.values()).sort((a,b) => (a.year - b.year) || (a.month - b.month));
+      setAvailableMonths(sortedMonths);
+      
+      if (sortedMonths.length > 0 && selectedMonths.length === 0) {
+          // Select all by default or just the first few
+          setSelectedMonths(sortedMonths.map(m => `${m.year}-${m.month}`));
+      }
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchArchived();
+  }, []);
+
+  const toggleMonth = (key: string) => {
+      setSelectedMonths(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
+
+  const overrideMonthsToDisplay = availableMonths.filter(m => selectedMonths.includes(`${m.year}-${m.month}`));
+
+  // Filter archived choices so PlanningPanel only works on what's visible
+  const visibleChoices = archivedChoices.filter(c => selectedMonths.includes(`${c.year}-${c.month}`));
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50 relative">
+      <div className="p-4 bg-white border-b flex flex-col md:flex-row justify-between items-start md:items-center shadow-sm z-10 shrink-0 gap-4">
+        <div>
+          <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800">Archive des plannings</h2>
+          <p className="text-xs text-slate-500 font-medium">Consultez et ajustez les plannings terminés.</p>
+        </div>
+        
+        {availableMonths.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+                <span className="text-xs font-black uppercase tracking-widest text-slate-400 self-center mr-2">Afficher :</span>
+                {availableMonths.map(m => {
+                    const key = `${m.year}-${m.month}`;
+                    const isSelected = selectedMonths.includes(key);
+                    return (
+                        <button
+                            key={key}
+                            onClick={() => toggleMonth(key)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            {m.label}
+                        </button>
+                    )
+                })}
+            </div>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+        {loading ? (
+           <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-50">
+             <div className="text-xs font-black uppercase tracking-widest text-slate-400 animate-pulse">Chargement de l'archive...</div>
+           </div>
+        ) : (
+          <PlanningPanel 
+            choices={visibleChoices} 
+            setChoices={(updater: any) => {
+               // Need to support function updater from PlanningPanel
+               setArchivedChoices(prev => {
+                   const newValue = typeof updater === 'function' ? updater(prev) : updater;
+                   return newValue;
+               });
+            }} 
+            users={users} 
+            activeRound={activeRound} 
+            columnConfigs={columnConfigs} 
+            quotas={quotas} 
+            headerConfigs={headerConfigs} 
+            supabase={supabase} 
+            globalClosures={archivedClosures.map((c: any) => ({ ...c, month: c.month - 1 }))} 
+            setGlobalClosures={() => {}} 
+            logAction={logAction} 
+            tableName="archived_choices"
+            overrideAdminMode={true}
+            overrideMonthsToDisplay={overrideMonthsToDisplay}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRounds, supabase, onLogout, currentUserTrigram }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>(AdminTab.USERS);
   const [selectedRoundId, setSelectedRoundId] = useState<number>(1);
@@ -100,9 +223,101 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteMode, setDeleteMode] = useState<'PENDING' | 'ALL'>('PENDING');
   const [pendingTarget, setPendingTarget] = useState<'DOCTOR' | 'SUBSTITUTE' | 'BOTH'>('BOTH');
+  
+  const [archiveModal, setArchiveModal] = useState<{
+    isOpen: boolean;
+    affectedMonthsLabel: string;
+    uniqueDates: Map<string, any>;
+    currentData: any[];
+  }>({ isOpen: false, affectedMonthsLabel: '', uniqueDates: new Map(), currentData: [] });
+  const [genericAlert, setGenericAlert] = useState<{isOpen: boolean; message: string; title?: string}>({isOpen: false, message: ''});
 
   const activeRound = useMemo(() => rounds.find(r => r.isActive) || rounds[0], [rounds]);
   const selectedRound = useMemo(() => rounds.find(r => r.id === selectedRoundId) || rounds[0], [rounds, selectedRoundId]);
+
+  const handleArchiveCurrent = async () => {
+    setIsLoading(true);
+    // 1. Fetch current ASSIGNED choices
+    const currentData = await fetchAll(supabase, 'choices', q => q.eq('status', 'ASSIGNED'));
+    
+    if (currentData.length > 0) {
+      // Find unique months to be updated
+      const uniqueDates = new Map<string, {month: number, year: number, label: string}>();
+      currentData.forEach((c: any) => {
+          const key = `${c.year}-${c.month}`;
+          if (!uniqueDates.has(key)) {
+              const d = new Date(c.year, c.month - 1, 1);
+              uniqueDates.set(key, { month: c.month, year: c.year, label: d.toLocaleString('fr-FR', { month: 'long', year: 'numeric' }) });
+          }
+      });
+      
+      const affectedMonthsLabel = Array.from(uniqueDates.values()).map(m => m.label).join(', ');
+      
+      setArchiveModal({
+          isOpen: true,
+          affectedMonthsLabel,
+          uniqueDates,
+          currentData
+      });
+      setIsLoading(false);
+    } else {
+      setGenericAlert({isOpen: true, title: 'Aucune garde', message: "Aucune garde assignée n'a été trouvée pour la mise à jour."});
+      setIsLoading(false);
+    }
+  };
+
+  const executeArchiveCurrent = async () => {
+      setArchiveModal(prev => ({ ...prev, isOpen: false }));
+      setIsLoading(true);
+      const { uniqueDates, currentData, affectedMonthsLabel } = archiveModal;
+      
+      // 2. Delete existing data for these months in archived_choices
+      const uniqueMonthsArr = Array.from(uniqueDates.values());
+      for (const m of uniqueMonthsArr) {
+          await supabase.from('archived_choices')
+              .delete()
+              .eq('month', m.month)
+              .eq('year', m.year);
+              
+          await supabase.from('archived_global_closures')
+              .delete()
+              .eq('month', m.month)
+              .eq('year', m.year);
+      }
+
+      // 3. Insert into archived_choices
+      const archivePayload = currentData.map((c: any) => ({
+        original_id: c.id, user_trigram: c.user_trigram, round_id: c.round_id,
+        row: c.row, col: c.col, month: c.month, year: c.year,
+        priority: c.priority, status: c.status,
+        group_index: c.group_index, sub_rank: c.sub_rank, category: c.category,
+        user_role: c.user_role, submitted_at: c.submitted_at, admin_comment: c.admin_comment,
+        col_label: c.col_label, col_type: c.col_type, col_time_range: c.col_time_range
+      }));
+      const { error: insertError } = await supabase.from('archived_choices').insert(archivePayload);
+      
+      if (!insertError) {
+        logAction('ARCHIVER_PLANNING_MAJ', { count: currentData.length, months: affectedMonthsLabel });
+        
+        // 4. Also archive global_closures for the months involved
+        const gc = await fetchAll(supabase, 'global_closures');
+        if (gc && gc.length > 0) {
+           const gcToArchive = gc.filter((g: any) => uniqueDates.has(`${g.year}-${g.month}`));
+           if (gcToArchive.length > 0) {
+               const gcArchivePayload = gcToArchive.map((g: any) => ({
+                  original_id: g.id, month: g.month, year: g.year, row: g.row, col: g.col, reason: g.reason
+               }));
+               await supabase.from('archived_global_closures').insert(gcArchivePayload);
+           }
+        }
+        
+        setGenericAlert({isOpen: true, title: 'Succès', message: `Plannings terminés mis à jour avec succès (${currentData.length} gardes copiées).`});
+        refreshData();
+      } else {
+        setGenericAlert({isOpen: true, title: 'Erreur', message: "Erreur lors de la mise à jour: " + insertError.message});
+      }
+      setIsLoading(false);
+  };
 
   const refreshData = useCallback(async () => {
     setIsLoading(true);
@@ -264,6 +479,56 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
 
   return (
     <div className="h-[100dvh] bg-slate-100 flex flex-col md:flex-row overflow-hidden font-sans text-slate-900 relative">
+      {archiveModal.isOpen && (
+        <div className="fixed inset-0 z-[150] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="bg-blue-50 p-6 border-b border-blue-100 flex items-center gap-4">
+                    <h3 className="text-lg font-black text-blue-600 uppercase tracking-tight">Archiver le planning</h3>
+                </div>
+                <div className="p-6">
+                    <p className="font-bold text-slate-700 mb-2">Vous allez mettre à jour les plannings terminés pour les mois suivants :</p>
+                    <p className="text-blue-600 font-black mb-4">{archiveModal.affectedMonthsLabel}</p>
+                    <p className="text-sm text-slate-500 mb-6">Cette action écrasera les plannings terminés existants pour ces mois par les données du choix actif sans modifier le planning en cours. Continuer ?</p>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setArchiveModal(prev => ({ ...prev, isOpen: false }))}
+                            className="flex-1 px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all"
+                        >
+                            Annuler
+                        </button>
+                        <button 
+                            onClick={executeArchiveCurrent}
+                            className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                        >
+                            Continuer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+      
+      {genericAlert.isOpen && (
+        <div className="fixed inset-0 z-[160] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="bg-slate-50 p-6 border-b border-slate-100 flex items-center gap-4">
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">{genericAlert.title || 'Information'}</h3>
+                </div>
+                <div className="p-6">
+                    <p className="font-bold text-slate-600 mb-6">{genericAlert.message}</p>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={() => setGenericAlert(prev => ({ ...prev, isOpen: false }))}
+                            className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
+
       {showDeleteModal && (
         <div className="fixed inset-0 z-[150] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -313,7 +578,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -364,7 +629,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -419,7 +684,8 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               logAction={logAction}
             />
           )}
-          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} />}
+          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} onArchiveCurrent={handleArchiveCurrent} />}
+          {activeTab === AdminTab.ARCHIVES && <ArchivePanel supabase={supabase} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} quotas={quotas} globalClosures={globalClosures} logAction={logAction} refreshMainData={refreshData} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} quotas={quotas} columnConfigs={columnConfigs} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
@@ -2297,7 +2563,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   );
 };
 
-export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells }: any) => {
+export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells, tableName = 'choices', overrideMonthsToDisplay, onArchiveCurrent }: any) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
@@ -2305,6 +2571,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
   const [highlightedTrigram, setHighlightedTrigram] = useState<string | null>(null);
 
   const monthsToDisplay = useMemo(() => {
+    if (overrideMonthsToDisplay) return overrideMonthsToDisplay;
     const list = [];
     if (!activeRound) return [];
     const startM = activeRound.monthStart ?? 0;
@@ -2361,7 +2628,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
 
       if (assignedChoice) {
           if (window.confirm(`Retirer la garde du Dr ${assignedChoice.userTrigram} ?`)) {
-              const { error } = await supabase.from('choices').delete().eq('id', assignedChoice.id);
+              const { error } = await supabase.from(tableName).delete().eq('id', assignedChoice.id);
               if (!error) {
                   setChoices((prev: any[]) => prev.filter((c: any) => c.id !== assignedChoice.id));
                   logAction('SUPPRESSION_GARDE', { user: assignedChoice.userTrigram, date: `${row}/${month+1}/${year}`, col: colId });
@@ -2419,7 +2686,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
       const pending = choices.find((c: any) => c.row === editingCell.row && c.col === editingCell.col && c.month === editingCell.month && c.year === editingCell.year && c.userTrigram === cleanTri);
 
       if (pending) {
-          const { error } = await supabase.from('choices').update({ status: 'ASSIGNED' }).eq('id', pending.id);
+          const { error } = await supabase.from(tableName).update({ status: 'ASSIGNED' }).eq('id', pending.id);
           if (!error) {
               setChoices((prev: any[]) => prev.map((c: any) => c.id === pending.id ? { ...c, status: 'ASSIGNED' } : c));
               logAction('VALIDATION_GARDE', { user: cleanTri, date: `${editingCell.row}/${editingCell.month+1}/${editingCell.year}`, col: editingCell.col });
@@ -2436,7 +2703,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
               submitted_at: new Date().toISOString()
           };
           
-          const { data, error } = await supabase.from('choices').insert(newPayload).select();
+          const { data, error } = await supabase.from(tableName).insert(newPayload).select();
           if (!error && data) {
               const newChoice: Choice = {
                   id: data[0].id,
@@ -2526,6 +2793,14 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
             </div>
             {!overrideAdminMode && (
                 <div className="flex gap-3">
+                    {onArchiveCurrent && (
+                        <button 
+                            onClick={onArchiveCurrent}
+                            className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white border border-orange-100"
+                        >
+                            Terminer le choix
+                        </button>
+                    )}
                     <button 
                         onClick={handleCreateVersion}
                         className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white border border-blue-100"
