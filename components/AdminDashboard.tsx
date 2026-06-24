@@ -305,7 +305,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
            const gcToArchive = gc.filter((g: any) => uniqueDates.has(`${g.year}-${g.month}`));
            if (gcToArchive.length > 0) {
                const gcArchivePayload = gcToArchive.map((g: any) => ({
-                  original_id: g.id, month: g.month, year: g.year, row: g.row, col: g.col, reason: g.reason
+                  original_id: g.id, month: g.month, year: g.year, row: g.row, col_id: g.col_id, reason: g.reason
                }));
                await supabase.from('archived_global_closures').insert(gcArchivePayload);
            }
