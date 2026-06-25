@@ -652,7 +652,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }, { id: AdminTab.MAINTENANCE, label: 'Maintenance', icon: '🛠️' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -703,7 +703,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }, { id: AdminTab.MAINTENANCE, label: 'Maintenance', icon: '🛠️' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -764,6 +764,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
           {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
+          {activeTab === AdminTab.MAINTENANCE && <MaintenancePanel supabase={supabase} logAction={logAction} />}
         </div>
       </main>
     </div>
@@ -821,6 +822,64 @@ const EnlargeableChart = ({ title, children, isScrollable = false, dataLength = 
         </div>
       )}
     </>
+  );
+};
+
+const MaintenancePanel = ({ supabase, logAction }: any) => {
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data } = await supabase.from('system_settings').select('maintenance_mode').eq('id', 1).maybeSingle();
+      if (data) {
+        setMaintenanceMode(data.maintenance_mode);
+      }
+      setLoading(false);
+    };
+    fetchSettings();
+  }, [supabase]);
+
+  const toggleMaintenance = async (checked: boolean) => {
+    setMaintenanceMode(checked);
+    await supabase.from('system_settings').update({ maintenance_mode: checked }).eq('id', 1);
+    logAction('MAINTENANCE_TOGGLE', `Maintenance mode set to ${checked}`);
+  };
+
+  if (loading) return <div className="p-6">Chargement...</div>;
+
+  return (
+    <div className="bg-white rounded-[40px] shadow-sm p-8 md:p-12 border border-slate-100 max-w-2xl mx-auto mt-8">
+      <div className="text-center mb-10">
+        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <span className="text-3xl">🛠️</span>
+        </div>
+        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800">Mode Maintenance</h2>
+        <p className="text-sm text-slate-500 mt-2">Gérez l'accessibilité globale de l'application.</p>
+      </div>
+
+      <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-slate-800">Activer la maintenance</h3>
+            <p className="text-xs text-slate-500 mt-1">Bloque l'accès à tous les médecins et remplaçants.</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" className="sr-only peer" checked={maintenanceMode} onChange={(e) => toggleMaintenance(e.target.checked)} />
+            <div className="w-14 h-7 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-500 shadow-inner"></div>
+          </label>
+        </div>
+        {maintenanceMode && (
+          <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-4">
+            <span className="text-red-500 text-xl">⚠️</span>
+            <div>
+              <p className="text-sm font-bold text-red-800">Attention</p>
+              <p className="text-xs text-red-600 mt-1">L'application est actuellement inaccessible pour les utilisateurs standards. Seuls les administrateurs peuvent se connecter.</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

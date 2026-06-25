@@ -354,6 +354,7 @@ const App: React.FC = () => {
   const [globalClosures, setGlobalClosures] = useState<any[]>([]);
   const [shiftDefinitions, setShiftDefinitions] = useState<ShiftDefinition[]>([]);
   const [shiftGlobalSettings, setShiftGlobalSettings] = useState<ShiftGlobalSettings | null>(null);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isDataSyncing, setIsDataSyncing] = useState(false);
   const [showUnavailabilityModal, setShowUnavailabilityModal] = useState(false);
@@ -498,6 +499,7 @@ const App: React.FC = () => {
         const { data: cfg } = await supabase.from('column_configs').select('*').eq('round_id', currentRoundId);
         const { data: sd } = await supabase.from('shift_definitions').select('*');
         const { data: sgs } = await supabase.from('shift_global_settings').select('*').eq('id', 1).single();
+        const { data: sys } = await supabase.from('system_settings').select('*').eq('id', 1).maybeSingle();
         const { data: unav } = await supabase.from('unavailabilities').select('*').eq('user_trigram', trigram.toUpperCase());
         const assigned = await fetchAll(supabase, 'choices', q => q.in('status', ['ASSIGNED', 'VALIDATED']).eq('round_id', currentRoundId));
         
@@ -701,6 +703,9 @@ const App: React.FC = () => {
         if (sd) setShiftDefinitions(sd);
         const { data: sgs } = await supabase.from('shift_global_settings').select('*').eq('id', 1).single();
         if (sgs) setShiftGlobalSettings(sgs);
+        const { data: sys } = await supabase.from('system_settings').select('*').eq('id', 1).maybeSingle();
+        if (sys) setSystemSettings(sys);
+        else setSystemSettings({ maintenance_mode: false });
         
         const { data: ud } = await supabase.from('users').select('*');
         if (ud) setUsers(ud);
@@ -1529,6 +1534,32 @@ const App: React.FC = () => {
       <div className="h-[100dvh] flex flex-col items-center justify-center bg-slate-900 text-white p-6">
         <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-6"></div>
         <h1 className="text-xl font-black uppercase tracking-[0.3em] animate-pulse">SOS 92</h1>
+      </div>
+    );
+  }
+
+  if (systemSettings?.maintenance_mode && currentUser?.role !== 'ADMIN' && viewMode !== ViewMode.LOGIN) {
+    return (
+      <div className="min-h-[100dvh] bg-slate-100 flex flex-col items-center justify-center p-6 gap-6 text-slate-900">
+        <div className="bg-white p-12 rounded-[50px] shadow-2xl w-full max-w-md text-center border-t-[12px] border-slate-900">
+            <div className="mx-auto w-24 h-24 mb-8 bg-red-50 text-red-500 rounded-full flex items-center justify-center relative">
+                <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {/* A slash over the cog */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-16 h-1 bg-red-500 transform rotate-45 rounded-full"></div>
+                </div>
+            </div>
+            <h1 className="text-3xl font-black uppercase tracking-tighter mb-4">Maintenance en cours</h1>
+            <p className="text-sm font-medium text-slate-500 mb-8">
+                L'application est temporairement indisponible pour cause de maintenance. Veuillez réessayer ultérieurement.
+            </p>
+            <button onClick={handleLogout} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[11px] hover:bg-slate-800 transition-all focus:outline-none">
+                Se déconnecter
+            </button>
+        </div>
       </div>
     );
   }
