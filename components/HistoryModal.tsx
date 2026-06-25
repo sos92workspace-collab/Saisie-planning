@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, ChevronRight, Target, Zap, Clock, Users } from 'lucide-react';
+import { X, ChevronDown, ChevronRight, Target, Zap, Clock, Users, Maximize, Minimize } from 'lucide-react';
+import { ArchivePlanningDoctorView } from './ArchivePlanningDoctorView';
 
 interface HistoryModalProps {
     isOpen: boolean;
     onClose: () => void;
     supabase: any;
     currentUserTrigram: string;
+    columnConfigs: any[];
 }
 
 const normalizeCategory = (cat: string) => {
@@ -23,15 +25,16 @@ const formatCardTitle = (day: number, month: number, year: number, colLabel: str
     return `${dayName} ${dd}/${mm} (Col ${colLabel})`;
 };
 
-export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram }: HistoryModalProps) {
+export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, columnConfigs }: HistoryModalProps) {
     const [roundsHistory, setRoundsHistory] = useState<any[]>([]);
     const [exchangesHistory, setExchangesHistory] = useState<any[]>([]);
     const [abandonsHistory, setAbandonsHistory] = useState<any[]>([]);
     const [takesHistory, setTakesHistory] = useState<any[]>([]);
     
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'ATTRIBUTIONS' | 'EXCHANGES' | 'ABANDONS' | 'TAKES'>('ATTRIBUTIONS');
+    const [activeTab, setActiveTab] = useState<'ATTRIBUTIONS' | 'EXCHANGES' | 'ABANDONS' | 'TAKES' | 'ARCHIVES'>('ATTRIBUTIONS');
     const [expandedRound, setExpandedRound] = useState<string | null>(null);
+    const [isFullscreen, setIsFullscreen] = useState(false);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -426,12 +429,22 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram }: 
             );
         }
 
+        if (activeTab === 'ARCHIVES') {
+            return (
+                <ArchivePlanningDoctorView 
+                    supabase={supabase} 
+                    currentUserTrigram={currentUserTrigram} 
+                    columnConfigs={columnConfigs} 
+                />
+            );
+        }
+
         return null;
     };
 
     return (
-        <div className="fixed inset-0 z-[500] flex p-4 md:p-8 bg-slate-900/50 backdrop-blur-sm shadow-2xl overflow-hidden">
-            <div className="bg-white w-full h-full rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className={`fixed inset-0 z-[500] flex bg-slate-900/50 backdrop-blur-sm shadow-2xl overflow-hidden ${isFullscreen ? 'p-0' : 'p-4 md:p-8'}`}>
+            <div className={`bg-white w-full h-full shadow-2xl flex flex-col overflow-hidden ${isFullscreen ? 'rounded-none' : 'rounded-2xl'}`}>
                 
                 {/* UNIFIED HEADER */}
                 <div className="bg-slate-900 p-5 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
@@ -442,12 +455,21 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram }: 
                         </h2>
                     </div>
                     
-                    <button 
-                        onClick={onClose}
-                        className="p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/10 transition-all focus:outline-none absolute top-4 right-4 sm:static"
-                    >
-                        <X className="w-6 h-6" />
-                    </button>
+                    <div className="flex items-center gap-2 absolute top-4 right-4 sm:static">
+                        <button 
+                            onClick={() => setIsFullscreen(!isFullscreen)}
+                            className="p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/10 transition-all focus:outline-none"
+                            title={isFullscreen ? "Réduire" : "Plein écran"}
+                        >
+                            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                        </button>
+                        <button 
+                            onClick={onClose}
+                            className="p-2 rounded-xl text-white/50 hover:text-white hover:bg-white/10 transition-all focus:outline-none"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* TAB BAR */}
@@ -457,7 +479,8 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram }: 
                             { id: 'ATTRIBUTIONS', label: 'Attributions' },
                             { id: 'EXCHANGES', label: 'Échanges' },
                             { id: 'ABANDONS', label: 'Abandons' },
-                            { id: 'TAKES', label: 'Reprises' }
+                            { id: 'TAKES', label: 'Reprises' },
+                            { id: 'ARCHIVES', label: 'Archive Planning' }
                         ].map(tab => (
                             <button
                                 key={tab.id}

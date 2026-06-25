@@ -1651,6 +1651,7 @@ const App: React.FC = () => {
           onClose={() => setShowHistoryModal(false)}
           supabase={supabase}
           currentUserTrigram={trigram.toUpperCase()}
+          columnConfigs={columnConfigs}
       />
 
       {showUnavailabilityModal && monthsToDisplay.length > 0 && (

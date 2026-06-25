@@ -78,13 +78,19 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
   const [archivedClosures, setArchivedClosures] = useState<any[]>([]);
   const [availableMonths, setAvailableMonths] = useState<{month: number, year: number, label: string}[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [monthSettings, setMonthSettings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const fetchArchived = async () => {
     setLoading(true);
     const data = await fetchAll(supabase, 'archived_choices');
     const dbClosures = await fetchAll(supabase, 'archived_global_closures');
+    const settings = await fetchAll(supabase, 'archived_month_settings');
     
+    if (settings) {
+        setMonthSettings(settings);
+    }
+
     if (dbClosures) {
        setArchivedClosures(dbClosures.map((c: any) => ({ ...c, month: c.month !== null ? c.month - 1 : null })));
     }
@@ -111,11 +117,6 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
       });
       const sortedMonths = Array.from(uniqueDates.values()).sort((a,b) => (a.year - b.year) || (a.month - b.month));
       setAvailableMonths(sortedMonths);
-      
-      if (sortedMonths.length > 0 && selectedMonths.length === 0) {
-          // Select all by default or just the first few
-          setSelectedMonths(sortedMonths.map(m => `${m.year}-${m.month}`));
-      }
     }
     setLoading(false);
   };
@@ -128,6 +129,31 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
       setSelectedMonths(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
+  const toggleMonthSetting = async (month: number, year: number, field: string, currentValue: boolean) => {
+      const newValue = !currentValue;
+      
+      // Update locally
+      setMonthSettings(prev => {
+          const copy = [...prev];
+          const idx = copy.findIndex(s => s.month === month && s.year === year);
+          if (idx >= 0) {
+              copy[idx] = { ...copy[idx], [field]: newValue };
+          } else {
+              copy.push({ month, year, [field]: newValue });
+          }
+          return copy;
+      });
+
+      // Update DB
+      const { data } = await supabase.from('archived_month_settings').select('id').eq('month', month).eq('year', year).maybeSingle();
+      if (data) {
+          await supabase.from('archived_month_settings').update({ [field]: newValue }).eq('month', month).eq('year', year);
+      } else {
+          await supabase.from('archived_month_settings').insert({ month, year, [field]: newValue });
+      }
+      logAction(`ARCHIVE_SETTINGS_UPDATE`, `Updated ${field} to ${newValue} for ${month}/${year}`);
+  };
+
   const overrideMonthsToDisplay = availableMonths.filter(m => selectedMonths.includes(`${m.year}-${m.month}`));
 
   // Filter archived choices so PlanningPanel only works on what's visible
@@ -135,27 +161,60 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
 
   return (
     <div className="flex flex-col h-full bg-slate-50 relative">
-      <div className="p-4 bg-white border-b flex flex-col md:flex-row justify-between items-start md:items-center shadow-sm z-10 shrink-0 gap-4">
-        <div>
-          <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800">Archive des plannings</h2>
-          <p className="text-xs text-slate-500 font-medium">Consultez et ajustez les plannings terminés.</p>
+      <div className="p-4 bg-white border-b flex flex-col gap-4 shadow-sm z-10 shrink-0">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h2 className="text-xl font-black uppercase tracking-tighter text-slate-800">Archive des plannings</h2>
+              <p className="text-xs text-slate-500 font-medium">Consultez et ajustez les plannings terminés.</p>
+            </div>
+            
+            {availableMonths.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    <span className="text-xs font-black uppercase tracking-widest text-slate-400 self-center mr-2">Afficher :</span>
+                    {availableMonths.map(m => {
+                        const key = `${m.year}-${m.month}`;
+                        const isSelected = selectedMonths.includes(key);
+                        return (
+                            <button
+                                key={key}
+                                onClick={() => toggleMonth(key)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                {m.label}
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
         </div>
         
-        {availableMonths.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-                <span className="text-xs font-black uppercase tracking-widest text-slate-400 self-center mr-2">Afficher :</span>
-                {availableMonths.map(m => {
-                    const key = `${m.year}-${m.month}`;
-                    const isSelected = selectedMonths.includes(key);
+        {overrideMonthsToDisplay.length > 0 && (
+            <div className="flex flex-wrap gap-4 pt-4 border-t border-slate-100">
+                {overrideMonthsToDisplay.map(m => {
+                    const settings = monthSettings.find(s => s.month === m.month && s.year === m.year) || {};
                     return (
-                        <button
-                            key={key}
-                            onClick={() => toggleMonth(key)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                        >
-                            {m.label}
-                        </button>
-                    )
+                        <div key={`${m.year}-${m.month}`} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex-1 min-w-[280px]">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">{m.label} - Paramètres</h4>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={settings.show_planning || false} onChange={() => toggleMonthSetting(m.month, m.year, 'show_planning', settings.show_planning || false)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                                    <span className="text-[10px] font-bold uppercase text-slate-600">Afficher planning</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={settings.allow_exchanges || false} onChange={() => toggleMonthSetting(m.month, m.year, 'allow_exchanges', settings.allow_exchanges || false)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                                    <span className="text-[10px] font-bold uppercase text-slate-600">Autoriser échanges</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={settings.allow_takes || false} onChange={() => toggleMonthSetting(m.month, m.year, 'allow_takes', settings.allow_takes || false)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                                    <span className="text-[10px] font-bold uppercase text-slate-600">Autoriser reprises</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={settings.allow_abandons || false} onChange={() => toggleMonthSetting(m.month, m.year, 'allow_abandons', settings.allow_abandons || false)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                                    <span className="text-[10px] font-bold uppercase text-slate-600">Autoriser abandons</span>
+                                </label>
+                            </div>
+                        </div>
+                    );
                 })}
             </div>
         )}
@@ -165,6 +224,20 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
         {loading ? (
            <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-50">
              <div className="text-xs font-black uppercase tracking-widest text-slate-400 animate-pulse">Chargement de l'archive...</div>
+           </div>
+        ) : selectedMonths.length === 0 ? (
+           <div className="flex-1 flex items-center justify-center bg-slate-50">
+               <div className="text-center space-y-4">
+                   <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto opacity-50">
+                       <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                       </svg>
+                   </div>
+                   <div>
+                       <h3 className="text-lg font-black text-slate-700">Aucun planning sélectionné</h3>
+                       <p className="text-sm text-slate-500 mt-1">Sélectionnez un ou plusieurs mois ci-dessus pour afficher les plannings terminés.</p>
+                   </div>
+               </div>
            </div>
         ) : (
           <PlanningPanel 
@@ -579,7 +652,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -630,7 +703,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -2811,7 +2884,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                         </button>
                     </>
                 )}
-                {isAdminMode && (
+                {(!overrideAdminMode || tableName === 'archived_choices') && (
                     <button 
                         onClick={() => setIsEditClosuresMode(!isEditClosuresMode)}
                         className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${isEditClosuresMode ? 'bg-red-600 text-white shadow-red-200 hover:bg-red-700' : 'bg-slate-900 text-white shadow-slate-200 hover:bg-slate-800'}`}
