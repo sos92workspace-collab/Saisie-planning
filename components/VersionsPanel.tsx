@@ -25,7 +25,7 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ supabase, logActio
   const [isLoading, setIsLoading] = useState(true);
   const [showSqlHelp, setShowSqlHelp] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<any | null>(null);
-  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string, colSite?: string, colTimeRange?: string } | null>(null);
   const [highlightedTrigram, setHighlightedTrigram] = useState<string | null>(null);
 
   const fetchVersions = async () => {
@@ -315,7 +315,7 @@ export const VersionsPanel: React.FC<VersionsPanelProps> = ({ supabase, logActio
                                                         key={col.id} 
                                                         className={cellStyles}
                                                         style={{ backgroundColor: bgColor }}
-                                                        onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
+                                                        onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type, colSite: col.site, colTimeRange: col.timeRange })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                     >
                                                         <div className="absolute inset-0 flex items-center justify-center">

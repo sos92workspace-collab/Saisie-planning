@@ -2700,7 +2700,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
-  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string, colSite?: string, colTimeRange?: string } | null>(null);
   const [highlightedTrigram, setHighlightedTrigram] = useState<string | null>(null);
 
   const monthsToDisplay = useMemo(() => {
@@ -3239,7 +3239,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                     <td 
                                                         key={col.id} 
                                                         title={isQuotaDoctorReached && isQuotaSubReached ? "Quotas atteints (Titulaires et Remplaçants)" : isQuotaDoctorReached ? "Quota Titulaires atteint" : isQuotaSubReached ? "Quota Remplaçants atteint" : ""}
-                                                        onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
+                                                        onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type, colSite: col.site, colTimeRange: col.timeRange })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
                                                         className={`border-r border-b border-slate-200 text-center relative min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
@@ -3281,6 +3281,18 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                 <span className="text-orange-400 whitespace-nowrap">Col {hoveredCell.colId}</span>
                 <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
                 <span className="whitespace-nowrap">{hoveredCell.colLabel}</span>
+                {hoveredCell.colTimeRange && (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                        <span className="text-yellow-400 whitespace-nowrap">{hoveredCell.colTimeRange}</span>
+                    </>
+                )}
+                {hoveredCell.colSite && (
+                    <>
+                        <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                        <span className="text-purple-400 whitespace-nowrap">{hoveredCell.colSite}</span>
+                    </>
+                )}
             </div>
         )}
     </div>

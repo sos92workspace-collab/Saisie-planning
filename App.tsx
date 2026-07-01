@@ -390,7 +390,7 @@ const App: React.FC = () => {
   const [myPendingExchanges, setMyPendingExchanges] = useState<any[]>([]);
   const [isExchangeSidebarOpen, setIsExchangeSidebarOpen] = useState(false);
 
-  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string } | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string, colSite?: string, colTimeRange?: string } | null>(null);
 
   useEffect(() => {
     const checkOrientation = () => setIsPortrait(window.innerHeight > window.innerWidth);
@@ -2358,7 +2358,7 @@ const App: React.FC = () => {
                                               isQuotaReachedUser && !myPending && !isAssignedToMe ? "Quota atteint" : undefined
                                           )
                                       }
-                                      onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type })}
+                                      onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type, colSite: col.site, colTimeRange: col.timeRange })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
                                           if (exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
@@ -2500,6 +2500,18 @@ const App: React.FC = () => {
             <span className="text-orange-400 whitespace-nowrap">Col {hoveredCell.colId}</span>
             <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
             <span className="whitespace-nowrap">{hoveredCell.colLabel}</span>
+            {hoveredCell.colTimeRange && (
+                <>
+                    <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                    <span className="text-yellow-400 whitespace-nowrap">{hoveredCell.colTimeRange}</span>
+                </>
+            )}
+            {hoveredCell.colSite && (
+                <>
+                    <div className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></div>
+                    <span className="text-purple-400 whitespace-nowrap">{hoveredCell.colSite}</span>
+                </>
+            )}
         </div>
       )}
 
