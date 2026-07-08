@@ -2592,16 +2592,11 @@ const App: React.FC = () => {
                                               {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && pendingGiveUp && (
                                                   <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↗</span>
                                               )}
-                                              {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && pendingTake && (
+                                              {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && (pendingTake || existingTake) && (
                                                   <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↙</span>
                                               )}
                                               {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && pendingAbandon && (
                                                   <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">⤫</span>
-                                              )}
-                                              {assignedList.length === 0 && (existingTake || pendingTake) && (isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && (
-                                                  <span className="text-[12px] md:text-[10px] text-white font-black uppercase tracking-tighter drop-shadow-sm leading-none flex items-center justify-center h-full">
-                                                      Demande
-                                                  </span>
                                               )}
                                           </div>
                                       )}

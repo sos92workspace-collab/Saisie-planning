@@ -735,11 +735,6 @@ export const ArchivePlanningDoctorView = ({ supabase, currentUserTrigram, column
                                                                             )}
                                                                         </div>
                                                                     )}
-                                                                    {!isClosed && !assigned && existingTake && takeMode !== 'INACTIVE' && (
-                                                                        <span className="text-[12px] md:text-[10px] text-white font-black uppercase tracking-tighter drop-shadow-sm leading-none flex items-center justify-center h-full">
-                                                                            Demande
-                                                                        </span>
-                                                                    )}
                                                                 </td>
                                                             );
                                                         })}
