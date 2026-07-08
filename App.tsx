@@ -2276,18 +2276,15 @@ const App: React.FC = () => {
                                   
                                   const timeRange = parseTimeRange(col.timeRange);
                                   const isWeekendTime = isOffDay || (date.getDay() === 6 && timeRange && timeRange.end > 14 * 60);
-                                  const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
-                                  
-                                  const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && (ex.requester_choice?.month - 1) === month && ex.requester_choice?.year === year);
+                                                                   const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && (ex.requester_choice?.month - 1) === month && ex.requester_choice?.year === year);
                                   const pendingTake = myPendingExchanges.find(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
                                   const existingTake = myPendingTakes.find(tk => tk.target_row === day && tk.target_col === col.id && tk.target_month === month && tk.target_year === year);
                                   
                                   const pendingAbandon = myPendingAbandons.find(ab => ab.status === 'PENDING' && ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
-
                                   const cellDiffHours = (cellDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
                                   const isLessThan48h = cellDiffHours < 48;
-
                                   let cellTitle: string | undefined = undefined;
+
                                   if (isLessThan48h && (exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE')) {
                                       cellTitle = "Garde non compatible, délai trop court";
                                   }
@@ -2321,21 +2318,26 @@ const App: React.FC = () => {
                                           cellStyles += " opacity-100 z-10 scale-[1.02] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#2563eb] cursor-pointer hover:bg-blue-600";
                                       } else if (exchangeMode === 'SELECT_OWN' && isAssignedToMe) {
                                           if (!isLessThan48h) {
-                                              bgColor = '#fde047'; // Yellow 300
-                                              cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all";
+                                              if (pendingAbandon) {
+                                                  bgColor = '#be123c'; // rose-700
+                                                  cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#9f1239] transition-all text-white font-black";
+                                              } else {
+                                                  bgColor = '#fde047'; // Yellow 300
+                                                  cellStyles += " opacity-100 cursor-pointer hover:scale-[1.05] hover:z-20 hover:shadow-[inset_0_0_0_2px_#facc15] transition-all text-slate-900";
+                                              }
                                           } else {
                                               bgColor = col.customColor || '#FFFFFF';
                                               cellStyles += " opacity-40 cursor-pointer text-slate-900"; // pointer so it triggers the alert
                                           }
                                       } else if (pendingGiveUp) {
                                           bgColor = '#a855f7'; // purple-500
-                                          cellStyles += " opacity-40 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
-                                      } else if (pendingTake) {
-                                          bgColor = '#c084fc'; // purple-400
-                                          cellStyles += " opacity-40 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
-                                      } else if (existingTake) {
-                                          bgColor = '#14b8a6'; // teal-500
-                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
+                                      } else if (pendingTake || existingTake) {
+                                          bgColor = '#22c55e'; // green-500
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#16a34a] cursor-not-allowed";
+                                      } else if (pendingAbandon) {
+                                          bgColor = '#be123c'; // rose-700
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239]";
                                       } else if (assignedList.length > 0) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-30 text-slate-900";
@@ -2349,9 +2351,15 @@ const App: React.FC = () => {
                                       if (isTargetSelected) {
                                           bgColor = '#0d9488'; // teal-600
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
-                                      } else if (existingTake) {
-                                          bgColor = '#14b8a6'; // teal-500
-                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
+                                      } else if (existingTake || pendingTake) {
+                                          bgColor = '#22c55e'; // green-500
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#16a34a] cursor-not-allowed pointer-events-none";
+                                      } else if (pendingGiveUp) {
+                                          bgColor = '#a855f7'; // purple-500
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed pointer-events-none";
+                                      } else if (pendingAbandon) {
+                                          bgColor = '#be123c'; // rose-700
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9f1239] cursor-not-allowed pointer-events-none";
                                       } else if (open && !isClosed && assignedList.length === 0 && !isLessThan48h) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " hover:bg-teal-50 cursor-pointer transition-colors opacity-100 text-slate-900 font-bold hover:shadow-[inset_0_0_0_2px_#5eead4]";
@@ -2375,9 +2383,6 @@ const App: React.FC = () => {
                                       } else if (pendingTake) {
                                           bgColor = '#c084fc'; // purple-400
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea]";
-                                      } else if (existingTake) {
-                                          bgColor = '#14b8a6'; // teal-500
-                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
                                       } else if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";

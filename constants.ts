@@ -287,16 +287,12 @@ export const doShiftsOverlap = (date1: Date, range1: string, date2: Date, range2
     const t2 = parseTimeRange(range2);
     if (!t1 || !t2) return false;
 
-    // Use UTC dates to calculate the difference in logical days, completely bypassing local DST anomalies.
-    // This ensures wall-clock time overlap calculations are perfectly accurate.
-    const day1 = Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate()) / 86400000;
-    const day2 = Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate()) / 86400000;
+    // Time difference adjusted for local time (so that 1day is exactly 24h, ignoring DST boundaries for simplicity since shifts don't typically span DST edge cases badly, but UTC is better if possible. For overlap, getTime() handles absolute offset)
+    const start1 = date1.getTime() / 60000 + t1.start;
+    const end1 = date1.getTime() / 60000 + t1.end;
 
-    const start1 = day1 * 1440 + t1.start;
-    const end1 = day1 * 1440 + t1.end;
-
-    const start2 = day2 * 1440 + t2.start;
-    const end2 = day2 * 1440 + t2.end;
+    const start2 = date2.getTime() / 60000 + t2.start;
+    const end2 = date2.getTime() / 60000 + t2.end;
 
     const overlapStart = Math.max(start1, start2);
     const overlapEnd = Math.min(end1, end2);
