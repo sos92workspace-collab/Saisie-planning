@@ -525,6 +525,9 @@ export const ArchivePlanningDoctorView = ({ supabase, currentUserTrigram, column
                                                                 } else if (isTargetSelected) {
                                                                     bgColor = '#0d9488'; // teal-600
                                                                     cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
+                                                                } else if (existingTake) {
+                                                                    bgColor = '#14b8a6'; // teal-500
+                                                                    cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
                                                                 } else if (isPossibleTarget && !assigned) {
                                                                     bgColor = col.customColor || '#FFFFFF';
                                                                     cellStyles += " hover:bg-teal-50 cursor-pointer opacity-100 shadow-[inset_0_0_0_2px_#5eead4]";

@@ -2280,6 +2280,7 @@ const App: React.FC = () => {
                                   
                                   const pendingGiveUp = myPendingExchanges.find(ex => ex.requester_choice?.row === day && ex.requester_choice?.col === col.id && (ex.requester_choice?.month - 1) === month && ex.requester_choice?.year === year);
                                   const pendingTake = myPendingExchanges.find(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
+                                  const existingTake = myPendingTakes.find(tk => tk.target_row === day && tk.target_col === col.id && tk.target_month === month && tk.target_year === year);
                                   
                                   const pendingAbandon = myPendingAbandons.find(ab => ab.status === 'PENDING' && ab.requester_choice?.row === day && ab.requester_choice?.col === col.id && (ab.requester_choice?.month - 1) === month && ab.requester_choice?.year === year);
 
@@ -2332,6 +2333,9 @@ const App: React.FC = () => {
                                       } else if (pendingTake) {
                                           bgColor = '#c084fc'; // purple-400
                                           cellStyles += " opacity-40 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
+                                      } else if (existingTake) {
+                                          bgColor = '#14b8a6'; // teal-500
+                                          cellStyles += " opacity-50 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
                                       } else if (assignedList.length > 0) {
                                           bgColor = col.customColor || '#FFFFFF';
                                           cellStyles += " opacity-30 text-slate-900";
@@ -2341,7 +2345,6 @@ const App: React.FC = () => {
                                       }
                                   } else if (takeMode !== 'INACTIVE') {
                                       const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
-                                      const existingTake = myPendingTakes.find(tk => tk.target_row === day && tk.target_col === col.id && tk.target_month === month && tk.target_year === year);
                                       
                                       if (isTargetSelected) {
                                           bgColor = '#0d9488'; // teal-600
@@ -2372,6 +2375,9 @@ const App: React.FC = () => {
                                       } else if (pendingTake) {
                                           bgColor = '#c084fc'; // purple-400
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea]";
+                                      } else if (existingTake) {
+                                          bgColor = '#14b8a6'; // teal-500
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
                                       } else if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";
