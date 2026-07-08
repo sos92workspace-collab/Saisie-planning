@@ -298,25 +298,34 @@ export const ArchivePlanningDoctorView = ({ supabase, currentUserTrigram, column
                     target_col_label: selectedTargetChoice.colLabel,
                     status: 'PENDING'
                 };
+                
+                const { data: takeData, error: errTake } = await supabase.from('take_requests').insert(reqTake).select().single();
+                if (errTake) throw errTake;
+                
                 const reqAbandon = {
                     requester_trigram: currentUserTrigram,
                     shift_snapshot: {
                         row: selectedOwnAbandonChoice.row,
-                        month: selectedOwnAbandonChoice.month,
+                        month: selectedOwnAbandonChoice.month + 1,
                         year: selectedOwnAbandonChoice.year,
                         col: selectedOwnAbandonChoice.col,
-                        colLabel: selectedOwnAbandonChoice.col_label || COLUMNS.find(c => c.id === selectedOwnAbandonChoice.col)?.label
+                        colLabel: selectedOwnAbandonChoice.col_label || COLUMNS.find(c => c.id === selectedOwnAbandonChoice.col)?.label,
+                        linked_take: {
+                            id: takeData.id,
+                            row: selectedTargetChoice.row,
+                            col: selectedTargetChoice.col,
+                            month: selectedTargetChoice.month,
+                            year: selectedTargetChoice.year,
+                            colLabel: selectedTargetChoice.colLabel
+                        }
                     },
                     status: 'PENDING'
                 };
                 
-                const { error: errTake } = await supabase.from('take_requests').insert(reqTake);
-                if (errTake) throw errTake;
-                
                 const { error: errAbandon } = await supabase.from('abandon_requests').insert(reqAbandon);
                 if (errAbandon) throw errAbandon;
                 
-                setMyPendingTakes([...myPendingTakes, reqTake]);
+                setMyPendingTakes([...myPendingTakes, takeData]);
                 alert("Votre demande d'abandon avec reprise a été envoyée à l'administrateur.");
             } else {
                 const { data: existing } = await supabase.from('take_requests')

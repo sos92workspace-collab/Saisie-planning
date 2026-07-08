@@ -533,6 +533,10 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
       } else {
         await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
       }
+      const ab = abandons.find(a => a.id === abandonId);
+      if (ab?.shift_snapshot?.linked_take?.id) {
+          await handleTakeAction(ab.shift_snapshot.linked_take.id, action);
+      }
       fetchArchivedChoices().then((archives) => { fetchAbandons(archives); });
     } catch (err) {
       console.error(err);
@@ -1327,6 +1331,22 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                 : 'Garde supprimée'}
                         </div>
                       </div>
+                      
+                      {ab.shift_snapshot?.linked_take && (
+                          <>
+                              <div className="flex items-center justify-center text-slate-300 mx-2">
+                                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                  </svg>
+                              </div>
+                              <div className="p-3 bg-teal-50 border border-teal-100 rounded-lg">
+                                  <div className="text-[9px] font-black text-teal-600 uppercase mb-1">Garde reprise</div>
+                                  <div className="text-sm font-bold text-slate-800">
+                                      {formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}
+                                  </div>
+                              </div>
+                          </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                        <button onClick={(e) => { e.stopPropagation(); handleAbandonAction(ab.id, 'REJECTED'); }} className="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg text-xs font-black uppercase transition-colors shadow-sm">Refuser</button>
@@ -1387,6 +1407,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                               : ab.shift_snapshot 
                                 ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
                                 : 'supprimée'}]
+                            {ab.shift_snapshot?.linked_take && (
+                                <>
+                                  {' → '}
+                                  <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
+                                </>
+                            )}
                           </span>
                           <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
                             <div className="flex items-center gap-2">
