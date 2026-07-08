@@ -264,7 +264,6 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
             logAction={logAction} 
             tableName="archived_choices"
             closuresTableName="archived_global_closures"
-            overrideAdminMode={true}
             overrideMonthsToDisplay={overrideMonthsToDisplay}
           />
         )}
@@ -2839,7 +2838,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
   const handleCellClick = async (row: number, colId: number, month: number, year: number) => {
       if (overrideAdminMode) {
           if (onCellClick) {
-              const assigned = choices.find((c: any) => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+              const assigned = choices.find((c: any) => c.row === row && c.col === colId && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
               onCellClick({ row, col: colId, month, year, assigned });
           }
           return;
@@ -2862,7 +2861,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
           return;
       }
 
-      const assignedChoice = choices.find((c: any) => c.row === row && c.col === colId && c.month === month && c.year === year && c.status === 'ASSIGNED');
+      const assignedChoice = choices.find((c: any) => c.row === row && c.col === colId && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
 
       if (assignedChoice) {
           if (window.confirm(`Retirer la garde du Dr ${assignedChoice.userTrigram} ?`)) {
@@ -2901,7 +2900,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
           c.userTrigram === cleanTri && 
           c.month === editingCell.month && 
           c.year === editingCell.year && 
-          c.status === 'ASSIGNED'
+          (c.status === 'ASSIGNED' || c.status === 'VALIDATED')
       );
 
       for (const assignedChoice of assigned) {
@@ -3026,11 +3025,11 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
     <div className="flex-1 overflow-auto custom-scrollbar p-8 pb-32 relative">
         <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-3xl border shadow-sm">
             <div>
-                <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{overrideAdminMode ? 'Planning (Sélectionnez une garde)' : 'Planning Global'}</h2>
-                <p className="text-xs font-bold text-slate-400 mt-1">{overrideAdminMode ? 'Cliquez sur une case pour confirmer l\'abandon.' : 'Gérez les attributions ou fermez des cases pour tous les tours.'}</p>
+                <h2 className="text-xl font-black uppercase tracking-tight text-slate-900">{overrideAdminMode ? 'Planning (Sélectionnez une garde)' : tableName === 'archived_choices' ? 'Planning Terminé' : 'Planning Global'}</h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">{overrideAdminMode ? 'Cliquez sur une case pour confirmer l\'abandon.' : tableName === 'archived_choices' ? 'Gérez les attributions ou fermez des cases des mois terminés.' : 'Gérez les attributions ou fermez des cases pour tous les tours.'}</p>
             </div>
             <div className="flex gap-3">
-                {!overrideAdminMode && (
+                {!overrideAdminMode && tableName !== 'archived_choices' && (
                     <>
                         {onArchiveCurrent && (
                             <button 
@@ -3200,7 +3199,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
             const fillPercentage = totalOpenCells > 0 ? Math.round((occupiedCells / totalOpenCells) * 100) : 0;
 
             const activeUsersWithCounts = users.map((u: any) => {
-                const userChoices = choices.filter((c: any) => c.userTrigram === u.trigram && c.status === 'ASSIGNED' && c.month === month && c.year === year);
+                const userChoices = choices.filter((c: any) => c.userTrigram === u.trigram && (c.status === 'ASSIGNED' || c.status === 'VALIDATED') && c.month === month && c.year === year);
                 const uniqueChoices = userChoices.filter((a: any, index: number, self: any[]) => 
                     index === self.findIndex((t: any) => t.row === a.row && t.col === a.col)
                 );
