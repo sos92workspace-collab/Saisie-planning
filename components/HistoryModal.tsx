@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, ChevronRight, Target, Zap, Clock, Users, Maximize, Minimize } from 'lucide-react';
+import { X, ChevronDown, ChevronRight, Target, Zap, Clock, Users, Maximize, Minimize, Trash2 } from 'lucide-react';
+import { COLUMNS } from '../constants';
 import { ArchivePlanningDoctorView } from './ArchivePlanningDoctorView';
 
 interface HistoryModalProps {
+    onHistoryUpdated?: () => void;
     isOpen: boolean;
     onClose: () => void;
     supabase: any;
@@ -16,6 +18,52 @@ const normalizeCategory = (cat: string) => {
     return 'normal';
 };
 
+const getDetailedCardInfo = (day: number, month: number, year: number, colId: number | undefined, colLabelRaw: string | undefined, columnConfigs: any[]) => {
+    const date = new Date(year, month - 1, day);
+    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const months = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const dayName = days[date.getDay()];
+    const monthName = months[month - 1];
+    const dd = day < 10 ? '0'+day : day;
+    
+    let shiftName = '';
+    let site = '';
+    let colLabel = colLabelRaw || colId?.toString() || '';
+
+    if (colId) {
+        const customConfig = columnConfigs?.find(c => c.column_id === colId);
+        const baseDef = COLUMNS?.find(c => c.id === colId);
+        if (customConfig?.custom_label) colLabel = customConfig.custom_label;
+        shiftName = customConfig?.custom_type || baseDef?.type || '';
+        site = baseDef?.site || '';
+        if (site === 'NONE') site = '';
+    }
+
+    return {
+        dateStr: `${dayName} ${dd} ${monthName} ${year}`,
+        colLabel,
+        shiftName,
+        site
+    };
+};
+
+const renderDetailedShift = (day: number, month: number, year: number, colId: number | undefined, colLabelRaw: string | undefined, columnConfigs: any[]) => {
+    const info = getDetailedCardInfo(day, month, year, colId, colLabelRaw, columnConfigs);
+    return (
+        <div className="flex flex-col">
+            <div className="font-black">{info.dateStr} (Col {info.colLabel})</div>
+            <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs font-medium opacity-80">{info.shiftName}</span>
+                {info.site && (
+                    <span className="bg-white/30 text-current text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">
+                        {info.site}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const formatCardTitle = (day: number, month: number, year: number, colLabel: string) => {
     const date = new Date(year, month - 1, day);
     const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
@@ -25,7 +73,7 @@ const formatCardTitle = (day: number, month: number, year: number, colLabel: str
     return `${dayName} ${dd}/${mm} (Col ${colLabel})`;
 };
 
-export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, columnConfigs }: HistoryModalProps) {
+export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, columnConfigs, onHistoryUpdated }: HistoryModalProps) {
     const [roundsHistory, setRoundsHistory] = useState<any[]>([]);
     const [exchangesHistory, setExchangesHistory] = useState<any[]>([]);
     const [abandonsHistory, setAbandonsHistory] = useState<any[]>([]);
@@ -100,6 +148,26 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, co
 
     const toggleRound = (id: string) => {
         setExpandedRound(prev => prev === id ? null : id);
+    };
+
+    const handleDeleteRequest = async (table: string, id: string) => {
+        if (!window.confirm("Voulez-vous vraiment annuler cette demande ?")) return;
+        try {
+            const { error } = await supabase.from(table).delete().eq('id', id);
+            if (error) throw error;
+            
+            if (onHistoryUpdated) onHistoryUpdated();
+            if (table === 'exchange_requests') {
+                setExchangesHistory(prev => prev.filter(x => x.id !== id));
+            } else if (table === 'abandon_requests') {
+                setAbandonsHistory(prev => prev.filter(x => x.id !== id));
+            } else if (table === 'take_requests') {
+                setTakesHistory(prev => prev.filter(x => x.id !== id));
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert("Erreur lors de l'annulation: " + e.message);
+        }
     };
 
     const formatDate = (dateStr: string) => {
@@ -323,19 +391,24 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, co
                                              </div>
                                              <div>
                                                  <div className="text-xs text-slate-500 font-bold mb-1">Cession de la Garde:</div>
-                                                 <div className="text-sm font-black text-slate-800 bg-orange-50 px-2 py-1 rounded inline-block">
-                                                     {ex.requester_choice ? formatCardTitle(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.columnLabel || ex.requester_choice.columnId) : 'N/A'}
-                                                 </div>
-                                                 <div className="text-xs mt-2 text-slate-500 font-bold mb-1">Pour la Garde cible:</div>
-                                                 <div className="text-sm font-black text-slate-800 bg-blue-50 px-2 py-1 rounded inline-block">
-                                                     {formatCardTitle(ex.target_row, ex.target_month, ex.target_year, ex.target_col_label || ex.target_col)}
-                                                 </div>
+                                                 <div className="text-sm font-black text-orange-800 bg-orange-50 px-2 py-1 rounded inline-block">
+        {ex.requester_choice ? renderDetailedShift(ex.requester_choice.row || ex.requester_choice.day, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col || ex.requester_choice.columnId, ex.requester_choice.colLabel || ex.requester_choice.columnLabel, columnConfigs) : 'N/A'}
+    </div>
+    <div className="text-xs mt-2 text-slate-500 font-bold mb-1">Pour la Garde cible:</div>
+    <div className="text-sm font-black text-blue-800 bg-blue-50 px-2 py-1 rounded inline-block">
+        {renderDetailedShift(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, columnConfigs)}
+    </div>
                                              </div>
                                          </div>
                                          <div className="flex flex-col items-end gap-2">
                                              <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-md ${statusColor}`}>
-                                                 {statusLabels[ex.status as 'APPROVED' | 'PENDING' | 'REJECTED'] || ex.status}
-                                             </span>
+        {statusLabels[ex.status as 'APPROVED' | 'PENDING' | 'REJECTED'] || ex.status}
+    </span>
+    {ex.status === 'PENDING' && (
+        <button onClick={() => handleDeleteRequest('exchange_requests', ex.id)} className="mt-1 p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Annuler la demande">
+            <Trash2 className="w-4 h-4" />
+        </button>
+    )}
                                              {ex.reason && <span className="text-xs text-slate-500 italic mt-1 max-w-[200px] text-right truncate" title={ex.reason}>"{ex.reason}"</span>}
                                              <span className="text-[10px] uppercase font-bold text-slate-400">Modif: {formatDate(ex.updated_at || ex.created_at)}</span>
                                          </div>
@@ -369,15 +442,20 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, co
                                              </div>
                                              <div>
                                                  <div className="text-xs text-slate-500 font-bold mb-1">Garde abandonnée:</div>
-                                                 <div className="text-sm font-black text-slate-800 bg-red-50 px-2 py-1 rounded inline-block text-red-800 border border-red-100">
-                                                     {choice ? formatCardTitle(choice.row || choice.day, choice.month, choice.year, choice.colLabel || choice.columnLabel || choice.col || choice.columnId) : 'N/A'}
-                                                 </div>
+                                                 <div className="text-sm font-black text-red-800 bg-red-50 px-2 py-1 rounded inline-block border border-red-100">
+        {choice ? renderDetailedShift(choice.row || choice.day, choice.month, choice.year, choice.col || choice.columnId, choice.colLabel || choice.columnLabel, columnConfigs) : 'N/A'}
+    </div>
                                              </div>
                                          </div>
                                          <div className="flex flex-col items-end gap-2">
                                              <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-md ${statusColor}`}>
-                                                 {statusLabels[ab.status as 'APPROVED' | 'PENDING' | 'REJECTED'] || ab.status}
-                                             </span>
+        {statusLabels[ab.status as 'APPROVED' | 'PENDING' | 'REJECTED'] || ab.status}
+    </span>
+    {ab.status === 'PENDING' && (
+        <button onClick={() => handleDeleteRequest('abandon_requests', ab.id)} className="mt-1 p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Annuler la demande">
+            <Trash2 className="w-4 h-4" />
+        </button>
+    )}
                                              <span className="text-[10px] uppercase font-bold text-slate-400">Modif: {formatDate(ab.updated_at || ab.created_at)}</span>
                                          </div>
                                      </div>
@@ -409,15 +487,20 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, co
                                              </div>
                                              <div>
                                                  <div className="text-xs text-slate-500 font-bold mb-1">Garde demandée:</div>
-                                                 <div className="text-sm font-black text-slate-800 bg-emerald-50 px-2 py-1 rounded inline-block text-emerald-800 border border-emerald-100">
-                                                     {formatCardTitle(tk.target_row, tk.target_month, tk.target_year, tk.target_col_label || tk.target_col)}
-                                                 </div>
+                                                 <div className="text-sm font-black text-emerald-800 bg-emerald-50 px-2 py-1 rounded inline-block border border-emerald-100">
+        {renderDetailedShift(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, columnConfigs)}
+    </div>
                                              </div>
                                          </div>
                                          <div className="flex flex-col items-end gap-2">
                                              <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-md ${statusColor}`}>
-                                                 {statusLabels[tk.status as 'APPROVED' | 'PENDING' | 'REJECTED'] || tk.status}
-                                             </span>
+        {statusLabels[tk.status as 'APPROVED' | 'PENDING' | 'REJECTED'] || tk.status}
+    </span>
+    {tk.status === 'PENDING' && (
+        <button onClick={() => handleDeleteRequest('take_requests', tk.id)} className="mt-1 p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Annuler la demande">
+            <Trash2 className="w-4 h-4" />
+        </button>
+    )}
                                              <span className="text-[10px] uppercase font-bold text-slate-400">Modif: {formatDate(tk.updated_at || tk.created_at)}</span>
                                          </div>
                                      </div>
@@ -499,7 +582,7 @@ export function HistoryModal({ isOpen, onClose, supabase, currentUserTrigram, co
                 </div>
 
                 {/* CONTENT AREA */}
-                <div className="flex-1 min-h-0 flex overflow-hidden">
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden min-w-0 w-full">
                     {renderTabContent()}
                 </div>
             </div>

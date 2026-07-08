@@ -212,6 +212,10 @@ const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs
                                     <input type="checkbox" checked={settings.allow_abandons || false} onChange={() => toggleMonthSetting(m.month, m.year, 'allow_abandons', settings.allow_abandons || false)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
                                     <span className="text-[10px] font-bold uppercase text-slate-600">Autoriser abandons</span>
                                 </label>
+                                <label className="flex items-center gap-2 cursor-pointer" title="Valider automatiquement les mouvements pour ce mois">
+                                    <input type="checkbox" checked={settings.auto_validate_movements || false} onChange={() => toggleMonthSetting(m.month, m.year, 'auto_validate_movements', settings.auto_validate_movements || false)} className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-600" />
+                                    <span className="text-[10px] font-bold uppercase text-slate-600">Auto valider mouvements</span>
+                                </label>
                             </div>
                         </div>
                     );
@@ -346,7 +350,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
       const { uniqueDates, currentData, affectedMonthsLabel } = archiveModal;
       
       // 2. Delete existing data for these months in archived_choices
-      const uniqueMonthsArr = Array.from(uniqueDates.values());
+      const uniqueMonthsArr = Array.from(uniqueDates.values()) as any[];
       for (const m of uniqueMonthsArr) {
           await supabase.from('archived_choices')
               .delete()
@@ -397,7 +401,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
     setIsLoading(true);
     try {
       const { data: ud } = await supabase.from('users').select('*').order('trigram');
-      if (ud) setUsers(ud);
+      if (ud) setUsers(ud.map((u: any) => ({ ...u, role: u.role === 'medecin' ? 'DOCTOR' : u.role })));
       const { data: rd } = await supabase.from('rounds').select('*').order('id');
       if (rd) {
         setRounds(rd.map((r: any) => ({
@@ -652,7 +656,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {!isSidebarCollapsed && <h2 className="hidden lg:block text-xs font-black uppercase tracking-tighter">SOS 92</h2>}
         </div>
         <nav className="flex-1 p-2 lg:p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }, { id: AdminTab.MAINTENANCE, label: 'Maintenance', icon: '🛠️' }].map(item => (
+          {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }, { id: AdminTab.MAINTENANCE, label: 'Maintenance', icon: '🛠️' }, { id: AdminTab.PENALTIES, label: 'Pénalités', icon: '💸' }].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id as AdminTab)} className={`w-full flex items-center justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:justify-start'} gap-3 p-3 lg:px-4 lg:py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`} title={item.label}>
               <span className="text-lg lg:text-base">{item.icon}</span>
               {!isSidebarCollapsed && <span className="hidden lg:block">{item.label}</span>}
@@ -703,7 +707,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 </button>
               </div>
               <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }, { id: AdminTab.MAINTENANCE, label: 'Maintenance', icon: '🛠️' }].map(item => (
+                {[{ id: AdminTab.USERS, label: 'Médecins', icon: '👥' }, { id: AdminTab.CONFIG, label: 'Paramétrage', icon: '⚙️' }, { id: AdminTab.SHIFTS, label: 'Gardes', icon: '🛡️' }, { id: AdminTab.PLANNING, label: 'Planning', icon: '📅' }, { id: AdminTab.VERSIONS, label: 'Copies de planning', icon: '💾' }, { id: AdminTab.ARCHIVES, label: 'Planning Terminé', icon: '📁' }, { id: AdminTab.WISHES, label: 'Choix Médecin', icon: '📝' }, { id: AdminTab.EXCHANGES, label: 'Mouvements de garde', icon: '🔄' }, { id: AdminTab.CONNECTION_LOGS, label: 'Historique log', icon: '📊' }, { id: AdminTab.MAINTENANCE, label: 'Maintenance', icon: '🛠️' }, { id: AdminTab.PENALTIES, label: 'Pénalités', icon: '💸' }].map(item => (
                   <button 
                     key={item.id} 
                     onClick={() => { setActiveTab(item.id as AdminTab); setIsMobileMenuOpen(false); }} 
@@ -727,7 +731,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           </div>
         )}
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden min-h-0">
           {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} logAction={logAction} />}
           {activeTab === AdminTab.CONFIG && (
             <ConfigPanel 
@@ -765,6 +769,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
           {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
           {activeTab === AdminTab.MAINTENANCE && <MaintenancePanel supabase={supabase} logAction={logAction} />}
+          {activeTab === AdminTab.PENALTIES && <PenaltiesPanel supabase={supabase} logAction={logAction} />}
         </div>
       </main>
     </div>
@@ -785,7 +790,7 @@ const EnlargeableChart = ({ title, children, isScrollable = false, dataLength = 
         >
           🗖
         </button>
-        <div className={`flex-1 min-h-[14rem] ${isScrollable ? "overflow-x-auto overflow-y-hidden" : ""}`}>
+        <div className={`flex-1 min-h-[14rem] ${isScrollable ? "overflow-x-auto overflow-y-hidden touch-pan-y" : ""}`}>
           {isScrollable ? (
               <div style={{ minWidth: dataLength > 0 ? `${Math.max(100, dataLength * 25)}px` : 'max(100%, 800px)', height: '100%' }}>
                  {children}
@@ -809,7 +814,7 @@ const EnlargeableChart = ({ title, children, isScrollable = false, dataLength = 
                 ✖
               </button>
             </div>
-            <div className={`flex-1 min-h-0 ${isScrollable ? "overflow-x-auto overflow-y-hidden" : ""}`}>
+            <div className={`flex-1 min-h-0 ${isScrollable ? "overflow-x-auto overflow-y-hidden touch-pan-y" : ""}`}>
                  {isScrollable ? (
                      <div style={{ minWidth: dataLength > 0 ? `${Math.max(100, dataLength * 40)}px` : 'max(100%, 1500px)', height: '100%' }}>
                          {children}
@@ -883,12 +888,109 @@ const MaintenancePanel = ({ supabase, logAction }: any) => {
   );
 };
 
+const PenaltiesPanel = ({ supabase, logAction }: any) => {
+  const [penalties, setPenalties] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPenalties = async () => {
+      const { data, error: fetchError } = await supabase.from('abandon_penalties').select('*').order('id', { ascending: true });
+      if (fetchError) {
+        if (fetchError.code === '42P01') {
+           setError("La table 'abandon_penalties' n'existe pas. Veuillez exécuter le script SQL fourni.");
+        } else {
+           setError(fetchError.message);
+        }
+      } else if (data) {
+        setPenalties(data);
+      }
+      setLoading(false);
+    };
+    fetchPenalties();
+  }, [supabase]);
+
+  const handleAmountChange = (id: number, amount: string) => {
+    setPenalties(prev => prev.map(p => p.id === id ? { ...p, penalty_amount: amount } : p));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    for (const penalty of penalties) {
+      await supabase.from('abandon_penalties').update({ penalty_amount: parseFloat(penalty.penalty_amount) || 0 }).eq('id', penalty.id);
+    }
+    logAction('PENALTIES_UPDATE', 'Mise à jour des pénalités d\'abandon');
+    setSaving(false);
+    alert('Pénalités enregistrées avec succès.');
+  };
+
+  const getLabel = (category: string) => {
+    switch(category) {
+      case 'MORE_THAN_48H': return 'Abandon supérieur à 48 heures';
+      case 'BETWEEN_6H_AND_48H': return 'Abandon entre 48h et 6h avant la garde';
+      case 'LESS_THAN_6H': return 'Abandon inférieur à 6 heures';
+      default: return category;
+    }
+  };
+
+  if (loading) return <div className="p-6">Chargement...</div>;
+
+  return (
+    <div className="bg-white rounded-[40px] shadow-sm p-8 md:p-12 border border-slate-100 max-w-2xl mx-auto mt-8">
+      <div className="text-center mb-10">
+        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <span className="text-3xl">💸</span>
+        </div>
+        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800">Pénalités d'abandon</h2>
+        <p className="text-sm text-slate-500 mt-2">Définissez les pénalités financières en cas d'abandon de garde.</p>
+      </div>
+
+      {error ? (
+        <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-200 text-sm mb-6">
+          {error}
+        </div>
+      ) : (
+        <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200 space-y-4">
+          {penalties.map((penalty) => (
+            <div key={penalty.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-white rounded-2xl border border-slate-100">
+              <div className="flex-1">
+                <h3 className="font-bold text-slate-800">{getLabel(penalty.delay_category)}</h3>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <input 
+                  type="number" 
+                  min="0"
+                  value={penalty.penalty_amount} 
+                  onChange={(e) => handleAmountChange(penalty.id, e.target.value)}
+                  className="w-24 px-3 py-2 border border-slate-300 rounded-xl text-right font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-slate-500 font-bold">€</span>
+              </div>
+            </div>
+          ))}
+          
+          <div className="pt-4 flex justify-end">
+            <button 
+              onClick={handleSave} 
+              disabled={saving}
+              className="px-6 py-3 bg-blue-600 text-white font-black uppercase tracking-widest text-xs rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LogsTabPanel = ({ supabase, currentUserTrigram }: any) => {
   const [subTab, setSubTab] = useState<'CONNECTIONS' | 'MOVEMENTS' | 'WISHES'>('CONNECTIONS');
 
   return (
-    <div className="space-y-6">
-       <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-200">
+    <div className="h-full overflow-y-auto p-4 md:p-8 custom-scrollbar space-y-6">
+       <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-200 shrink-0">
           <button 
             onClick={() => setSubTab('CONNECTIONS')} 
             className={`flex-1 p-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${subTab === 'CONNECTIONS' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
@@ -1156,7 +1258,7 @@ const ConnectionLogsSubPanel = ({ supabase, currentUserTrigram }: any) => {
       {loading ? (
           <div className="text-slate-500 text-sm py-4">Chargement des logs...</div>
       ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-pan-y">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -1388,7 +1490,7 @@ const MovementLogsSubPanel = ({ supabase }: any) => {
       {loading ? (
           <div className="text-slate-500 text-sm py-4">Chargement des mouvements...</div>
       ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-pan-y">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -1581,7 +1683,7 @@ const WishesLogsSubPanel = ({ supabase }: any) => {
       {loading ? (
           <div className="text-slate-500 text-sm py-4">Chargement des vœux...</div>
       ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto touch-pan-y">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -2234,39 +2336,46 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
 
   return (
     <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
-      <div className="p-4 md:p-6 bg-white border-b flex flex-col md:flex-row gap-4 md:gap-6 items-start md:items-center justify-between shrink-0">
-         <div className="flex flex-col md:flex-row items-start md:items-center gap-6 w-full md:w-auto">
-             <div className="flex flex-col">
-                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour</label>
-                 <div className="flex items-center gap-3">
-                     <select value={selectedRoundId} onChange={e => setSelectedRoundId(Number(e.target.value))} className="bg-slate-50 border border-slate-200 text-slate-900 text-sm font-bold rounded-xl px-4 py-2 outline-none focus:ring-2 ring-blue-50 min-w-[200px]">
-                        {allRounds.map((r: Round) => <option key={r.id} value={r.id}>{r.title}</option>)}
-                     </select>
-                     {round && !round.isActive && (
-                         <button onClick={setRoundActive} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 transition-all whitespace-nowrap">Activer ce tour</button>
+      <div className="p-4 md:p-6 bg-white border-b flex flex-col gap-4 shrink-0">
+         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 w-full">
+             <div className="flex flex-col md:flex-row items-start md:items-center gap-6 w-full md:w-auto">
+                 <div className="flex flex-col">
+                     <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour</label>
+                     <div className="flex items-center gap-3">
+                         <select value={selectedRoundId} onChange={e => setSelectedRoundId(Number(e.target.value))} className="bg-slate-50 border border-slate-200 text-slate-900 text-sm font-bold rounded-xl px-4 py-2 outline-none focus:ring-2 ring-blue-50 min-w-[200px]">
+                            {allRounds.map((r: Round) => <option key={r.id} value={r.id}>{r.title}</option>)}
+                         </select>
+                         {round && !round.isActive && (
+                             <button onClick={setRoundActive} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-200 transition-all whitespace-nowrap">Activer ce tour</button>
+                         )}
+                     </div>
+                 </div>
+                 
+                 <div className="hidden md:block w-px h-10 bg-slate-200"></div>
+                 <div className="flex flex-col">
+                     <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour actuellement actif</label>
+                     {isGloballyLocked ? (
+                         <div className="text-sm font-black text-red-600 flex items-center gap-2">
+                             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                             SYSTÈME VERROUILLÉ
+                         </div>
+                     ) : (
+                         <div className="text-sm font-black text-emerald-600 flex items-center gap-2">
+                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                             {allRounds.find(r => r.isActive)?.title || "Aucun"}
+                         </div>
                      )}
                  </div>
              </div>
-             
-             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
-
-             <div className="flex flex-col">
-                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Tour actuellement actif</label>
-                 {isGloballyLocked ? (
-                     <div className="text-sm font-black text-red-600 flex items-center gap-2">
-                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                         SYSTÈME VERROUILLÉ
-                     </div>
-                 ) : (
-                     <div className="text-sm font-black text-emerald-600 flex items-center gap-2">
-                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                         {allRounds.find(r => r.isActive)?.title || "Aucun"}
-                     </div>
-                 )}
+             <div className="flex gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
+                <button onClick={() => setActiveSubTab('general')} className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeSubTab === 'general' ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>Général</button>
+                <button onClick={() => setActiveSubTab('columns')} className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeSubTab === 'columns' ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>Colonnes</button>
              </div>
+         </div>
+         
+         <div className="h-px w-full bg-slate-100 hidden md:block mt-1"></div>
 
-             <div className="hidden md:block w-px h-10 bg-slate-200"></div>
-
+         <div className="flex flex-col md:flex-row items-start md:items-center justify-start gap-6 w-full">
              <div className="flex flex-col">
                  <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Verrouillage Global</label>
                  <label className="flex items-center gap-3 cursor-pointer">
@@ -2276,11 +2385,11 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                      <span className={`text-xs font-bold ${isGloballyLocked ? 'text-red-600' : 'text-slate-400'}`}>{isGloballyLocked ? 'VERROUILLÉ' : 'DÉVERROUILLÉ'}</span>
                  </label>
              </div>
-
+             
              <div className="hidden md:block w-px h-10 bg-slate-200"></div>
-
+             
              <div className="flex flex-col">
-                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest" title="Validation automatique des échanges sans admin">Auto-validation (Échanges)</label>
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest" title="Validation automatique des mouvements">Auto-validation</label>
                  <label className="flex items-center gap-3 cursor-pointer">
                      <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isAutoValidateExchanges ? 'bg-indigo-500' : 'bg-slate-200'}`} onClick={toggleAutoValidate}>
                          <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isAutoValidateExchanges ? 'translate-x-6' : ''}`}></div>
@@ -2290,9 +2399,9 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
              </div>
              
              <div className="hidden md:block w-px h-10 bg-slate-200"></div>
-
+             
              <div className="flex flex-col">
-                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Autoriser les échanges</label>
+                 <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Autorisations, abandons</label>
                  <label className="flex items-center gap-3 cursor-pointer">
                      <div className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 ${isExchangesAllowed ? 'bg-green-500' : 'bg-slate-200'}`} onClick={toggleExchanges}>
                          <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 ${isExchangesAllowed ? 'translate-x-6' : ''}`}></div>
@@ -2302,7 +2411,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
              </div>
              
              <div className="hidden md:block w-px h-10 bg-slate-200"></div>
-
+             
              <div className="flex flex-col">
                  <label className="text-[9px] font-black uppercase text-slate-400 mb-1 tracking-widest">Autoriser la prise de garde</label>
                  <label className="flex items-center gap-3 cursor-pointer">
@@ -2312,10 +2421,6 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                      <span className={`text-xs font-bold ${isTakesAllowed ? 'text-green-600' : 'text-slate-400'}`}>{isTakesAllowed ? 'AUTORISÉE' : 'INTERDITE'}</span>
                  </label>
              </div>
-         </div>
-         <div className="flex gap-2 w-full md:w-auto overflow-x-auto no-scrollbar">
-            <button onClick={() => setActiveSubTab('general')} className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeSubTab === 'general' ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>Général</button>
-            <button onClick={() => setActiveSubTab('columns')} className={`flex-1 md:flex-none px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeSubTab === 'columns' ? 'bg-slate-800 text-white' : 'bg-white border hover:bg-slate-50'}`}>Colonnes</button>
          </div>
       </div>
       <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
@@ -2582,7 +2687,7 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
                 </div>
 
                 <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto touch-pan-y">
                         <table className="w-max min-w-full text-left border-collapse">
                             <thead className="bg-slate-900 text-white sticky top-0 z-10">
                                 <tr>

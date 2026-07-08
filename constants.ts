@@ -281,3 +281,24 @@ export const checkQuotaReached = (
 
     return false;
 };
+
+export const doShiftsOverlap = (date1: Date, range1: string, date2: Date, range2: string, maxOverlapMinutes: number = 0): boolean => {
+    const t1 = parseTimeRange(range1);
+    const t2 = parseTimeRange(range2);
+    if (!t1 || !t2) return false;
+
+    // Time difference adjusted for local time (so that 1day is exactly 24h, ignoring DST boundaries for simplicity since shifts don't typically span DST edge cases badly, but UTC is better if possible. For overlap, getTime() handles absolute offset)
+    const start1 = date1.getTime() / 60000 + t1.start;
+    const end1 = date1.getTime() / 60000 + t1.end;
+
+    const start2 = date2.getTime() / 60000 + t2.start;
+    const end2 = date2.getTime() / 60000 + t2.end;
+
+    const overlapStart = Math.max(start1, start2);
+    const overlapEnd = Math.min(end1, end2);
+
+    if (overlapStart < overlapEnd) {
+        return (overlapEnd - overlapStart) > maxOverlapMinutes;
+    }
+    return false;
+};

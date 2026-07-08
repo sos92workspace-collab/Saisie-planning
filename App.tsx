@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { ChevronDown, Calendar, Bot, X, ArrowRight, Book, ArrowLeft } from 'lucide-react';
-import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, checkQuotaReached } from './constants';
+import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHoliday, checkQuotaReached, doShiftsOverlap } from './constants';
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings, ColumnQuota } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 
@@ -343,6 +343,7 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<AppStep>(AppStep.NORMAL_SELECTION);
   const [choices, setChoices] = useState<Choice[]>([]);
+  const [archivedChoices, setArchivedChoices] = useState<any[]>([]);
   const [quotas, setQuotas] = useState<ColumnQuota[]>([]);
   const prevChoicesCountRef = useRef<number>(-1);
   const prevCategoryRef = useRef<string>('');
@@ -708,7 +709,7 @@ const App: React.FC = () => {
         else setSystemSettings({ maintenance_mode: false });
         
         const { data: ud } = await supabase.from('users').select('*');
-        if (ud) setUsers(ud);
+        if (ud) setUsers(ud.map((u: any) => ({ ...u, role: u.role === 'medecin' ? 'DOCTOR' : u.role })));
         
         const gc = await fetchAll(supabase, 'global_closures');
         if (gc) setGlobalClosures(gc.map((g: any) => ({ ...g, month: g.month !== null ? g.month - 1 : null })));
@@ -731,6 +732,9 @@ const App: React.FC = () => {
     if (unav) setUnavailabilities(unav.map((u: any) => ({
         id: u.id, userTrigram: u.user_trigram, day: u.day, month: u.month - 1, year: u.year, period: u.period
     })));
+
+    const { data: archData } = await supabase.from('archived_choices').select('*');
+    if (archData) setArchivedChoices(archData);
 
     // Fetch my pending exchanges
     const { data: myExchanges } = await supabase.from('exchange_requests')
@@ -1181,8 +1185,41 @@ const App: React.FC = () => {
           if (isAssigned) return;
 
           // Check if cell is already targeted by me in another pending exchange
+          
           const isAlreadyTargetedByMe = myPendingExchanges.some(ex => ex.target_row === day && ex.target_col === col.id && ex.target_month === month && ex.target_year === year);
           if (isAlreadyTargetedByMe) return;
+
+          // Check if this target cell overlaps with any of my currently assigned shifts
+          const myAssignedShifts = [
+        ...choices.filter((c: any) => c.userTrigram === (currentUser?.trigram || trigram).toUpperCase() && (c.status === 'ASSIGNED' || c.status === 'VALIDATED' || c.status === 'PENDING')),
+        ...archivedChoices
+            .filter((c: any) => (c.user_trigram) === (currentUser?.trigram || trigram).toUpperCase() && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'))
+            .map((c: any) => ({ ...c, month: c.month - 1 })),
+        ...myPendingTakes.map((t: any) => ({
+            row: t.target_row, col: t.target_col, month: t.target_month, year: t.target_year
+        })),
+        ...myPendingExchanges.map((e: any) => ({
+            row: e.target_row, col: e.target_col, month: e.target_month, year: e.target_year
+        }))
+    ];
+          let hasOverlap = false;
+          if (col.timeRange || col.custom_time_range) {
+              const targetTimeRange = col.custom_time_range || col.timeRange;
+              const targetDateObj = new Date(year, month, day);
+              for (const myChoice of myAssignedShifts) {
+                  
+                  const myCol = columnConfigs.find(c => c.column_id === myChoice.col) || COLUMNS.find(c => c.id === myChoice.col);
+                  if (!myCol || !myCol.timeRange && !myCol.custom_time_range) continue;
+                  const myTimeRange = myCol.custom_time_range || myCol.timeRange;
+                  const myDateObj = new Date(myChoice.year, myChoice.month, myChoice.row);
+                  if (doShiftsOverlap(targetDateObj, targetTimeRange, myDateObj, myTimeRange)) {
+                      hasOverlap = true;
+                      break;
+                  }
+              }
+          }
+          if (hasOverlap) return;
+
 
           // Check if quota allows it
           const isQuotaReached = checkQuotaReached(col.id, targetDate, currentUser?.role || 'DOCTOR', choices, quotas);
@@ -1270,6 +1307,40 @@ const App: React.FC = () => {
 
         const colConfig = columnConfigs.find(c => c.column_id === colId);
         const colDef = COLUMNS.find(c => c.id === colId);
+        const colTimeRange = colConfig?.custom_time_range || colDef?.timeRange || '';
+        if (colTimeRange) {
+            const targetDateObj = new Date(year, month, row);
+            const myAssignedShifts = [
+        ...choices.filter((c: any) => c.userTrigram === trigram.toUpperCase() && (c.status === 'ASSIGNED' || c.status === 'VALIDATED' || c.status === 'PENDING')),
+        ...archivedChoices
+            .filter((c: any) => (c.user_trigram) === trigram.toUpperCase() && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'))
+            .map((c: any) => ({ ...c, month: c.month - 1 })),
+        ...myPendingTakes.map((t: any) => ({
+            row: t.target_row, col: t.target_col, month: t.target_month, year: t.target_year
+        })),
+        ...myPendingExchanges.map((e: any) => ({
+            row: e.target_row, col: e.target_col, month: e.target_month, year: e.target_year
+        }))
+    ];
+            let hasOverlap = false;
+            for (const myChoice of myAssignedShifts) {
+                  
+                const myCol = columnConfigs.find(c => c.column_id === myChoice.col) || COLUMNS.find(c => c.id === myChoice.col);
+                if (!myCol || !myCol.timeRange && !myCol.custom_time_range) continue;
+                const myTimeRange = myCol.custom_time_range || myCol.timeRange;
+                const myDateObj = new Date(myChoice.year, myChoice.month, myChoice.row);
+                if (doShiftsOverlap(targetDateObj, colTimeRange, myDateObj, myTimeRange)) {
+                    hasOverlap = true;
+                    break;
+                }
+            }
+            if (hasOverlap) {
+                alert("Action impossible : vous avez déjà une garde sur des horaires incompatibles.");
+                return;
+            }
+        }
+
+
         const colLabel = colConfig?.custom_label || colDef?.label || '';
 
         setSelectedTargetChoice({
@@ -1520,7 +1591,7 @@ const App: React.FC = () => {
           .eq('status', 'PENDING');
         if (myTakes) setMyPendingTakes(myTakes);
 
-        setTakeMode('INACTIVE');
+        // setTakeMode('INACTIVE'); // Keep mode active to allow taking multiple
         setSelectedTargetChoice(null);
         setShowTakeConfirmModal(false);
     } catch (err) {
@@ -1683,6 +1754,7 @@ const App: React.FC = () => {
           supabase={supabase}
           currentUserTrigram={trigram.toUpperCase()}
           columnConfigs={columnConfigs}
+          onHistoryUpdated={() => fetchChoices(trigram)}
       />
 
       {showUnavailabilityModal && monthsToDisplay.length > 0 && (
@@ -1820,7 +1892,7 @@ const App: React.FC = () => {
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${exchangeMode !== 'INACTIVE' ? 'bg-orange-500 text-white border-orange-600 hover:bg-orange-600' : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-500 hover:text-white'}`}
                         >
                             <span className="hidden md:inline">{exchangeMode !== 'INACTIVE' ? 'Annuler l\'échange' : 'Échanger une garde'}</span>
-                            <span className="md:hidden">Échanger</span>
+                            <span className="md:hidden">{exchangeMode !== 'INACTIVE' ? 'Annuler' : 'Échanger'}</span>
                         </button>
                         {exchangeMode === 'INACTIVE' && (
                            <button 
@@ -1838,17 +1910,17 @@ const App: React.FC = () => {
                         <>
                         <button 
                             onClick={() => {
-                                if (takeMode === 'INACTIVE') {
+                                if (takeMode !== 'INACTIVE') {
+                                    setTakeMode('INACTIVE');
+                                } else {
                                     setTakeMode('SELECT_TARGET');
                                     setExchangeMode('INACTIVE');
-                                } else {
-                                    setTakeMode('INACTIVE');
                                 }
                             }}
                             className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${takeMode !== 'INACTIVE' ? 'bg-teal-500 text-white border-teal-600 hover:bg-teal-600' : 'bg-teal-50 text-teal-600 border-teal-100 hover:bg-teal-500 hover:text-white'}`}
                         >
-                            <span className="hidden md:inline">{takeMode !== 'INACTIVE' ? 'Annuler la prise' : 'Prendre une garde'}</span>
-                            <span className="md:hidden">Prendre</span>
+                            <span className="hidden md:inline">{takeMode !== 'INACTIVE' ? 'Arrêter de prendre des gardes' : 'Prendre des gardes'}</span>
+                            <span className="md:hidden">{takeMode !== 'INACTIVE' ? 'Arrêter' : 'Prendre'}</span>
                         </button>
                         {takeMode === 'INACTIVE' && (
                            <button 
@@ -2214,7 +2286,25 @@ const App: React.FC = () => {
                                   const cellDiffHours = (cellDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
                                   const isLessThan48h = cellDiffHours < 48;
 
-                                  if (exchangeMode !== 'INACTIVE') {
+                                  let cellTitle: string | undefined = undefined;
+                                  if (isLessThan48h && (exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE')) {
+                                      cellTitle = "Garde non compatible, délai trop court";
+                                  }
+
+                                  if (isClosed) {
+                                      bgColor = '#fee2e2'; // red-100
+                                      cellStyles += " opacity-40 cursor-not-allowed text-slate-900 pointer-events-none";
+                                  } else if (isLessThan48h && (exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE')) {
+                                      bgColor = '#f8fafc';
+                                      cellStyles += " opacity-50 grayscale cursor-not-allowed text-slate-900";
+                                      if (assignedList.length > 0) {
+                                          if (isAssignedToMe) {
+                                              bgColor = '#fef08a';
+                                          } else {
+                                              bgColor = col.customColor || '#e2e8f0';
+                                          }
+                                      }
+                                  } else if (exchangeMode !== 'INACTIVE') {
                                       const isOwnSelected = selectedOwnChoice?.row === day && selectedOwnChoice?.col === col.id && selectedOwnChoice?.month === month && selectedOwnChoice?.year === year;
                                       const isTargetSelected = selectedTargetChoice?.row === day && selectedTargetChoice?.col === col.id && selectedTargetChoice?.month === month && selectedTargetChoice?.year === year;
                                       const isPossibleTarget = possibleTargetChoices.some(c => c.row === day && c.col === col.id && c.month === month && c.year === year);
@@ -2344,23 +2434,30 @@ const App: React.FC = () => {
                                   const isColoredCase = exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE' || myPending || hasMultiplePending || assignedList.length > 0 || isBlocked;
                                   const skipWeekendGradient = (isClosed || (isQuotaReachedUser && !isColoredCase));
 
-                                  if (isWeekendGuard && !skipWeekendGradient) {
+                                                                    if (isWeekendGuard && !skipWeekendGradient) {
                                       bgColor = `linear-gradient(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.25)), ${bgColor}`;
                                   }
-
+                                  
                                   if(assignedList.length > 0 && !isAssignedToMe && !isConsultationMode) cellStyles += " cursor-not-allowed";
-
+                                  
                                   return (
                                     <td 
                                       key={col.id} 
                                       title={
-                                          (!isConsultationMode && isBlocked) ? "Indisponibilité" : (
-                                              isQuotaReachedUser && !myPending && !isAssignedToMe ? "Quota atteint" : undefined
+                                          cellTitle || (
+                                              (!isConsultationMode && isBlocked) ? "Indisponibilité" : (
+                                                  isQuotaReachedUser && !myPending && !isAssignedToMe ? "Quota atteint" : undefined
+                                              )
                                           )
                                       }
                                       onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type, colSite: col.site, colTimeRange: col.timeRange })}
                                       onMouseLeave={() => setHoveredCell(null)}
                                       onClick={(e) => {
+                                          if (isLessThan48h && (exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE')) return;
+                                          if (isLessThan48h && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && !isConsultationMode && assignedList.length === 0) {
+                                              alert("Cette garde est dans moins de 48 heures, action impossible.");
+                                              return;
+                                          }
                                           if (exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (isConsultationMode || assignedList.length > 0)) return;
                                           if (isQuotaReachedUser && !isConsultationMode && !myPending && !isAssignedToMe && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE') {
                                               alert("⚠️ ACTION BLOQUÉE : Le quota mensuel pour ce type de jour est déjà atteint. Vous ne pouvez plus demander cette garde.");
@@ -2379,6 +2476,11 @@ const App: React.FC = () => {
                                       }}
                                       onDoubleClick={(e) => {
                                           e.preventDefault();
+                                          if (isLessThan48h && (exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE')) return;
+                                          if (isLessThan48h && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && !isConsultationMode && assignedList.length === 0) {
+                                              alert("Cette garde est dans moins de 48 heures, action impossible.");
+                                              return;
+                                          }
                                           if (isConsultationMode || assignedList.length > 0) return;
                                           if (isQuotaReachedUser && !myPending && !isAssignedToMe && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE') {
                                               alert("⚠️ ACTION BLOQUÉE : Le quota mensuel pour ce type de jour est déjà atteint. Vous ne pouvez plus demander cette garde.");
@@ -2687,7 +2789,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="flex gap-4">
-                    <button onClick={() => setShowExchangeConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
+                    <button onClick={() => { setShowExchangeConfirmModal(false); setSelectedTargetChoice(null); }} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
                     <button onClick={handleExchangeConfirm} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-blue-500/20 transition-all flex justify-center items-center gap-2">Confirmer la demande</button>
                 </div>
             </div>
@@ -2709,7 +2811,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="flex gap-4">
-                    <button onClick={() => setShowTakeConfirmModal(false)} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
+                    <button onClick={() => { setShowTakeConfirmModal(false); setSelectedTargetChoice(null); }} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold uppercase text-xs tracking-widest transition-colors">Annuler</button>
                     <button onClick={handleTakeConfirm} className="flex-1 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-xl shadow-teal-500/20 transition-all flex justify-center items-center gap-2">Confirmer</button>
                 </div>
             </div>

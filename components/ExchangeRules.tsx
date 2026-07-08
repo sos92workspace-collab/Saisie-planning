@@ -126,8 +126,29 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
     }
   };
 
-  const fetchRequests = async () => {
+  const [archivedChoices, setArchivedChoices] = useState<any[]>([]);
+
+  const fetchArchivedChoices = async () => {
     try {
+      let allData: any[] = [];
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase.from('archived_choices').select('*').range(page * 1000, (page + 1) * 1000 - 1);
+        if (error || !data || data.length === 0) break;
+        allData.push(...data);
+        page++;
+      }
+      setArchivedChoices(allData);
+      return allData;
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  };
+
+  const fetchRequests = async (archiveDb?: any[]) => {
+    try {
+      const currentArchive = archiveDb || archivedChoices;
       const { data, error } = await supabase
         .from('exchange_requests')
         .select(`
@@ -138,14 +159,27 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         .order('created_at', { ascending: true });
       
       if (error) throw error;
-      setRequests(data || []);
+      
+      const parsed = (data || []).map(req => {
+          let reqChoice = req.requester_choice;
+          if (!reqChoice && req.requester_choice_id) {
+             reqChoice = currentArchive.find(c => c.original_id === req.requester_choice_id);
+          }
+          let tgtChoice = req.target_choice;
+          if (!tgtChoice && req.target_choice_id) {
+             tgtChoice = currentArchive.find(c => c.original_id === req.target_choice_id);
+          }
+          return { ...req, requester_choice: reqChoice, target_choice: tgtChoice };
+      });
+      setRequests(parsed);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const fetchAbandons = async () => {
+  const fetchAbandons = async (archiveDb?: any[]) => {
     try {
+      const currentArchive = archiveDb || archivedChoices;
       const { data, error } = await supabase
         .from('abandon_requests')
         .select(`
@@ -155,7 +189,15 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         .order('created_at', { ascending: true });
       
       if (error) throw error;
-      setAbandons(data || []);
+      
+      const parsed = (data || []).map(req => {
+          let reqChoice = req.requester_choice;
+          if (!reqChoice && req.choice_id) {
+             reqChoice = currentArchive.find(c => c.original_id === req.choice_id);
+          }
+          return { ...req, requester_choice: reqChoice };
+      });
+      setAbandons(parsed);
     } catch (err) {
       console.error(err);
     }
@@ -167,7 +209,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         .from('take_requests')
         .select('*')
         .order('created_at', { ascending: true });
-      
       if (error) throw error;
       setTakes(data || []);
     } catch (err) {
@@ -229,7 +270,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const fetchUsersAndLogs = async () => {
     try {
       const { data: usersData } = await supabase.from('users').select('*');
-      if (usersData) setUsersState(usersData);
+      if (usersData) setUsersState(usersData.map((u: any) => ({ ...u, role: u.role === 'medecin' ? 'DOCTOR' : u.role })));
 
       const [logsAbandons, logsRequests, logsTakes] = await Promise.all([
         supabase.from('logs').select('created_at').eq('action', 'RESET_ABANDON_COUNTER').order('created_at', { ascending: false }).limit(1),
@@ -261,9 +302,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   useEffect(() => {
     fetchColumnConfigs();
     fetchRules();
-    fetchRequests();
+    fetchArchivedChoices().then((archives) => { fetchRequests(archives); fetchAbandons(archives); });
     fetchVersions();
-    fetchAbandons();
+    
     fetchTakes();
     fetchAdminLogs();
     fetchUsersAndLogs();
@@ -371,7 +412,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
 
       if (refreshData) refreshData();
       fetchAssignedChoices();
-      fetchRequests();
+      fetchArchivedChoices().then((archives) => { fetchRequests(archives); fetchAbandons(archives); });
       setExchangeSourceChoice(null);
       setExchangeTargetCell(null);
     } catch (e: any) {
@@ -400,7 +441,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
       if (abandonError) throw abandonError;
 
       fetchAssignedChoices();
-      fetchAbandons();
+      
       
       const { error: logError } = await supabase.from('logs').insert([{
         action: 'SUPPRESSION_GARDE', // from Admin Dashboard
@@ -422,12 +463,21 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
 
       if (action === 'APPROVED') {
         // Update the requester's choice to the new coordinates
-        await supabase.from('choices').update({ 
+        const { data: c } = await supabase.from('choices').update({ 
             row: req.target_row,
             col: req.target_col,
             month: req.target_month + 1,
             year: req.target_year
-        }).eq('id', req.requester_choice_id);
+        }).eq('id', req.requester_choice_id).select();
+        
+        if (!c || c.length === 0) {
+            await supabase.from('archived_choices').update({
+                row: req.target_row,
+                col: req.target_col,
+                month: req.target_month + 1,
+                year: req.target_year
+            }).eq('original_id', req.requester_choice_id);
+        }
 
         // Auto-reject other pending requests for the same target cell
         const otherRequests = requests.filter(r => 
@@ -449,7 +499,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
       }
 
       await supabase.from('exchange_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', requestId);
-      fetchRequests();
+      fetchArchivedChoices().then((archives) => { fetchRequests(archives); fetchAbandons(archives); });
     } catch (err) {
       console.error(err);
       alert("Erreur lors du traitement de la demande.");
@@ -461,20 +511,29 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
       if (action === 'APPROVED') {
         const ab = abandons.find(a => a.id === abandonId);
         if (ab) {
-            // Read choice
-            const { data: choiceData } = await supabase.from('choices').select('*').eq('id', ab.choice_id).single();
-            if (choiceData) {
-               await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
-            } else {
-               await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+            if (ab.choice_id) {
+                const { data: choiceData } = await supabase.from('choices').select('*').eq('id', ab.choice_id).single();
+                if (choiceData) {
+                   await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+                } else {
+                   await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+                }
+                await supabase.from('choices').delete().eq('id', ab.choice_id);
+            } else if (ab.shift_snapshot) {
+                await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+                await supabase.from('archived_choices')
+                    .delete()
+                    .eq('user_trigram', ab.requester_trigram)
+                    .eq('row', ab.shift_snapshot.row)
+                    .eq('col', ab.shift_snapshot.col)
+                    .eq('month', ab.shift_snapshot.month + 1)
+                    .eq('year', ab.shift_snapshot.year);
             }
-            // Delete the choice if approved
-            await supabase.from('choices').delete().eq('id', ab.choice_id);
         }
       } else {
         await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
       }
-      fetchAbandons();
+      fetchArchivedChoices().then((archives) => { fetchAbandons(archives); });
     } catch (err) {
       console.error(err);
       alert("Erreur lors du traitement de la demande d'abandon.");
@@ -486,23 +545,42 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
       if (action === 'APPROVED') {
         const tk = takes.find(t => t.id === takeId);
         if (tk) {
-            // Find user id for requester_trigram
-            const { data: usersData } = await supabase.from('users').select('id').eq('trigram', tk.requester_trigram).single();
-            const userId = usersData ? usersData.id : null;
+            const { data: usersData } = await supabase.from('users').select('role').eq('trigram', tk.requester_trigram).single();
+            if (usersData) {
+                // Check if target is archived
+                const { data: archivedSetting } = await supabase.from('archived_month_settings')
+                    .select('id')
+                    .eq('month', tk.target_month)
+                    .eq('year', tk.target_year)
+                    .maybeSingle();
 
-            if (userId) {
-                // Insert new choice
-                await supabase.from('choices').insert({
-                    user_id: userId,
-                    user_trigram: tk.requester_trigram,
-                    round_id: tk.round_id,
-                    row: tk.target_row,
-                    col: tk.target_col,
-                    month: tk.target_month + 1, // Choices table is 1-indexed month
-                    year: tk.target_year,
-                    category: 'normal',
-                    status: 'ASSIGNED'
-                });
+                if (archivedSetting) {
+                    await supabase.from('archived_choices').insert({
+                        user_trigram: tk.requester_trigram,
+                        round_id: tk.round_id || 0,
+                        row: tk.target_row,
+                        col: tk.target_col,
+                        month: tk.target_month + 1,
+                        year: tk.target_year,
+                        category: 'normal',
+                        status: 'ASSIGNED',
+                        user_role: usersData?.role || 'DOCTOR',
+                        col_label: tk.target_col_label
+                    });
+                } else {
+                    // Insert new choice
+                    await supabase.from('choices').insert({
+                        
+                        user_trigram: tk.requester_trigram,
+                        round_id: tk.round_id || 0,
+                        row: tk.target_row,
+                        col: tk.target_col,
+                        month: tk.target_month + 1,
+                        year: tk.target_year,
+                        category: 'normal',
+                        status: 'ASSIGNED'
+                    });
+                }
 
                 // Auto-reject other pending takes for the same target cell
                 const otherTakes = takes.filter(t => 
@@ -526,6 +604,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
       
       await supabase.from('take_requests').update({ status: action }).eq('id', takeId);
       fetchTakes();
+      fetchArchivedChoices();
     } catch (err) {
       console.error(err);
       alert("Erreur lors du traitement de la prise de garde.");
