@@ -509,6 +509,9 @@ export const ArchivePlanningDoctorView = ({ supabase, currentUserTrigram, column
                                                                 if (assigned && assigned.userTrigram === currentUserTrigram) {
                                                                     bgColor = '#fef08a';
                                                                     cellStyles += " hover:bg-rose-100 cursor-pointer opacity-100 scale-[1.05] z-10 shadow-[inset_0_0_0_2px_#f43f5e]";
+                                                                } else if (existingTake) {
+                                                                    bgColor = '#14b8a6'; // teal-500
+                                                                    cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
                                                                 } else if (assigned) {
                                                                     bgColor = col.customColor || '#FFFFFF';
                                                                     cellStyles += " opacity-20 pointer-events-none";
@@ -525,6 +528,9 @@ export const ArchivePlanningDoctorView = ({ supabase, currentUserTrigram, column
                                                                 } else if (isTargetSelected) {
                                                                     bgColor = '#0d9488'; // teal-600
                                                                     cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
+                                                                } else if (existingTake) {
+                                                                    bgColor = '#14b8a6'; // teal-500
+                                                                    cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
                                                                 } else if (isPossibleTarget && !assigned) {
                                                                     bgColor = col.customColor || '#FFFFFF';
                                                                     cellStyles += " hover:bg-teal-50 cursor-pointer opacity-100 shadow-[inset_0_0_0_2px_#5eead4]";
@@ -720,8 +726,18 @@ export const ArchivePlanningDoctorView = ({ supabase, currentUserTrigram, column
                                                                         </svg>
                                                                     )}
                                                                     {!isClosed && assigned && (
-                                                                        <span className={`text-[14px] md:text-[11px] font-black block leading-none tracking-tighter drop-shadow-sm relative z-10 ${assigned.userTrigram === currentUserTrigram ? 'text-yellow-900' : 'text-slate-900'}`}>
-                                                                            {assigned.userTrigram}
+                                                                        <div className="flex flex-col items-center justify-center gap-[1px] relative h-full w-full">
+                                                                            <span className={`text-[14px] md:text-[11px] font-black block leading-none tracking-tighter drop-shadow-sm relative z-10 ${assigned.userTrigram === currentUserTrigram ? 'text-yellow-900' : (existingTake && takeMode !== 'INACTIVE' ? 'text-white' : 'text-slate-900')}`}>
+                                                                                {assigned.userTrigram}
+                                                                            </span>
+                                                                            {takeMode !== 'INACTIVE' && existingTake && (
+                                                                                <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px] z-10">↙</span>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                    {!isClosed && !assigned && existingTake && takeMode !== 'INACTIVE' && (
+                                                                        <span className="text-[12px] md:text-[10px] text-white font-black uppercase tracking-tighter drop-shadow-sm leading-none flex items-center justify-center h-full">
+                                                                            Demande
                                                                         </span>
                                                                     )}
                                                                 </td>

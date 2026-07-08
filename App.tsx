@@ -2334,7 +2334,10 @@ const App: React.FC = () => {
                                       } else if (pendingGiveUp) {
                                           bgColor = '#a855f7'; // purple-500
                                           cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea] cursor-not-allowed";
-                                      } else if (pendingTake || existingTake) {
+                                      } else if (existingTake) {
+                                          bgColor = '#14b8a6'; // teal-500
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed";
+                                      } else if (pendingTake) {
                                           bgColor = '#22c55e'; // green-500
                                           cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#16a34a] cursor-not-allowed";
                                       } else if (pendingAbandon) {
@@ -2353,7 +2356,10 @@ const App: React.FC = () => {
                                       if (isTargetSelected) {
                                           bgColor = '#0d9488'; // teal-600
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
-                                      } else if (existingTake || pendingTake) {
+                                      } else if (existingTake) {
+                                          bgColor = '#14b8a6'; // teal-500
+                                          cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e] cursor-not-allowed pointer-events-none";
+                                      } else if (pendingTake) {
                                           bgColor = '#22c55e'; // green-500
                                           cellStyles += " opacity-100 z-10 rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#16a34a] cursor-not-allowed pointer-events-none";
                                       } else if (pendingGiveUp) {
@@ -2385,6 +2391,9 @@ const App: React.FC = () => {
                                       } else if (pendingTake) {
                                           bgColor = '#c084fc'; // purple-400
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#9333ea]";
+                                      } else if (existingTake) {
+                                          bgColor = '#14b8a6'; // teal-500
+                                          cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-white font-black shadow-[inset_0_0_0_2px_#0f766e]";
                                       } else if (isAssignedToMe) {
                                           bgColor = '#fde047'; // Yellow 300
                                           cellStyles += " opacity-100 z-20 scale-[1.05] rounded-sm text-slate-900 font-black shadow-[inset_0_0_0_2px_#facc15]";
@@ -2572,20 +2581,28 @@ const App: React.FC = () => {
                                         </div>
                                       )}
 
-                                      {/* Cas 2 : Garde Validée (Moi ou Autre) - Affiche le(s) trigramme(s) */}
-                                      {(isAssignedToMe || isAssignedToOther) && (
-                                          <div className="flex flex-col items-center justify-center gap-[1px] relative">
-                                              {isConsultationMode && pendingGiveUp && (
-                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↗</span>
-                                              )}
-                                              {isConsultationMode && pendingTake && (
-                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↙</span>
-                                              )}
+                                      {/* Cas 2 : Garde Validée (Moi ou Autre) ou demande sur case vide */}
+                                      {(isAssignedToMe || isAssignedToOther || (assignedList.length === 0 && (existingTake || pendingTake))) && (
+                                          <div className="flex flex-col items-center justify-center gap-[1px] relative h-full w-full">
                                               {assignedList.map((a, i) => (
-                                                  <span key={i} className={`text-[14px] md:text-[11px] font-black drop-shadow-sm tracking-tighter block leading-none ${(isConsultationMode && (pendingGiveUp || pendingTake)) ? 'text-white' : 'text-slate-900'}`}>
+                                                  <span key={i} className={`text-[14px] md:text-[11px] font-black drop-shadow-sm tracking-tighter block leading-none ${((isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && (pendingGiveUp || pendingTake || existingTake || pendingAbandon)) ? 'text-white' : 'text-slate-900'}`}>
                                                       {a.userTrigram}
                                                   </span>
                                               ))}
+                                              {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && pendingGiveUp && (
+                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↗</span>
+                                              )}
+                                              {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && pendingTake && (
+                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">↙</span>
+                                              )}
+                                              {(isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && pendingAbandon && (
+                                                  <span className="absolute -top-1 md:-top-2 right-0 text-white font-black drop-shadow-md text-[10px] md:text-[14px]">⤫</span>
+                                              )}
+                                              {assignedList.length === 0 && (existingTake || pendingTake) && (isConsultationMode || exchangeMode !== 'INACTIVE' || takeMode !== 'INACTIVE') && (
+                                                  <span className="text-[12px] md:text-[10px] text-white font-black uppercase tracking-tighter drop-shadow-sm leading-none flex items-center justify-center h-full">
+                                                      Demande
+                                                  </span>
+                                              )}
                                           </div>
                                       )}
                                     </td>
