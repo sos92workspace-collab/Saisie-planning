@@ -79,7 +79,7 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
                headerConfigs={headerConfigs} 
                globalClosures={globalClosures} 
                PlanningPanel={PlanningPanel} 
-               refreshData={refreshData} currentUserTrigram={currentUserTrigram} 
+               refreshData={refreshData} currentUserTrigram={currentUserTrigram} isStandardist={true} 
             />
           )}
           {activeTab === 'ARCHIVES' && (
