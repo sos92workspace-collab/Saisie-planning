@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { COLUMNS, isPublicHoliday } from '../constants';
 import { ColumnDefinition } from '../types';
 import { Save, AlertCircle, Check, MousePointerSquareDashed } from 'lucide-react';
@@ -65,6 +65,21 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const [requests, setRequests] = useState<any[]>([]);
   const [abandons, setAbandons] = useState<any[]>([]);
   const [takes, setTakes] = useState<any[]>([]);
+
+  const linkedTakeIds = useMemo(() => {
+    const ids = new Set<string>();
+    abandons.forEach(a => {
+      if (a.shift_snapshot?.linked_take?.id) {
+        ids.add(a.shift_snapshot.linked_take.id);
+      }
+    });
+    return ids;
+  }, [abandons]);
+
+  const standaloneTakes = useMemo(() => {
+    return takes.filter(t => !linkedTakeIds.has(t.id));
+  }, [takes, linkedTakeIds]);
+
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
 
@@ -813,7 +828,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const allHistory = [
     ...requests.filter(r => r.status !== 'PENDING').map(r => ({ type: 'EXCHANGE', data: r, date: new Date(r.updated_at || r.created_at) })),
     ...abandons.filter(a => a.status !== 'PENDING').map(a => ({ type: 'ABANDON', data: a, date: new Date(a.updated_at || a.created_at) })),
-    ...takes.filter(t => t.status !== 'PENDING').map(t => ({ type: 'TAKE', data: t, date: new Date(t.updated_at || t.created_at) })),
+    ...standaloneTakes.filter(t => t.status !== 'PENDING').map(t => ({ type: 'TAKE', data: t, date: new Date(t.updated_at || t.created_at) })),
     ...adminLogs.map(l => ({ type: 'ADMIN', data: l, date: new Date(l.created_at) }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
@@ -846,9 +861,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex border-none items-center gap-2 whitespace-nowrap ${activeTab === 'TAKES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             Ajouts
-            {takes.filter(t => t.status === 'PENDING').length > 0 && (
+            {standaloneTakes.filter(t => t.status === 'PENDING').length > 0 && (
               <span className="bg-teal-500 text-white px-1.5 py-0.5 rounded-full text-[9px]">
-                {takes.filter(t => t.status === 'PENDING').length}
+                {standaloneTakes.filter(t => t.status === 'PENDING').length}
               </span>
             )}
           </button>
@@ -1208,14 +1223,19 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                              const actionDate = new Date(a.updated_at || a.created_at);
                              return actionDate > counterResetDate;
                            });
-                           return { user, count: matchedAbandons.length, matchedAbandons };
+                           const matchedExchanges = requests.filter(r => {
+                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                             const actionDate = new Date(r.updated_at || r.created_at);
+                             return actionDate > counterResetDate;
+                           });
+                           return { user, count: matchedAbandons.length + matchedExchanges.length, matchedAbandons, matchedExchanges };
                          }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
 
                          if (userCounts.length === 0) {
                            return <div className="text-xs text-slate-500 italic py-1">Aucun abandon comptabilisé.</div>;
                          }
 
-                         return userCounts.map(({ user, count, matchedAbandons }) => (
+                         return userCounts.map(({ user, count, matchedAbandons, matchedExchanges }) => (
                            <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
                              <div 
                                className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
@@ -1237,6 +1257,17 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                      <div className="text-[10px] text-slate-400 mt-1">Abandon traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')}</div>
                                    </div>
                                  ))}
+                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
+                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Échange (Abandon) : {ex.requester_trigram === user.trigram ? 
+                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée') :
+                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)
+                                       }
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
                                </div>
                              )}
                            </div>
@@ -1256,14 +1287,19 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                              const actionDate = new Date(a.updated_at || a.created_at);
                              return actionDate > counterResetDate;
                            });
-                           return { user, count: matchedAbandons.length, matchedAbandons };
+                           const matchedExchanges = requests.filter(r => {
+                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                             const actionDate = new Date(r.updated_at || r.created_at);
+                             return actionDate > counterResetDate;
+                           });
+                           return { user, count: matchedAbandons.length + matchedExchanges.length, matchedAbandons, matchedExchanges };
                          }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
 
                          if (userCounts.length === 0) {
                            return <div className="text-xs text-slate-500 italic py-1">Aucun abandon comptabilisé.</div>;
                          }
 
-                         return userCounts.map(({ user, count, matchedAbandons }) => (
+                         return userCounts.map(({ user, count, matchedAbandons, matchedExchanges }) => (
                            <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
                              <div 
                                className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
@@ -1283,6 +1319,17 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                        Ce jour-ci : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
                                      </div>
                                      <div className="text-[10px] text-slate-400 mt-1">Abandon traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
+                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Échange (Abandon) : {ex.requester_trigram === user.trigram ? 
+                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée') :
+                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)
+                                       }
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
                                    </div>
                                  ))}
                                </div>
@@ -1487,14 +1534,19 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                              const actionDate = new Date(t.updated_at || t.created_at);
                              return actionDate > counterResetDateTakes;
                            });
-                           return { user, count: matchedTakes.length, matchedTakes };
+                           const matchedExchanges = requests.filter(r => {
+                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                             const actionDate = new Date(r.updated_at || r.created_at);
+                             return actionDate > counterResetDateTakes;
+                           });
+                           return { user, count: matchedTakes.length + matchedExchanges.length, matchedTakes, matchedExchanges };
                          }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
 
                          if (userCounts.length === 0) {
                            return <div className="text-xs text-slate-500 italic py-1">Aucun ajout comptabilisé.</div>;
                          }
 
-                         return userCounts.map(({ user, count, matchedTakes }) => (
+                         return userCounts.map(({ user, count, matchedTakes, matchedExchanges }) => (
                            <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
                              <div 
                                className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
@@ -1514,6 +1566,17 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                        Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
                                      </div>
                                      <div className="text-[10px] text-slate-400 mt-1">Ajout validé le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
+                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
+                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Échange (Reprise) : {ex.requester_trigram === user.trigram ? 
+                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs) :
+                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée')
+                                       }
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
                                    </div>
                                  ))}
                                </div>
@@ -1535,14 +1598,19 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                              const actionDate = new Date(t.updated_at || t.created_at);
                              return actionDate > counterResetDateTakes;
                            });
-                           return { user, count: matchedTakes.length, matchedTakes };
+                           const matchedExchanges = requests.filter(r => {
+                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                             const actionDate = new Date(r.updated_at || r.created_at);
+                             return actionDate > counterResetDateTakes;
+                           });
+                           return { user, count: matchedTakes.length + matchedExchanges.length, matchedTakes, matchedExchanges };
                          }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
 
                          if (userCounts.length === 0) {
                            return <div className="text-xs text-slate-500 italic py-1">Aucun ajout comptabilisé.</div>;
                          }
 
-                         return userCounts.map(({ user, count, matchedTakes }) => (
+                         return userCounts.map(({ user, count, matchedTakes, matchedExchanges }) => (
                            <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
                              <div 
                                className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
@@ -1564,6 +1632,17 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                      <div className="text-[10px] text-slate-400 mt-1">Ajout validé le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')}</div>
                                    </div>
                                  ))}
+                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
+                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                     <div className="font-bold text-slate-800">
+                                       Échange (Reprise) : {ex.requester_trigram === user.trigram ? 
+                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs) :
+                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée')
+                                       }
+                                     </div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
+                                   </div>
+                                 ))}
                                </div>
                              )}
                            </div>
@@ -1579,11 +1658,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
           {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'ajout en attente</h3>
-            {takes.filter(t => t.status === 'PENDING').length === 0 ? (
+            {standaloneTakes.filter(t => t.status === 'PENDING').length === 0 ? (
               <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun ajout en attente.</div>
             ) : (
               <div className="space-y-4">
-                {takes.filter(t => t.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(tk => {
+                {standaloneTakes.filter(t => t.status === 'PENDING').sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map(tk => {
                   const date = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   const isSelected = selectedTakeRequest?.id === tk.id;
                   return (
@@ -1648,11 +1727,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
 
           <div className="mt-8 border-t border-slate-100 pt-8">
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des ajouts (Pour rappel)</h3>
-            {takes.filter(t => t.status !== 'PENDING').length === 0 ? (
+            {standaloneTakes.filter(t => t.status !== 'PENDING').length === 0 ? (
               <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
             ) : (
               <div className="space-y-3">
-                {takes.filter(t => t.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(tk => {
+                {standaloneTakes.filter(t => t.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(tk => {
                   const date = new Date(tk.updated_at || tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${tk.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">

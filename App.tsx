@@ -5,6 +5,8 @@ import { COLUMNS, DEFAULT_ROUNDS, DEFAULT_HEADERS, parseTimeRange, isPublicHolid
 import { Choice, AppStep, ChoiceCategory, ViewMode, Round, UserProfile, ColumnConfig, UserRole, HeaderConfig, Unavailability, ShiftDefinition, ShiftGlobalSettings, ColumnQuota } from './types';
 import { MatrixHeader } from './components/MatrixHeader';
 
+import { StandardisteDashboard } from './components/StandardisteDashboard';
+
 const formatRequestDate = (day: number | undefined, month: number | undefined, year: number | undefined, col: number | undefined, colLabel: string | undefined, is1IndexedMonth: boolean = false, columnConfigs: ColumnConfig[] = []) => {
   if (day == null || month == null || year == null || col == null) return '';
   const adjustedMonth = is1IndexedMonth ? month - 1 : month;
@@ -788,7 +790,7 @@ const App: React.FC = () => {
             id: newSessionId,
             user_trigram: cleanTri,
             login_time: new Date().toISOString(),
-            view_mode: user.role === 'ADMIN' ? 'ADMIN' : targetMode,
+            view_mode: user.role === 'ADMIN' ? 'ADMIN' : (user.role === 'STANDARDISTE' ? 'STANDARDISTE' : targetMode),
             device_info: navigator.userAgent,
             screen_resolution: `${window.innerWidth}x${window.innerHeight}`
         }]);
@@ -798,6 +800,8 @@ const App: React.FC = () => {
       
       if (user.role === 'ADMIN') {
         setViewMode(ViewMode.ADMIN);
+      } else if (user.role === 'STANDARDISTE') {
+        setViewMode(ViewMode.STANDARDISTE);
       } else {
         setViewMode(targetMode);
       }
@@ -1637,6 +1641,10 @@ const App: React.FC = () => {
 
   if (viewMode === ViewMode.ADMIN) {
     return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} />;
+  }
+
+  if (viewMode === ViewMode.STANDARDISTE) {
+    return <StandardisteDashboard users={users} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} activeRound={activeRound} columnConfigs={columnConfigs} globalClosures={globalClosures} />;
   }
 
   if (viewMode === ViewMode.LOGIN) {

@@ -64,7 +64,7 @@ export enum AppStep {
   RECAP_ORDERING = 4
 }
 
-export type UserRole = 'ADMIN' | 'DOCTOR' | 'SUBSTITUTE';
+export type UserRole = 'ADMIN' | 'DOCTOR' | 'SUBSTITUTE' | 'STANDARDISTE';
 
 export interface UserProfile {
   trigram: string;
@@ -76,7 +76,8 @@ export enum ViewMode {
   LOGIN = 'LOGIN',
   APP = 'APP',
   ADMIN = 'ADMIN',
-  LIST_INPUT = 'LIST_INPUT'
+  LIST_INPUT = 'LIST_INPUT',
+  STANDARDISTE = 'STANDARDISTE'
 }
 
 export enum AdminTab {
