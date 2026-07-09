@@ -777,7 +777,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
     });
   };
 
-  const applyHistoryFilters = (items: { type: string, data: any, date: Date }[]) => {
+  const applyHistoryFilters = (items: { type: string, data: any, date: Date, created_at: Date }[]) => {
       return items.filter(item => {
           let reqTrigram = '';
           const { type, data, date: itemDate } = item;
@@ -836,10 +836,10 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   if (loading) return <div className="p-8 text-center text-slate-500 font-bold">Chargement des règles...</div>;
 
   const allHistory = [
-    ...requests.filter(r => r.status !== 'PENDING').map(r => ({ type: 'EXCHANGE', data: r, date: new Date(r.updated_at || r.created_at) })),
-    ...abandons.filter(a => a.status !== 'PENDING').map(a => ({ type: 'ABANDON', data: a, date: new Date(a.updated_at || a.created_at) })),
-    ...standaloneTakes.filter(t => t.status !== 'PENDING').map(t => ({ type: 'TAKE', data: t, date: new Date(t.updated_at || t.created_at) })),
-    ...adminLogs.map(l => ({ type: 'ADMIN', data: l, date: new Date(l.created_at) }))
+    ...requests.filter(r => r.status !== 'PENDING').map(r => ({ type: 'EXCHANGE', data: r, date: new Date(r.updated_at || r.created_at), created_at: new Date(r.created_at) })),
+    ...abandons.filter(a => a.status !== 'PENDING').map(a => ({ type: 'ABANDON', data: a, date: new Date(a.updated_at || a.created_at), created_at: new Date(a.created_at) })),
+    ...standaloneTakes.filter(t => t.status !== 'PENDING').map(t => ({ type: 'TAKE', data: t, date: new Date(t.updated_at || t.created_at), created_at: new Date(t.created_at) })),
+    ...adminLogs.map(l => ({ type: 'ADMIN', data: l, date: new Date(l.created_at), created_at: new Date(l.created_at) }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const ITEMS_PER_PAGE = 30;
@@ -1113,11 +1113,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             ) : (
               <div className="space-y-3">
                 {requests.filter(r => r.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(req => {
-                  const date = new Date(req.updated_at || req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const createdDate = new Date(req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const updatedDate = new Date(req.updated_at || req.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${req.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                       <div className="flex items-start gap-4">
-                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{createdDate}</span>
                         <div className="flex flex-col gap-1">
                           <span className="font-bold text-slate-700">Demande initiée par {req.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
@@ -1387,11 +1388,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             ) : (
               <div className="space-y-3">
                 {abandons.filter(a => a.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(ab => {
-                  const date = new Date(ab.updated_at || ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const createdDate = new Date(ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const updatedDate = new Date(ab.updated_at || ab.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${ab.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                       <div className="flex items-start gap-4">
-                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{createdDate}</span>
                         <div className="flex flex-col gap-1 w-full">
                           <span className="font-bold text-slate-700">Abandon initié par {ab.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
@@ -1410,7 +1412,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                           <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
                             <div className="flex items-center gap-2">
                               <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${ab.status === 'APPROVED' ? 'bg-rose-100 text-rose-700' : 'bg-red-100 text-red-700'}`}>
-                                {ab.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'}
+                                {ab.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'} le {updatedDate} {ab.processed_by ? 'par ' + ab.processed_by : ''}
                               </span>
                             </div>
                           </div>
@@ -1649,11 +1651,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             ) : (
               <div className="space-y-3">
                 {standaloneTakes.filter(t => t.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(tk => {
-                  const date = new Date(tk.updated_at || tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const createdDate = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const updatedDate = new Date(tk.updated_at || tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                   return (
                     <div key={`log-${tk.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                       <div className="flex items-start gap-4">
-                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{date}</span>
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{createdDate}</span>
                         <div className="flex flex-col gap-1 w-full">
                           <span className="font-bold text-slate-700">Ajout initié par {tk.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
@@ -1662,7 +1665,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                           <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
                             <div className="flex items-center gap-2">
                               <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${tk.status === 'APPROVED' ? 'bg-teal-100 text-teal-700' : 'bg-red-100 text-red-700'}`}>
-                                {tk.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'}
+                                {tk.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'} le {updatedDate} {tk.processed_by ? 'par ' + tk.processed_by : ''}
                               </span>
                             </div>
                           </div>
@@ -1688,13 +1691,14 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
               <div className="space-y-4">
                 <div className="space-y-3">
                   {paginatedHistory.map((item, index) => {
-                    const { type, data, date } = item;
-                    const formattedDate = date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    const { type, data, date, created_at } = item;
+                    const formattedCreatedDate = created_at.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    const formattedUpdatedDate = (data.updated_at ? new Date(data.updated_at) : date).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
                     
                     return (
                       <div key={`hist-${index}-${date.getTime()}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
                         <div className="flex items-start gap-4">
-                          <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{formattedDate}</span>
+                          <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{formattedCreatedDate}</span>
                           <div className="flex flex-col gap-1 w-full">
                             
                             {/* EXCHANGE RENDER */}
@@ -1706,7 +1710,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                 </span>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
-                                    {data.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'} {data.processed_by ? 'par ' + data.processed_by : ''}
+                                    {data.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'} le {formattedUpdatedDate} {data.processed_by ? 'par ' + data.processed_by : ''}
                                   </span>
                                 </div>
                               </>
@@ -1725,7 +1729,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                 </span>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-rose-100 text-rose-700' : 'bg-red-100 text-red-700'}`}>
-                                    {data.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'} {data.processed_by ? 'par ' + data.processed_by : ''}
+                                    {data.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'} le {formattedUpdatedDate} {data.processed_by ? 'par ' + data.processed_by : ''} {data.processed_by ? 'par ' + data.processed_by : ''}
                                   </span>
                                 </div>
                               </>
@@ -1740,7 +1744,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                 </span>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-teal-100 text-teal-700' : 'bg-red-100 text-red-700'}`}>
-                                    {data.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'} {data.processed_by ? 'par ' + data.processed_by : ''}
+                                    {data.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'} le {formattedUpdatedDate} {data.processed_by ? 'par ' + data.processed_by : ''} {data.processed_by ? 'par ' + data.processed_by : ''}
                                   </span>
                                 </div>
                               </>
