@@ -517,7 +517,8 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         }
       }
 
-      await supabase.from('exchange_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', requestId);
+      const { error } = await supabase.from('exchange_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', requestId);
+      if (error) throw error;
       fetchArchivedChoices().then((archives) => { fetchRequests(archives); fetchAbandons(archives); });
     } catch (err) {
       console.error(err);
@@ -533,13 +534,16 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             if (ab.choice_id) {
                 const { data: choiceData } = await supabase.from('choices').select('*').eq('id', ab.choice_id).single();
                 if (choiceData) {
-                   await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                   const { error: err1 } = await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                   if (err1) throw err1;
                 } else {
-                   await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                   const { error: err2 } = await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                if (err2) throw err2;
                 }
                 await supabase.from('choices').delete().eq('id', ab.choice_id);
             } else if (ab.shift_snapshot) {
-                await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                const { error: err2 } = await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                if (err2) throw err2;
                 await supabase.from('archived_choices')
                     .delete()
                     .eq('user_trigram', ab.requester_trigram)
@@ -550,7 +554,8 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             }
         }
       } else {
-        await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+        const { error: err2 } = await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
+                if (err2) throw err2;
       }
       const ab = abandons.find(a => a.id === abandonId);
       if (ab?.shift_snapshot?.linked_take?.id) {
@@ -625,7 +630,8 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         }
       }
       
-      await supabase.from('take_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', takeId);
+      const { error: err3 } = await supabase.from('take_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', takeId);
+      if (err3) throw err3;
       fetchTakes();
       fetchArchivedChoices();
     } catch (err) {
