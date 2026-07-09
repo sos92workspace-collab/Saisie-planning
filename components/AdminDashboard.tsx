@@ -73,7 +73,7 @@ const generateAutoVersionName = async (supabase: any, activeRound: any) => {
     return `${baseName} v${maxV + 1}`;
 };
 
-const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs, supabase, logAction, refreshMainData }: any) => {
+export const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs, supabase, logAction, refreshMainData }: any) => {
   const [archivedChoices, setArchivedChoices] = useState<Choice[]>([]);
   const [archivedClosures, setArchivedClosures] = useState<any[]>([]);
   const [availableMonths, setAvailableMonths] = useState<{month: number, year: number, label: string}[]>([]);
@@ -731,7 +731,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
         )}
 
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-          {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} logAction={logAction} />}
+          {activeTab === AdminTab.USERS && <UsersPanel users={users} supabase={supabase} refreshData={refreshData} currentUserTrigram={currentUserTrigram} logAction={logAction} />}
           {activeTab === AdminTab.CONFIG && (
             <ConfigPanel 
               round={selectedRound} 
@@ -757,15 +757,15 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               shiftGlobalSettings={shiftGlobalSettings}
               users={users}
               supabase={supabase}
-              refreshData={refreshData}
+              refreshData={refreshData} currentUserTrigram={currentUserTrigram}
               logAction={logAction}
             />
           )}
           {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} onArchiveCurrent={handleArchiveCurrent} />}
           {activeTab === AdminTab.ARCHIVES && <ArchivePanel supabase={supabase} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} quotas={quotas} globalClosures={globalClosures} logAction={logAction} refreshMainData={refreshData} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} quotas={quotas} columnConfigs={columnConfigs} />}
-          {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} />}
-          {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} />}
+          {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} currentUserTrigram={currentUserTrigram} />}
+          {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} currentUserTrigram={currentUserTrigram} />}
           {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
           {activeTab === AdminTab.MAINTENANCE && <MaintenancePanel supabase={supabase} logAction={logAction} />}
           {activeTab === AdminTab.PENALTIES && <PenaltiesPanel supabase={supabase} logAction={logAction} />}

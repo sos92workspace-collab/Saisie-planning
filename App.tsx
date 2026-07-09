@@ -13,13 +13,15 @@ const formatRequestDate = (day: number | undefined, month: number | undefined, y
   const d = new Date(year, adjustedMonth, day);
   const dayName = d.toLocaleDateString('fr-FR', { weekday: 'long' }).toUpperCase();
   const dateStr = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  
+  const jf = isPublicHoliday(d) ? ' - JF' : '';
   const columnDef = COLUMNS.find(c => c.id === col);
   const cfg = columnConfigs.find(c => c.column_id === col);
   const displayLabel = colLabel || cfg?.custom_label || columnDef?.label || '';
-  const typeInfos = columnDef ? ` | ${cfg?.custom_type || columnDef.type} ${cfg?.custom_time_range || columnDef.timeRange}` : '';
   
-  return `Col. ${col} : ${displayLabel} - ${dayName} ${dateStr}${typeInfos}`;
+  const typeStr = cfg?.custom_type || columnDef?.type || '';
+  const timeStr = cfg?.custom_time_range || columnDef?.timeRange || '';
+  
+  return `${dayName} ${dateStr}${jf} | ${typeStr} | Col. ${col} : ${displayLabel} | ${timeStr}`;
 };
 import { StepProgressBar } from './components/StepProgressBar';
 import { RecapView } from './components/RecapView';

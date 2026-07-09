@@ -16,8 +16,11 @@ const formatRequestDate = (day: number | undefined, month: number | undefined, y
   const columnDef = COLUMNS.find(c => c.id === col);
   const cfg = columnConfigs.find(c => c.column_id === col);
   const displayLabel = colLabel || cfg?.custom_label || columnDef?.label || '';
-  const typeInfos = columnDef ? ` | ${cfg?.custom_type || columnDef.type} ${cfg?.custom_time_range || columnDef.timeRange}` : '';
-  return `Col. ${col} : ${displayLabel} - ${dayName} ${dateStr}${jf}${typeInfos}`;
+  
+  const typeStr = cfg?.custom_type || columnDef?.type || '';
+  const timeStr = cfg?.custom_time_range || columnDef?.timeRange || '';
+  
+  return `${dayName} ${dateStr}${jf} | ${typeStr} | Col. ${col} : ${displayLabel} | ${timeStr}`;
 };
 
 export interface ExchangeMode {
@@ -42,9 +45,10 @@ interface ExchangeRulesProps {
   globalClosures?: any[];
   PlanningPanel?: any;
   refreshData?: () => void;
+  currentUserTrigram?: string;
 }
 
-export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices, users: propsUsers, activeRound, columnConfigs: propsColumnConfigs, headerConfigs, globalClosures, PlanningPanel, refreshData }) => {
+export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices, users: propsUsers, activeRound, columnConfigs: propsColumnConfigs, headerConfigs, globalClosures, PlanningPanel, refreshData, currentUserTrigram }) => {
   const [modes, setModes] = useState<Record<number, 'GLOBAL' | 'INDIVIDUAL'>>({});
   const [rules, setRules] = useState<ExchangeRule[]>([]);
   const [columnConfigsState, setColumnConfigsState] = useState<any[]>([]);
@@ -355,7 +359,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         target_col: confirmTakeCell.col,
         target_col_label: columnConfigs.find((c: any) => c.column_id === confirmTakeCell.col)?.custom_label || confirmTakeCell.col,
         status: 'APPROVED',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(), processed_by: currentUserTrigram
       }]);
 
       await supabase.from('logs').insert([{
@@ -417,7 +421,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         target_col_label: columnConfigs.find((c: any) => c.column_id === exchangeTargetCell.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === exchangeTargetCell.col)?.name || exchangeTargetCell.col,
         status: 'APPROVED',
         reason: newTrigram ? `Échange Manuel avec ${newTrigram}` : `Déplacement Manuel`,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(), processed_by: currentUserTrigram
       }]);
 
       await supabase.from('logs').insert([{
@@ -451,7 +455,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
           colLabel: columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === choice.col)?.name || choice.col
         },
         status: 'APPROVED',
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(), processed_by: currentUserTrigram
       }]);
       if (abandonError) throw abandonError;
 
@@ -508,12 +512,12 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
           const reason = `Refusé car attribué à ${req.requester_trigram}`;
           const otherIds = otherRequests.map(r => r.id);
           await supabase.from('exchange_requests')
-            .update({ status: 'REJECTED', reason, updated_at: new Date().toISOString() })
+            .update({ status: 'REJECTED', reason, updated_at: new Date().toISOString(), processed_by: currentUserTrigram })
             .in('id', otherIds);
         }
       }
 
-      await supabase.from('exchange_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', requestId);
+      await supabase.from('exchange_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', requestId);
       fetchArchivedChoices().then((archives) => { fetchRequests(archives); fetchAbandons(archives); });
     } catch (err) {
       console.error(err);
@@ -529,13 +533,13 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             if (ab.choice_id) {
                 const { data: choiceData } = await supabase.from('choices').select('*').eq('id', ab.choice_id).single();
                 if (choiceData) {
-                   await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+                   await supabase.from('abandon_requests').update({ shift_snapshot: choiceData, status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
                 } else {
-                   await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+                   await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
                 }
                 await supabase.from('choices').delete().eq('id', ab.choice_id);
             } else if (ab.shift_snapshot) {
-                await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+                await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
                 await supabase.from('archived_choices')
                     .delete()
                     .eq('user_trigram', ab.requester_trigram)
@@ -546,7 +550,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             }
         }
       } else {
-        await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString() }).eq('id', abandonId);
+        await supabase.from('abandon_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', abandonId);
       }
       const ab = abandons.find(a => a.id === abandonId);
       if (ab?.shift_snapshot?.linked_take?.id) {
@@ -621,7 +625,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
         }
       }
       
-      await supabase.from('take_requests').update({ status: action }).eq('id', takeId);
+      await supabase.from('take_requests').update({ status: action, updated_at: new Date().toISOString(), processed_by: currentUserTrigram }).eq('id', takeId);
       fetchTakes();
       fetchArchivedChoices();
     } catch (err) {
@@ -978,7 +982,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                  {matchedRequests.map((req, idx) => (
                                    <div key={req.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
-                                       Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}]
+                                       Cède : {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)} ➔ Récupère : {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}
                                      </div>
                                      <div className="text-[10px] text-slate-400 mt-1">Échange validé le {new Date(req.updated_at || req.created_at).toLocaleDateString('fr-FR')}</div>
                                    </div>
@@ -1026,7 +1030,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                  {matchedRequests.map((req, idx) => (
                                    <div key={req.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
-                                       Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}]
+                                       Cède : {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)} ➔ Récupère : {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}
                                      </div>
                                      <div className="text-[10px] text-slate-400 mt-1">Échange validé le {new Date(req.updated_at || req.created_at).toLocaleDateString('fr-FR')}</div>
                                    </div>
@@ -1095,42 +1099,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             )}
           </div>
 
-          {/* Exchange Planning Grid */}
-          <div className="flex flex-col h-[70vh] mt-8 border-t border-slate-100 pt-8">
-             {PlanningPanel && <PlanningPanel 
-               choices={choices || []} 
-               setChoices={() => {}} 
-               users={users} 
-               activeRound={activeRound} 
-               columnConfigs={columnConfigs} 
-               headerConfigs={headerConfigs} 
-               supabase={supabase} 
-               globalClosures={globalClosures} 
-               overrideAdminMode={true}
-               highlightCells={[
-                 exchangeSourceChoice, 
-                 exchangeTargetCell,
-                 selectedExchangeRequest ? { row: selectedExchangeRequest.target_row, month: selectedExchangeRequest.target_month, year: selectedExchangeRequest.target_year, col: selectedExchangeRequest.target_col } : null,
-                 selectedExchangeRequest?.requester_choice ? { row: selectedExchangeRequest.requester_choice.row, month: selectedExchangeRequest.requester_choice.month - 1, year: selectedExchangeRequest.requester_choice.year, col: selectedExchangeRequest.requester_choice.col } : null
-               ].filter(Boolean)}
-               onCellClick={(data: any) => {
-                 if (!exchangeSourceChoice) {
-                   if (data.assigned) {
-                     setExchangeSourceChoice(data.assigned);
-                   } else {
-                     alert("Veuillez sélectionner une case déjà attribuée pour initialiser l'échange.");
-                   }
-                 } else {
-                   if (data.row === exchangeSourceChoice.row && data.month === exchangeSourceChoice.month && data.year === exchangeSourceChoice.year && data.col === exchangeSourceChoice.col) {
-                     // Clicked same cell again, unselect
-                     setExchangeSourceChoice(null);
-                     return;
-                   }
-                   setExchangeTargetCell(data);
-                 }
-               }}
-             />}
-          </div>
 
           <div className="mt-8 border-t border-slate-100 pt-8">
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des échanges (Pour rappel)</h3>
@@ -1147,7 +1115,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                         <div className="flex flex-col gap-1">
                           <span className="font-bold text-slate-700">Demande initiée par {req.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
-                          Cède [{formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}]
+                          Cède : {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)} ➔ Récupère : {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}
                           </span>
                         </div>
                       </div>
@@ -1252,9 +1220,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                  {matchedAbandons.map((ab, idx) => (
                                    <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
-                                       Ce jour-ci : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
+                                       Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Abandon traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')} {ab?.processed_by ? 'par ' + ab.processed_by : ''}</div>
                                    </div>
                                  ))}
                                  {matchedExchanges && matchedExchanges.map((ex, idx) => (
@@ -1265,7 +1233,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                          formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)
                                        }
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
                                    </div>
                                  ))}
                                </div>
@@ -1316,9 +1284,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                  {matchedAbandons.map((ab, idx) => (
                                    <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
-                                       Ce jour-ci : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
+                                       Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Abandon traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')} {ab?.processed_by ? 'par ' + ab.processed_by : ''}</div>
                                    </div>
                                  ))}
                                  {matchedExchanges && matchedExchanges.map((ex, idx) => (
@@ -1329,7 +1297,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                          formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)
                                        }
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
                                    </div>
                                  ))}
                                </div>
@@ -1405,34 +1373,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             )}
           </div>
 
-          {/* Abandon Planning Grid */}
-          <div className="flex flex-col h-[70vh] mt-8 border-t border-slate-100 pt-8">
-             {PlanningPanel && <PlanningPanel 
-               choices={choices || []} 
-               setChoices={() => {}} 
-               users={users} 
-               activeRound={activeRound} 
-               columnConfigs={columnConfigs} 
-               headerConfigs={headerConfigs} 
-               supabase={supabase} 
-               globalClosures={globalClosures} 
-               overrideAdminMode={true}
-               highlightCells={[
-                 confirmAbandonChoice,
-                 selectedAbandonRequest?.requester_choice ? { row: selectedAbandonRequest.requester_choice.row, month: selectedAbandonRequest.requester_choice.month - 1, year: selectedAbandonRequest.requester_choice.year, col: selectedAbandonRequest.requester_choice.col } : null,
-                 selectedAbandonRequest?.shift_snapshot ? { row: selectedAbandonRequest.shift_snapshot.row, month: selectedAbandonRequest.shift_snapshot.month - 1, year: selectedAbandonRequest.shift_snapshot.year, col: selectedAbandonRequest.shift_snapshot.col } : null
-               ].filter(Boolean)}
-               onCellClick={(data: any) => {
-                 if (confirmAbandonChoice && confirmAbandonChoice.row === data.row && confirmAbandonChoice.col === data.col && confirmAbandonChoice.month === data.month && confirmAbandonChoice.year === data.year) {
-                   setConfirmAbandonChoice(null);
-                   return;
-                 }
-                 if (data.assigned) {
-                   setConfirmAbandonChoice(data.assigned);
-                 }
-               }}
-             />}
-          </div>
 
           <div className="mt-8 border-t border-slate-100 pt-8">
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des abandons (Pour rappel)</h3>
@@ -1449,15 +1389,15 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                         <div className="flex flex-col gap-1 w-full">
                           <span className="font-bold text-slate-700">Abandon initié par {ab.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
-                            Garde [{ab.requester_choice 
+                            Garde : {ab.requester_choice 
                               ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs)
                               : ab.shift_snapshot 
                                 ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
-                                : 'supprimée'}]
+                                : 'supprimée'}
                             {ab.shift_snapshot?.linked_take && (
                                 <>
                                   {' → '}
-                                  <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
+                                  <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}</span>
                                 </>
                             )}
                           </span>
@@ -1563,9 +1503,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                  {matchedTakes.map((tk, idx) => (
                                    <div key={tk.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
-                                       Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
+                                       Garde : {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Ajout validé le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(tk.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')} {tk?.processed_by ? 'par ' + tk.processed_by : ''}</div>
                                    </div>
                                  ))}
                                  {matchedExchanges && matchedExchanges.map((ex, idx) => (
@@ -1576,7 +1516,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                          (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée')
                                        }
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
                                    </div>
                                  ))}
                                </div>
@@ -1627,9 +1567,9 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                  {matchedTakes.map((tk, idx) => (
                                    <div key={tk.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
-                                       Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
+                                       Garde : {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Ajout validé le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(tk.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')} {tk?.processed_by ? 'par ' + tk.processed_by : ''}</div>
                                    </div>
                                  ))}
                                  {matchedExchanges && matchedExchanges.map((ex, idx) => (
@@ -1640,7 +1580,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                                          (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée')
                                        }
                                      </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Échange traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')}</div>
+                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
                                    </div>
                                  ))}
                                </div>
@@ -1695,35 +1635,6 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
             )}
           </div>
 
-          {/* Take Planning Grid */}
-          <div className="flex flex-col h-[70vh] mt-8 border-t border-slate-100 pt-8">
-             {PlanningPanel && <PlanningPanel 
-               choices={choices || []} 
-               setChoices={() => {}} 
-               users={users} 
-               activeRound={activeRound} 
-               columnConfigs={columnConfigs} 
-               headerConfigs={headerConfigs} 
-               supabase={supabase} 
-               globalClosures={globalClosures} 
-               overrideAdminMode={true}
-               highlightCells={[
-                 confirmTakeCell,
-                 selectedTakeRequest ? { row: selectedTakeRequest.target_row, month: selectedTakeRequest.target_month, year: selectedTakeRequest.target_year, col: selectedTakeRequest.target_col } : null
-               ].filter(Boolean)}
-               onCellClick={(data: any) => {
-                 if (confirmTakeCell && confirmTakeCell.row === data.row && confirmTakeCell.col === data.col && confirmTakeCell.month === data.month && confirmTakeCell.year === data.year) {
-                   setConfirmTakeCell(null);
-                   return;
-                 }
-                 if (!data.assigned) {
-                   setConfirmTakeCell(data);
-                 } else {
-                   alert("Veuillez sélectionner une case vide pour ajouter un médecin.");
-                 }
-               }}
-             />}
-          </div>
 
           <div className="mt-8 border-t border-slate-100 pt-8">
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des ajouts (Pour rappel)</h3>
@@ -1740,7 +1651,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                         <div className="flex flex-col gap-1 w-full">
                           <span className="font-bold text-slate-700">Ajout initié par {tk.requester_trigram}</span>
                           <span className="text-slate-500 text-xs">
-                          Garde [{formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}]
+                          Garde : {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
                           </span>
                           <div className="flex flex-col gap-1 ml-[136px] pl-4 border-l-2 border-slate-200 mt-2">
                             <div className="flex items-center gap-2">
@@ -1785,11 +1696,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                               <>
                                 <span className="font-bold text-slate-700">Échange initié par {data.requester_trigram}</span>
                                 <span className="text-slate-500 text-xs">
-                                  Cède [{formatRequestDate(data.requester_choice?.row, data.requester_choice?.month, data.requester_choice?.year, data.requester_choice?.col, data.requester_choice?.colLabel, true, columnConfigs)}] ➔ Récupère [{formatRequestDate(data.target_row, data.target_month, data.target_year, data.target_col, data.target_col_label, false, columnConfigs)}]
+                                  Cède : {formatRequestDate(data.requester_choice?.row, data.requester_choice?.month, data.requester_choice?.year, data.requester_choice?.col, data.requester_choice?.colLabel, true, columnConfigs)} ➔ Récupère : {formatRequestDate(data.target_row, data.target_month, data.target_year, data.target_col, data.target_col_label, false, columnConfigs)}
                                 </span>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
-                                    {data.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'}
+                                    {data.status === 'APPROVED' ? 'Échange validé' : 'Échange refusé'} {data.processed_by ? 'par ' + data.processed_by : ''}
                                   </span>
                                 </div>
                               </>
@@ -1800,15 +1711,15 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                               <>
                                 <span className="font-bold text-slate-700">Abandon initié par {data.requester_trigram}</span>
                                 <span className="text-slate-500 text-xs">
-                                  Garde [{data.requester_choice 
+                                  Garde : {data.requester_choice 
                                     ? formatRequestDate(data.requester_choice.row, data.requester_choice.month, data.requester_choice.year, data.requester_choice.col, data.requester_choice.colLabel, true, columnConfigs)
                                     : data.shift_snapshot 
                                       ? formatRequestDate(data.shift_snapshot.row, data.shift_snapshot.month, data.shift_snapshot.year, data.shift_snapshot.col, data.shift_snapshot.colLabel, true, columnConfigs)
-                                      : 'supprimée'}]
+                                      : 'supprimée'}
                                 </span>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-rose-100 text-rose-700' : 'bg-red-100 text-red-700'}`}>
-                                    {data.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'}
+                                    {data.status === 'APPROVED' ? 'Abandon pris en compte' : 'Abandon refusé'} {data.processed_by ? 'par ' + data.processed_by : ''}
                                   </span>
                                 </div>
                               </>
@@ -1819,11 +1730,11 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
                               <>
                                 <span className="font-bold text-slate-700">Ajout initié par {data.requester_trigram}</span>
                                 <span className="text-slate-500 text-xs">
-                                  Garde [{formatRequestDate(data.target_row, data.target_month, data.target_year, data.target_col, data.target_col_label, false, columnConfigs)}]
+                                  Garde : {formatRequestDate(data.target_row, data.target_month, data.target_year, data.target_col, data.target_col_label, false, columnConfigs)}
                                 </span>
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`w-fit font-black uppercase text-[10px] px-2 py-1 rounded-md ${data.status === 'APPROVED' ? 'bg-teal-100 text-teal-700' : 'bg-red-100 text-red-700'}`}>
-                                    {data.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'}
+                                    {data.status === 'APPROVED' ? 'Ajout validé' : 'Ajout refusé'} {data.processed_by ? 'par ' + data.processed_by : ''}
                                   </span>
                                 </div>
                               </>

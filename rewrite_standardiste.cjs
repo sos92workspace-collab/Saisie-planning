@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+const fs = require('fs');
+
+const content = `import React, { useState, useEffect } from 'react';
 import { ExchangeRules } from './ExchangeRules';
 import { PlanningPanel, ArchivePanel } from './AdminDashboard';
 import { Settings, CheckSquare, Users, FileText, Download, Upload, Shield, LogOut, Clock, Calendar, Box, Database, Save, RotateCcw, Activity, ShieldAlert, X } from 'lucide-react';
@@ -42,9 +44,9 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                className={\`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 \${isActive ? 'bg-blue-600 text-white shadow-md shadow-blue-900/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}\`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-blue-200' : 'text-slate-500'}`} strokeWidth={2.5} />
+                <Icon className={\`w-5 h-5 \${isActive ? 'text-blue-200' : 'text-slate-500'}\`} strokeWidth={2.5} />
                 {item.label}
               </button>
             );
@@ -79,7 +81,7 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
                headerConfigs={headerConfigs} 
                globalClosures={globalClosures} 
                PlanningPanel={PlanningPanel} 
-               refreshData={refreshData} currentUserTrigram={currentUserTrigram} 
+               refreshData={refreshData} 
             />
           )}
           {activeTab === 'ARCHIVES' && (
@@ -89,7 +91,7 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
                activeRound={activeRound} 
                columnConfigs={columnConfigs} 
                headerConfigs={headerConfigs} 
-               quotas={[]} 
+               quotas={{}} 
                globalClosures={globalClosures} 
                logAction={async () => {}} 
                refreshMainData={refreshData} 
@@ -100,3 +102,6 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
     </div>
   );
 };
+`;
+
+fs.writeFileSync('components/StandardisteDashboard.tsx', content);

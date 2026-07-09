@@ -1,0 +1,3 @@
+ALTER TABLE exchange_requests ADD COLUMN processed_by TEXT;
+ALTER TABLE abandon_requests ADD COLUMN processed_by TEXT;
+ALTER TABLE take_requests ADD COLUMN processed_by TEXT;
