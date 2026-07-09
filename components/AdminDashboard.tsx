@@ -73,7 +73,7 @@ const generateAutoVersionName = async (supabase: any, activeRound: any) => {
     return `${baseName} v${maxV + 1}`;
 };
 
-export const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs, supabase, logAction, refreshMainData }: any) => {
+export const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, headerConfigs, supabase, logAction, refreshMainData, currentUserTrigram }: any) => {
   const [archivedChoices, setArchivedChoices] = useState<Choice[]>([]);
   const [archivedClosures, setArchivedClosures] = useState<any[]>([]);
   const [availableMonths, setAvailableMonths] = useState<{month: number, year: number, label: string}[]>([]);
@@ -244,7 +244,7 @@ export const ArchivePanel = ({ users, activeRound, columnConfigs, quotas, header
                </div>
            </div>
         ) : (
-          <PlanningPanel 
+          <PlanningPanel currentUserTrigram={currentUserTrigram} 
             choices={visibleChoices} 
             setChoices={(updater: any) => {
                // Need to support function updater from PlanningPanel
@@ -761,8 +761,8 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
               logAction={logAction}
             />
           )}
-          {activeTab === AdminTab.PLANNING && <PlanningPanel choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} onArchiveCurrent={handleArchiveCurrent} />}
-          {activeTab === AdminTab.ARCHIVES && <ArchivePanel supabase={supabase} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} quotas={quotas} globalClosures={globalClosures} logAction={logAction} refreshMainData={refreshData} />}
+          {activeTab === AdminTab.PLANNING && <PlanningPanel currentUserTrigram={currentUserTrigram} choices={allChoices} setChoices={setAllChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} quotas={quotas} headerConfigs={headerConfigs} supabase={supabase} onImport={handleImportCSV} globalClosures={globalClosures} setGlobalClosures={setGlobalClosures} logAction={logAction} onArchiveCurrent={handleArchiveCurrent} />}
+          {activeTab === AdminTab.ARCHIVES && <ArchivePanel currentUserTrigram={currentUserTrigram} supabase={supabase} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} quotas={quotas} globalClosures={globalClosures} logAction={logAction} refreshMainData={refreshData} />}
           {activeTab === AdminTab.WISHES && <WishesPanel choices={allChoices} setChoices={setAllChoices} supabase={supabase} onImport={handleImportCSV} activeRound={activeRound} logAction={logAction} users={users} quotas={quotas} columnConfigs={columnConfigs} />}
           {activeTab === AdminTab.VERSIONS && <VersionsPanel supabase={supabase} logAction={logAction} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} refreshData={refreshData} currentUserTrigram={currentUserTrigram} />}
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} currentUserTrigram={currentUserTrigram} />}
@@ -2800,8 +2800,10 @@ const ConfigPanel = ({ round, allRounds, setRounds, selectedRoundId, setSelected
   );
 };
 
-export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells, tableName = 'choices', closuresTableName = 'global_closures', overrideMonthsToDisplay, onArchiveCurrent }: any) => {
+export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnConfigs, quotas, headerConfigs, supabase, globalClosures, setGlobalClosures, logAction, onCellClick, overrideAdminMode, highlightCell, highlightCells, tableName = 'choices', closuresTableName = 'global_closures', overrideMonthsToDisplay, onArchiveCurrent, currentUserTrigram }: any) => {
   const [editingCell, setEditingCell] = useState<{row: number, col: number, month: number, year: number} | null>(null);
+  const [removingCell, setRemovingCell] = useState<{row: number, col: number, month: number, year: number, assignedChoice: any} | null>(null);
+  const [logInCounter, setLogInCounter] = useState<boolean>(true);
   const [selectedUserTrigram, setSelectedUserTrigram] = useState('');
   const [isEditClosuresMode, setIsEditClosuresMode] = useState(false);
   const [hoveredCell, setHoveredCell] = useState<{ day: number, month: number, year: number, colId: number, colLabel: string, colType: string, colSite?: string, colTimeRange?: string } | null>(null);
@@ -2835,6 +2837,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
     });
   }, [columnConfigs]);
 
+
   const handleCellClick = async (row: number, colId: number, month: number, year: number) => {
       if (overrideAdminMode) {
           if (onCellClick) {
@@ -2843,6 +2846,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
           }
           return;
       }
+
       if (isEditClosuresMode) {
           const existing = globalClosures.find((gc: any) => gc.col_id === colId && gc.row === row && gc.month === month && gc.year === year);
           if (existing) {
@@ -2862,22 +2866,49 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
       }
 
       const assignedChoice = choices.find((c: any) => c.row === row && c.col === colId && c.month === month && c.year === year && (c.status === 'ASSIGNED' || c.status === 'VALIDATED'));
-
+      
       if (assignedChoice) {
-          if (window.confirm(`Retirer la garde du Dr ${assignedChoice.userTrigram} ?`)) {
-              const { error } = await supabase.from(tableName).delete().eq('id', assignedChoice.id);
-              if (!error) {
-                  setChoices((prev: any[]) => prev.filter((c: any) => c.id !== assignedChoice.id));
-                  logAction('SUPPRESSION_GARDE', { user: assignedChoice.userTrigram, date: `${row}/${month+1}/${year}`, col: colId });
-              } else {
-                  alert("Erreur lors de la suppression");
-              }
-          }
+          setRemovingCell({ row, col: colId, month, year, assignedChoice });
+          setLogInCounter(true);
       } else {
           // Open Modal for Assignment
           setEditingCell({ row, col: colId, month, year });
           setSelectedUserTrigram('');
+          setLogInCounter(true);
       }
+  };
+  
+  const handleRemoveAssignment = async () => {
+      if (!removingCell) return;
+      const { row, col, month, year, assignedChoice } = removingCell;
+      const { error } = await supabase.from(tableName).delete().eq('id', assignedChoice.id);
+      if (!error) {
+          setChoices((prev: any[]) => prev.filter((c: any) => c.id !== assignedChoice.id));
+          logAction('SUPPRESSION_GARDE', { user: assignedChoice.userTrigram, date: `${row}/${month+1}/${year}`, col: col });
+          
+          if (logInCounter) {
+             const reqAbandon = {
+                  requester_trigram: assignedChoice.userTrigram,
+                  shift_snapshot: {
+                      row: assignedChoice.row,
+                      month: assignedChoice.month + 1,
+                      year: assignedChoice.year,
+                      col: assignedChoice.col,
+                      colLabel: assignedChoice.colLabel || COLUMNS.find(c => c.id === assignedChoice.col)?.label
+                  },
+                  status: 'APPROVED',
+                  processed_by: (typeof currentUserTrigram !== 'undefined' ? currentUserTrigram : 'ADMIN'),
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+              };
+              supabase.from('abandon_requests').insert([reqAbandon]).then(({error}) => {
+                  if (error) console.error("Error inserting abandon_request", error);
+              });
+          }
+      } else {
+          alert("Erreur lors de la suppression");
+      }
+      setRemovingCell(null);
   };
 
   const handleAssignment = async () => {
@@ -2950,8 +2981,29 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                   status: data[0].status, submittedAt: data[0].submitted_at, roundId: data[0].round_id,
                   colLabel: data[0].col_label, colType: data[0].col_type, colTimeRange: data[0].col_time_range
               };
+              
               setChoices((prev: any[]) => [...prev, newChoice]);
               logAction('ASSIGNATION_MANUELLE', { user: cleanTri, date: `${editingCell.row}/${editingCell.month+1}/${editingCell.year}`, col: editingCell.col });
+              
+              if (logInCounter) {
+                  const takeReq = {
+                      requester_trigram: cleanTri,
+                      target_row: editingCell.row,
+                      target_col: editingCell.col,
+                      target_month: editingCell.month + 1,
+                      target_year: editingCell.year,
+                      target_col_label: columnConfigs.find((c: any) => c.column_id === editingCell.col)?.col_label || COLUMNS.find(c => c.id === editingCell.col)?.label,
+                      status: 'APPROVED',
+                      processed_by: currentUserTrigram || 'ADMIN',
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
+                  };
+                  supabase.from('take_requests').insert([takeReq]).then(({error}) => {
+                      if (error) console.error("Error inserting into take_requests", error);
+                  });
+              }
+              setEditingCell(null);
+
           } else {
               console.error(error);
               alert("Erreur lors de l'attribution");
@@ -3059,6 +3111,50 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
         </div>
 
         {/* Assignment Modal */}
+        
+        {/* Assignment Removal Modal */}
+        {removingCell && (
+            <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 p-6">
+                        <h3 className="text-white text-lg font-black uppercase tracking-tight">Retirer la garde</h3>
+                        <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-wider">
+                            Le {removingCell.row}/{removingCell.month + 1}/{removingCell.year} • Colonne {removingCell.col}
+                        </p>
+                    </div>
+                    <div className="p-6 space-y-6">
+                        <div className="text-sm font-medium text-slate-700">
+                            Êtes-vous sûr de vouloir retirer la garde du Dr <span className="font-bold text-slate-900">{removingCell.assignedChoice.userTrigram}</span> ?
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <input 
+                                type="checkbox" 
+                                id="logInCounterRemove" 
+                                checked={logInCounter} 
+                                onChange={(e) => setLogInCounter(e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor="logInCounterRemove" className="text-xs font-bold text-slate-700">Comptabiliser cet abandon dans le compteur du médecin</label>
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                            <button 
+                                onClick={() => setRemovingCell(null)}
+                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                            >
+                                Annuler
+                            </button>
+                            <button 
+                                onClick={handleRemoveAssignment}
+                                className="flex-1 py-3 bg-red-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-600 transition-colors shadow-sm"
+                            >
+                                Confirmer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {editingCell && (
             <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
@@ -3094,8 +3190,20 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>
                                 </div>
                             </div>
+                        
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <input 
+                                type="checkbox" 
+                                id="logInCounter" 
+                                checked={logInCounter} 
+                                onChange={(e) => setLogInCounter(e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <label htmlFor="logInCounter" className="text-xs font-bold text-slate-700">Comptabiliser cet ajout dans le compteur du médecin</label>
                         </div>
                         <div className="flex gap-3 pt-2">
+
                             <button 
                                 onClick={() => setEditingCell(null)}
                                 className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
