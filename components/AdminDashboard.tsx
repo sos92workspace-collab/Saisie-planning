@@ -3157,6 +3157,26 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
           return;
       }
       
+      
+      const takeReq = {
+          requester_trigram: abandonedChoice.userTrigram,
+          target_row: replacementCell.row,
+          target_col: replacementCell.col,
+          target_month: replacementCell.month + 1,
+          target_year: replacementCell.year,
+          target_col_label: replacementCell.colLabel || columnConfigs.find((c: any) => c.column_id === replacementCell.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === replacementCell.col)?.name,
+          status: 'APPROVED',
+          processed_by: currentUserTrigram || 'ADMIN',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+      };
+      
+      let takeId = null;
+      const { data: takeData, error: takeError } = await supabase.from('take_requests').insert([takeReq]).select().single();
+      if (!takeError && takeData) {
+          takeId = takeData.id;
+      }
+
       const reqAbandon = {
           requester_trigram: abandonedChoice.userTrigram,
           shift_snapshot: {
@@ -3165,16 +3185,21 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
               year: abandonedChoice.year,
               col: abandonedChoice.col,
               colLabel: abandonedChoice.colLabel || columnConfigs.find((c: any) => c.column_id === abandonedChoice.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === abandonedChoice.col)?.name,
-              target_row: replacementCell.row,
-              target_month: replacementCell.month + 1,
-              target_year: replacementCell.year,
-              target_col: replacementCell.col
+              linked_take: takeId ? {
+                  id: takeId,
+                  row: replacementCell.row,
+                  col: replacementCell.col,
+                  month: replacementCell.month + 1,
+                  year: replacementCell.year,
+                  colLabel: replacementCell.colLabel || columnConfigs.find((c: any) => c.column_id === replacementCell.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === replacementCell.col)?.name,
+              } : null
           },
           status: 'APPROVED',
           processed_by: (typeof currentUserTrigram !== 'undefined' ? currentUserTrigram : 'ADMIN'),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
       };
+
       
       const { data: reqData, error: reqError } = await supabase.from('abandon_requests').insert([reqAbandon]).select();
       if (!reqError && reqData && reqData.length > 0) {

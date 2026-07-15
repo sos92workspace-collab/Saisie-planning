@@ -2736,6 +2736,14 @@ const App: React.FC = () => {
                                  ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs)
                                  : 'Garde supprimée'}
                          </span>
+                         {ab.shift_snapshot?.linked_take && (
+                             <div className="mt-2 p-2 bg-teal-50 border border-teal-100 rounded-lg">
+                               <div className="text-[9px] font-black text-teal-600 uppercase mb-1">Garde reprise</div>
+                               <div className="text-sm font-bold text-slate-800">
+                                   {formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}
+                               </div>
+                             </div>
+                         )}
                      </div>
                  </div>
              )})}

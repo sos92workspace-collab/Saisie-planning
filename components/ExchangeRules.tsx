@@ -1483,6 +1483,12 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
                                    <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
                                        Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
+                                       {ab.shift_snapshot?.linked_take && (
+                                           <>
+                                             {' → '}
+                                             <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
+                                           </>
+                                       )}
                                      </div>
                                      <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')} {ab?.processed_by ? 'par ' + ab.processed_by : ''}</div>
                                    </div>
@@ -1547,6 +1553,12 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
                                    <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
                                      <div className="font-bold text-slate-800">
                                        Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
+                                       {ab.shift_snapshot?.linked_take && (
+                                           <>
+                                             {' → '}
+                                             <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
+                                           </>
+                                       )}
                                      </div>
                                      <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')} {ab?.processed_by ? 'par ' + ab.processed_by : ''}</div>
                                    </div>
