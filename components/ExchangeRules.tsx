@@ -2481,14 +2481,21 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
                           
                           <label className="block text-xs font-bold text-slate-700 mb-1">Montant à appliquer (€)</label>
                           <div className="flex items-center gap-2">
-                              <input 
-                                  type="number" 
-                                  min="0"
-                                  value={removePenaltyAmount}
-                                  onChange={e => setRemovePenaltyAmount(parseFloat(e.target.value) || 0)}
-                                  className="w-24 p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900"
-                              />
-                              <span className="text-sm text-slate-500 font-bold">€</span>
+                              
+                    <select 
+                        value={removePenaltyAmount}
+                        onChange={e => setRemovePenaltyAmount(parseFloat(e.target.value) || 0)}
+                        className="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900"
+                    >
+                        {abandonPenaltiesRules.map(r => (
+                            <option key={r.id} value={r.penalty_amount}>
+                                {r.penalty_amount}€ - {r.delay_category === 'MORE_THAN_48H' ? '> 48h' : r.delay_category === 'BETWEEN_6H_AND_48H' ? '48h à 6h' : '< 6h'}
+                            </option>
+                        ))}
+                        <option value="0">0€ - Aucune pénalité (Exonération)</option>
+                    </select>
+
+                              
                           </div>
                           
                           <div className="mt-3 text-[10px] text-slate-500">

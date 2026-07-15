@@ -11,11 +11,8 @@ const env = fs.readFileSync('.env', 'utf8').split('\n').reduce((acc, line) => {
 const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 
 async function check() {
-  const { data: stData } = await supabase.from('choices').select('status');
-  const counts = {};
-  for (const row of (stData || [])) {
-      counts[row.status] = (counts[row.status] || 0) + 1;
-  }
-  console.log("Statuses in choices:", counts);
+  const { data, error } = await supabase.from('abandon_requests').select('*').limit(1);
+  if (error) console.error(error);
+  console.log(data);
 }
 check();
