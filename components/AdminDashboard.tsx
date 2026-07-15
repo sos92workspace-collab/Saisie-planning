@@ -769,7 +769,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
           {activeTab === AdminTab.EXCHANGES && <ExchangeRules supabase={supabase} choices={allChoices} users={users} activeRound={activeRound} columnConfigs={columnConfigs} headerConfigs={headerConfigs} globalClosures={globalClosures} PlanningPanel={PlanningPanel} refreshData={refreshData} currentUserTrigram={currentUserTrigram} />}
           {activeTab === AdminTab.CONNECTION_LOGS && <LogsTabPanel supabase={supabase} currentUserTrigram={currentUserTrigram} />}
           {activeTab === AdminTab.MAINTENANCE && <MaintenancePanel supabase={supabase} logAction={logAction} />}
-          {activeTab === AdminTab.PENALTIES && <PenaltiesPanel supabase={supabase} logAction={logAction} />}
+          {activeTab === AdminTab.PENALTIES && <PenaltiesPanel supabase={supabase} logAction={logAction} columnConfigs={columnConfigs} />}
         </div>
       </main>
     </div>
@@ -889,94 +889,68 @@ const MaintenancePanel = ({ supabase, logAction }: any) => {
 };
 
 
-const PenaltiesPanel = ({ supabase, logAction }: any) => {
+const PenaltiesPanel = ({ supabase, logAction, columnConfigs }: any) => {
   const [penalties, setPenalties] = useState<any[]>([]);
-  const [appliedPenalties, setAppliedPenalties] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-
+  const [appliedPenalties, setAppliedPenalties] = useState<any[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
+  const [counterResetDate, setCounterResetDate] = useState<Date>(new Date(0));
+  const [expandedUserTrigram, setExpandedUserTrigram] = useState<string | null>(null);
+  
   useEffect(() => {
     const fetchPenalties = async () => {
-      const { data, error: fetchError } = await supabase.from('abandon_penalties').select('*').order('id', { ascending: true });
-      
-      if (fetchError) {
-        if (fetchError.code === '42P01') {
-           setError("La table 'abandon_penalties' n'existe pas. Veuillez exécuter le script SQL fourni.");
-        } else {
-           setError(fetchError.message);
-        }
-      } else if (data) {
-        setPenalties(data);
-        await syncAppliedPenalties(data);
-      }
-      setLoading(false);
-    };
-
-    const syncAppliedPenalties = async (currentPenalties: any[]) => {
       try {
-        const { data: requests } = await supabase.from('abandon_requests').select('*').eq('status', 'APPROVED');
-        const { data: applied, error: errApplied } = await supabase.from('applied_penalties').select('*');
-        
-        if (errApplied && errApplied.code === '42P01') {
-            setError("La table 'applied_penalties' n'existe pas. Veuillez exécuter le script SQL fourni.");
-            return;
+        const { data, error: fetchError } = await supabase.from('abandon_penalties').select('*');
+        if (fetchError) throw fetchError;
+        if (data && data.length > 0) {
+            setPenalties(data);
+        } else {
+            const defaults = [
+                { delay_category: 'MORE_THAN_48H', penalty_amount: 0 },
+                { delay_category: 'BETWEEN_6H_AND_48H', penalty_amount: 30 },
+                { delay_category: 'LESS_THAN_6H', penalty_amount: 50 }
+            ];
+            const { data: inserted, error: insertError } = await supabase.from('abandon_penalties').insert(defaults).select('*');
+            if (insertError) throw insertError;
+            setPenalties(inserted);
         }
 
-        const appliedSet = new Set((applied || []).map((a: any) => a.abandon_request_id));
+        const { data: usersData } = await supabase.from('users').select('*');
+        if (usersData) setUsers(usersData);
+
+        const { data: logsData } = await supabase.from('logs').select('created_at').eq('action', 'RESET_PENALTIES_COUNTER').order('created_at', { ascending: false }).limit(1);
+        if (logsData && logsData.length > 0) {
+          setCounterResetDate(new Date(logsData[0].created_at));
+        } else {
+          setCounterResetDate(new Date(0));
+        }
+
+        const { data: applied } = await supabase.from('applied_penalties').select('*, abandon_request:abandon_requests(*)');
+        const { data: abandons } = await supabase.from('abandon_requests').select('*, requester_choice:choices!choice_id(*)').eq('status', 'APPROVED');
+        
         const toInsert = [];
+        if (abandons) {
+          for (const req of abandons) {
+            const isAlreadyApplied = applied?.some(p => p.abandon_request_id === req.id);
+            if (isAlreadyApplied) continue;
 
-        for (const req of (requests || [])) {
-          if (!appliedSet.has(req.id)) {
-            const snap = req.shift_snapshot;
-            let hour = 0;
-            const match = snap.colLabel?.match(/\((\d{1,2})h/i);
-            if (match) {
-                hour = parseInt(match[1], 10);
-            }
-            
-let year = snap?.year;
-let month = snap?.month;
-let row = snap?.row;
-if (year === undefined) {
-    if (snap?.date) {
-        const d = new Date(snap.date);
-        year = d.getFullYear();
-        month = d.getMonth() + 1;
-        row = d.getDate();
-    } else {
-        year = new Date().getFullYear();
-    }
-}
-if (month === undefined) month = new Date().getMonth() + 1;
-if (row === undefined) row = new Date().getDate();
+            const shiftDate = new Date(req.shift_snapshot ? req.shift_snapshot.year : req.requester_choice.year, req.shift_snapshot ? req.shift_snapshot.month - 1 : req.requester_choice.month - 1, req.shift_snapshot ? req.shift_snapshot.row : req.requester_choice.row);
+            const abandonDate = new Date(req.created_at);
+            const delayHours = (shiftDate.getTime() - abandonDate.getTime()) / (1000 * 60 * 60);
 
-let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
-            if (isNaN(shiftDate.getTime())) {
-                console.warn("Invalid shift date for abandon request", req.id, snap);
-                shiftDate = new Date(); // fallback to avoid crash
-            }
-            const abandonDate = new Date(req.created_at || new Date());
-            
-            const delayHours = (shiftDate.getTime() - abandonDate.getTime()) / (1000 * 3600);
-            
-            if (isNaN(delayHours)) {
-                console.warn("Invalid delayHours", {shiftDate, abandonDate});
-                continue;
-            }
             let category = 'MORE_THAN_48H';
-            if (delayHours < 6) {
-                category = 'LESS_THAN_6H';
-            } else if (delayHours < 48) {
-                category = 'BETWEEN_6H_AND_48H';
+            if (delayHours < 6) category = 'LESS_THAN_6H';
+            else if (delayHours < 48) category = 'BETWEEN_6H_AND_48H';
+
+            let amount = 0;
+            if (data && data.length > 0) {
+                const penaltyConfig = data.find(p => p.delay_category === category);
+                if (penaltyConfig) amount = penaltyConfig.penalty_amount;
             }
-            
-            const p = currentPenalties.find((p: any) => p.delay_category === category);
-            const amount = p ? parseFloat(p.penalty_amount) : 0;
-            
+
             toInsert.push({
                 abandon_request_id: req.id,
                 user_trigram: req.requester_trigram,
@@ -991,16 +965,16 @@ let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
         
         if (toInsert.length > 0) {
             await supabase.from('applied_penalties').insert(toInsert);
-            const { data: finalApplied } = await supabase.from('applied_penalties').select('*');
+            const { data: finalApplied } = await supabase.from('applied_penalties').select('*, abandon_request:abandon_requests(*, requester_choice:choices!choice_id(*))');
             setAppliedPenalties(finalApplied || []);
         } else {
-            setAppliedPenalties(applied || []);
+            const { data: finalApplied } = await supabase.from('applied_penalties').select('*, abandon_request:abandon_requests(*, requester_choice:choices!choice_id(*))');
+            setAppliedPenalties(finalApplied || []);
         }
       } catch (e) {
           console.error("Error syncing applied penalties", e);
       }
     };
-
     fetchPenalties();
   }, [supabase]);
 
@@ -1018,6 +992,25 @@ let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
     alert('Pénalités enregistrées avec succès.');
   };
 
+  const handleResetCounter = async () => {
+    const adminUser = users.find(u => u.role === 'ADMIN');
+    if (!adminUser) return alert("Utilisateur admin non trouvé.");
+    
+    const pwd = window.prompt("Pour réinitialiser le compteur des pénalités, veuillez saisir le mot de passe administrateur :");
+    if (pwd === null) return;
+    if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
+    
+    try {
+      const { error } = await supabase.from('logs').insert([{ action: 'RESET_PENALTIES_COUNTER', details: {} }]);
+      if (error) throw error;
+      setCounterResetDate(new Date());
+      alert("Compteur réinitialisé avec succès.");
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la réinitialisation.");
+    }
+  };
+
   const getLabel = (category: string) => {
     switch(category) {
       case 'MORE_THAN_48H': return 'Abandon supérieur à 48 heures';
@@ -1027,29 +1020,46 @@ let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
     }
   };
 
+  const formatRequestDate = (row: number, month: number, year: number, colId: number, colLabel: string, includeDate: boolean, configs: any[]) => {
+      let finalLabel = colLabel;
+      const customConf = configs?.find((c: any) => c.column_id === colId);
+      if (customConf?.custom_label) {
+          finalLabel = customConf.custom_label;
+      }
+      
+      const date = new Date(year, month - 1, row);
+      const days = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+      let dStr = '';
+      if (includeDate) {
+          dStr = `${days[date.getDay()]} ${row.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year} | `;
+      }
+      return `${dStr}Col. ${colId} : ${finalLabel}`;
+  };
+
   const ranking = React.useMemo(() => {
       let filtered = appliedPenalties.filter(p => p.penalty_amount > 0);
-      if (startDate) {
-          filtered = filtered.filter(p => new Date(p.shift_date) >= new Date(startDate));
-      }
+      const effStartDate = startDate ? new Date(startDate) : counterResetDate;
+      filtered = filtered.filter(p => new Date(p.shift_date) >= effStartDate);
+      
       if (endDate) {
-          // Add 1 day to end date to include the whole day
           const end = new Date(endDate);
           end.setDate(end.getDate() + 1);
           filtered = filtered.filter(p => new Date(p.shift_date) < end);
       }
       
-      const userTotals: Record<string, number> = {};
+      const userTotals: Record<string, { total: number, items: any[] }> = {};
       filtered.forEach(p => {
-          userTotals[p.user_trigram] = (userTotals[p.user_trigram] || 0) + parseFloat(p.penalty_amount);
+          if (!userTotals[p.user_trigram]) {
+              userTotals[p.user_trigram] = { total: 0, items: [] };
+          }
+          userTotals[p.user_trigram].total += parseFloat(p.penalty_amount);
+          userTotals[p.user_trigram].items.push(p);
       });
       
       return Object.entries(userTotals)
-          .map(([trigram, total]) => ({ trigram, total }))
+          .map(([trigram, data]) => ({ trigram, total: data.total, items: data.items.sort((a, b) => new Date(b.abandon_date).getTime() - new Date(a.abandon_date).getTime()) }))
           .sort((a, b) => b.total - a.total);
-  }, [appliedPenalties, startDate, endDate]);
-
-  if (loading) return <div className="p-6">Chargement...</div>;
+  }, [appliedPenalties, startDate, endDate, counterResetDate]);
 
   return (
     <div className="space-y-8 p-4 md:p-8 h-full overflow-y-auto custom-scrollbar pb-24">
@@ -1101,10 +1111,20 @@ let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
 
       {!error && (
           <div className="bg-white rounded-[40px] shadow-sm p-8 md:p-12 border border-slate-100 max-w-4xl mx-auto">
-             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                <div>
+             <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+                <div className="flex-1">
                     <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-800">Classement des pénalités</h2>
                     <p className="text-sm text-slate-500 mt-1">Total des pénalités par médecin selon la période de garde.</p>
+                    <div className="mt-4 inline-flex items-center gap-4 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl">
+                        <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDate.getFullYear() === 1970 ? 'début' : counterResetDate.toLocaleDateString('fr-FR')}</span>
+                        <div className="h-4 w-px bg-slate-200"></div>
+                        <button 
+                            onClick={handleResetCounter}
+                            className="text-xs font-black uppercase text-red-600 hover:text-red-700 transition-colors"
+                        >
+                            Réinitialiser le compteur
+                        </button>
+                    </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
                     <div className="flex items-center gap-2">
@@ -1127,47 +1147,73 @@ let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
                     </div>
                     {(startDate || endDate) && (
                         <button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors" title="Effacer les filtres">
-                            <X className="w-4 h-4" />
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                         </button>
                     )}
                 </div>
              </div>
 
              {ranking.length > 0 ? (
-                 <div className="overflow-hidden rounded-3xl border border-slate-200">
-                     <table className="w-full text-left border-collapse">
-                         <thead>
-                             <tr className="bg-slate-50 border-b border-slate-200">
-                                 <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Médecin</th>
-                                 <th className="py-4 px-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Total Pénalités</th>
-                             </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-100">
-                             {ranking.map((row, index) => (
-                                 <tr key={row.trigram} className="hover:bg-slate-50/50 transition-colors">
-                                     <td className="py-4 px-6">
-                                         <div className="flex items-center gap-3">
-                                             <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs">
-                                                 #{index + 1}
+                 <div className="flex flex-col gap-2">
+                     {ranking.map((row, index) => (
+                         <div key={row.trigram} className="flex flex-col border border-slate-200 bg-white rounded-xl overflow-hidden shadow-sm">
+                             <div 
+                                 className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                                 onClick={() => setExpandedUserTrigram(expandedUserTrigram === row.trigram ? null : row.trigram)}
+                             >
+                                 <div className="flex items-center gap-4">
+                                     <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs shrink-0">
+                                         #{index + 1}
+                                     </div>
+                                     <span className="font-bold text-slate-900 text-lg">{row.trigram}</span>
+                                     <svg className={`w-5 h-5 text-slate-400 transition-transform ${expandedUserTrigram === row.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                 </div>
+                                 <div className="flex items-center gap-4">
+                                     <span className="font-black text-red-600 text-lg">{row.total.toFixed(2)} €</span>
+                                 </div>
+                             </div>
+                             
+                             {expandedUserTrigram === row.trigram && (
+                                 <div className="bg-slate-50 p-4 border-t border-slate-100">
+                                     <div className="flex flex-col gap-3">
+                                         {row.items.map((p, idx) => {
+                                             const req = p.abandon_request;
+                                             return (
+                                             <div key={p.id || idx} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                                 <div className="flex-1 space-y-1">
+                                                     <div className="flex items-center gap-2">
+                                                         <span className="px-2 py-1 bg-rose-100 text-rose-700 rounded text-[10px] font-black uppercase tracking-widest">{getLabel(p.penalty_category)}</span>
+                                                     </div>
+                                                     <div className="font-bold text-slate-800 text-sm mt-2">
+                                                         {req ? (
+                                                            req.requester_choice 
+                                                            ? formatRequestDate(req.requester_choice.row, req.requester_choice.month, req.requester_choice.year, req.requester_choice.col, req.requester_choice.colLabel, true, columnConfigs) 
+                                                            : (req.shift_snapshot ? formatRequestDate(req.shift_snapshot.row, req.shift_snapshot.month, req.shift_snapshot.year, req.shift_snapshot.col, req.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')
+                                                         ) : 'Garde introuvable'}
+                                                         {req?.shift_snapshot?.linked_take && (
+                                                             <>
+                                                               {' → '}
+                                                               <span className="font-bold text-teal-600">Reprise [{formatRequestDate(req.shift_snapshot.linked_take.row, req.shift_snapshot.linked_take.month, req.shift_snapshot.linked_take.year, req.shift_snapshot.linked_take.col, req.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
+                                                             </>
+                                                         )}
+                                                     </div>
+                                                     <div className="text-[10px] text-slate-400">Demandé le {new Date(p.abandon_date).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                                                 </div>
+                                                 <div className="text-right shrink-0">
+                                                     <span className="font-black text-red-600">{parseFloat(p.penalty_amount).toFixed(2)} €</span>
+                                                 </div>
                                              </div>
-                                             <span className="font-bold text-slate-900">{row.trigram}</span>
-                                         </div>
-                                     </td>
-                                     <td className="py-4 px-6 text-right">
-                                         <span className="font-black text-red-600">{row.total.toFixed(2)} €</span>
-                                     </td>
-                                 </tr>
-                             ))}
-                         </tbody>
-                         <tfoot className="bg-slate-50 border-t border-slate-200">
-                             <tr>
-                                 <td className="py-4 px-6 font-black text-slate-900 uppercase tracking-widest text-sm">Total</td>
-                                 <td className="py-4 px-6 text-right font-black text-red-700 text-lg">
-                                     {ranking.reduce((sum, r) => sum + r.total, 0).toFixed(2)} €
-                                 </td>
-                             </tr>
-                         </tfoot>
-                     </table>
+                                         )})}
+                                     </div>
+                                 </div>
+                             )}
+                         </div>
+                     ))}
+                     
+                     <div className="mt-4 p-6 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                         <span className="font-black text-slate-900 uppercase tracking-widest text-sm">Total des pénalités</span>
+                         <span className="font-black text-red-700 text-2xl">{ranking.reduce((sum, r) => sum + r.total, 0).toFixed(2)} €</span>
+                     </div>
                  </div>
              ) : (
                  <div className="text-center py-12 bg-slate-50 rounded-3xl border border-slate-200 border-dashed">
