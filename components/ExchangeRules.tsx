@@ -463,6 +463,10 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const [expandedUserTrigramTakes, setExpandedUserTrigramTakes] = useState<string | null>(null);
 
   const [confirmAbandonChoice, setConfirmAbandonChoice] = useState<any>(null);
+  const [removeMode, setRemoveMode] = useState<'ABANDON'|'ERROR'>('ABANDON');
+  const [removePenaltyAmount, setRemovePenaltyAmount] = useState<number>(0);
+  const [removeDelayCategory, setRemoveDelayCategory] = useState<string>('');
+  const [abandonPenaltiesRules, setAbandonPenaltiesRules] = useState<any[]>([]);
   const [confirmTakeCell, setConfirmTakeCell] = useState<any>(null);
   const [takeTargetUser, setTakeTargetUser] = useState<string>('');
   const [exchangeSourceChoice, setExchangeSourceChoice] = useState<any>(null);
@@ -666,29 +670,54 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
     try {
       const { error: deleteError } = await supabase.from('choices').delete().eq('id', choice.id);
       if (deleteError) throw deleteError;
+      
+      if (removeMode === 'ERROR') {
+          const { error: logError } = await supabase.from('logs').insert([{
+            action: 'SUPPRESSION_GARDE',
+            details: { mode: 'CORRECTION_ERREUR', user: choice.userTrigram || choice.user_trigram, date: `${choice.row}/${choice.month + 1}/${choice.year}`, col: choice.col }
+          }]);
+      } else {
+          const { data: abandonData, error: abandonError } = await supabase.from('abandon_requests').insert([{
+            requester_trigram: choice.userTrigram || choice.user_trigram,
+            shift_snapshot: {
+              row: choice.row,
+              month: choice.month + 1,
+              year: choice.year,
+              col: choice.col,
+              colLabel: columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === choice.col)?.name || choice.col
+            },
+            status: 'APPROVED',
+            updated_at: new Date().toISOString(), processed_by: currentUserTrigram
+          }]).select();
+          
+          if (abandonError) throw abandonError;
+          
+          if (abandonData && abandonData.length > 0) {
+              let colLabel = columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_label || COLUMNS.find(c => c.id === choice.col)?.label || "0h";
+              const hMatch = colLabel.match(/\((\d{1,2})h/i);
+              const hour = hMatch ? parseInt(hMatch[1], 10) : 0;
+              const shiftDate = new Date(choice.year, choice.month, choice.row || 1, hour, 0, 0);
+              
+              const penaltyInsert = {
+                  abandon_request_id: abandonData[0].id,
+                  user_trigram: choice.userTrigram || choice.user_trigram,
+                  shift_date: shiftDate.toISOString(),
+                  abandon_date: new Date().toISOString(),
+                  delay_hours: 0,
+                  penalty_amount: removePenaltyAmount,
+                  penalty_category: removeDelayCategory
+              };
+              
+              await supabase.from('applied_penalties').insert([penaltyInsert]);
+          }
 
-      const { error: abandonError } = await supabase.from('abandon_requests').insert([{
-        requester_trigram: choice.userTrigram || choice.user_trigram,
-        shift_snapshot: {
-          row: choice.row,
-          month: choice.month + 1,
-          year: choice.year,
-          col: choice.col,
-          colLabel: columnConfigs.find((c: any) => c.column_id === choice.col)?.custom_label || columnConfigs.find((c: any) => c.column_id === choice.col)?.name || choice.col
-        },
-        status: 'APPROVED',
-        updated_at: new Date().toISOString(), processed_by: currentUserTrigram
-      }]);
-      if (abandonError) throw abandonError;
+          const { error: logError } = await supabase.from('logs').insert([{
+            action: 'SUPPRESSION_GARDE',
+            details: { mode: 'ABANDON', user: choice.userTrigram || choice.user_trigram, date: `${choice.row}/${choice.month + 1}/${choice.year}`, col: choice.col }
+          }]);
+      }
 
       fetchAssignedChoices();
-      
-      
-      const { error: logError } = await supabase.from('logs').insert([{
-        action: 'SUPPRESSION_GARDE', // from Admin Dashboard
-        details: { mode: 'ABANDON_MANUEL', user: choice.userTrigram || choice.user_trigram, date: `${choice.row}/${choice.month + 1}/${choice.year}`, col: choice.col }
-      }]);
-      
       if (refreshData) refreshData();
       setConfirmAbandonChoice(null);
     } catch (e: any) {
@@ -2405,15 +2434,12 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
             <div className="bg-slate-900 p-6 flex items-center justify-between">
               <h3 className="text-white text-lg font-black uppercase tracking-tight">Confirmer l'abandon</h3>
             </div>
-            <div className="p-6 space-y-4 text-center">
-              <p className="text-sm font-medium text-slate-600">
-                Êtes-vous sûr de vouloir abandonner la garde suivante ?
+            
+            <div className="p-6 space-y-6">
+              <p className="text-sm font-medium text-slate-700">
+                Vous êtes sur le point de retirer la garde suivante du Dr <span className="font-bold text-slate-900">{confirmAbandonChoice.userTrigram || confirmAbandonChoice.user_trigram}</span> :
               </p>
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 inline-block text-left w-full space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-xs uppercase font-bold text-slate-400">Médecin</span>
-                  <span className="text-sm font-black text-slate-800">{confirmAbandonChoice.userTrigram || confirmAbandonChoice.user_trigram}</span>
-                </div>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left space-y-2">
                 <div className="flex justify-between">
                   <span className="text-xs uppercase font-bold text-slate-400">Date</span>
                   <span className="text-sm font-bold text-slate-800">{String(confirmAbandonChoice.row).padStart(2, '0')}/{String(confirmAbandonChoice.month + 1).padStart(2, '0')}/{confirmAbandonChoice.year}</span>
@@ -2421,11 +2447,63 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
                 <div className="flex justify-between">
                   <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
                   <span className="text-sm font-bold text-slate-800 text-right">
-                    Col {confirmAbandonChoice.col} - {columnConfigs?.find((c: any) => c.column_id === confirmAbandonChoice.col)?.custom_label || COLUMNS.find(c => c.id === confirmAbandonChoice.col)?.label}
-                    <br/>
-                    <span className="text-xs text-slate-500 font-medium">({columnConfigs?.find((c: any) => c.column_id === confirmAbandonChoice.col)?.custom_time_range || COLUMNS.find(c => c.id === confirmAbandonChoice.col)?.timeRange})</span>
+                    Col {confirmAbandonChoice.col}
                   </span>
                 </div>
+              </div>
+
+              <div className="space-y-4">
+                  <div className="text-sm font-bold text-slate-700">Motif du retrait :</div>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="removeModeEx" checked={removeMode === 'ERROR'} onChange={() => setRemoveMode('ERROR')} className="mt-1" />
+                      <div>
+                          <div className="text-sm font-bold text-slate-900">Correction d'erreur</div>
+                          <div className="text-xs text-slate-500">Ne compte pas comme un abandon. Aucune pénalité, la garde est juste retirée.</div>
+                      </div>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="removeModeEx" checked={removeMode === 'ABANDON'} onChange={() => setRemoveMode('ABANDON')} className="mt-1" />
+                      <div>
+                          <div className="text-sm font-bold text-slate-900">Abandon de garde</div>
+                          <div className="text-xs text-slate-500">Comptabilise l'abandon et applique une pénalité financière.</div>
+                      </div>
+                  </label>
+                  
+                  {removeMode === 'ABANDON' && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-widest">Détails de la pénalité</div>
+                          
+                          <div className="text-xs text-slate-600 mb-3">
+                              Catégorie de délai : <span className="font-bold">
+                                  {removeDelayCategory === 'MORE_THAN_48H' ? '> 48h' : removeDelayCategory === 'BETWEEN_6H_AND_48H' ? 'Entre 6h et 48h' : '< 6h'}
+                              </span>
+                          </div>
+                          
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Montant à appliquer (€)</label>
+                          <div className="flex items-center gap-2">
+                              <input 
+                                  type="number" 
+                                  min="0"
+                                  value={removePenaltyAmount}
+                                  onChange={e => setRemovePenaltyAmount(parseFloat(e.target.value) || 0)}
+                                  className="w-24 p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900"
+                              />
+                              <span className="text-sm text-slate-500 font-bold">€</span>
+                          </div>
+                          
+                          <div className="mt-3 text-[10px] text-slate-500">
+                              Suggéré selon les règles :<br/>
+                              {abandonPenaltiesRules.map(r => (
+                                  <div key={r.id}>- {r.delay_category === 'MORE_THAN_48H' ? '> 48h' : r.delay_category === 'BETWEEN_6H_AND_48H' ? '48h - 6h' : '< 6h'} : {r.penalty_amount}€</div>
+                              ))}
+                          </div>
+                          
+                          <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-xs font-medium border border-yellow-200 flex items-start gap-2">
+                              <span className="text-base leading-none">💡</span>
+                              <span>Pour conserver l'équilibre du planning, n'oubliez pas d'assigner une nouvelle garde de remplacement au médecin, ou demandez-lui d'en prendre une via la bourse d'échanges.</span>
+                          </div>
+                      </div>
+                  )}
               </div>
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
@@ -2453,37 +2531,77 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
             <div className="bg-slate-900 p-6 flex items-center justify-between">
               <h3 className="text-white text-lg font-black uppercase tracking-tight">Ajouter un médecin</h3>
             </div>
-            <div className="p-6 space-y-4 text-center">
-              <p className="text-sm font-medium text-slate-600">
-                Sélectionnez le médecin à ajouter pour cette garde :
+            
+            <div className="p-6 space-y-6">
+              <p className="text-sm font-medium text-slate-700">
+                Vous êtes sur le point de retirer la garde suivante du Dr <span className="font-bold text-slate-900">{confirmAbandonChoice.userTrigram || confirmAbandonChoice.user_trigram}</span> :
               </p>
-              
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 inline-block text-left w-full space-y-2">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left space-y-2">
                 <div className="flex justify-between">
                   <span className="text-xs uppercase font-bold text-slate-400">Date</span>
-                  <span className="text-sm font-bold text-slate-800">{String(confirmTakeCell.row).padStart(2, '0')}/{String(confirmTakeCell.month + 1).padStart(2, '0')}/{confirmTakeCell.year}</span>
+                  <span className="text-sm font-bold text-slate-800">{String(confirmAbandonChoice.row).padStart(2, '0')}/{String(confirmAbandonChoice.month + 1).padStart(2, '0')}/{confirmAbandonChoice.year}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
                   <span className="text-sm font-bold text-slate-800 text-right">
-                    Col {confirmTakeCell.col} - {columnConfigs?.find((c: any) => c.column_id === confirmTakeCell.col)?.custom_label || COLUMNS.find(c => c.id === confirmTakeCell.col)?.label}
-                    <br/>
-                    <span className="text-xs text-slate-500 font-medium">({columnConfigs?.find((c: any) => c.column_id === confirmTakeCell.col)?.custom_time_range || COLUMNS.find(c => c.id === confirmTakeCell.col)?.timeRange})</span>
+                    Col {confirmAbandonChoice.col}
                   </span>
                 </div>
               </div>
 
-              <select
-                className="w-full mt-4 p-3 border border-slate-200 rounded-xl text-sm font-bold bg-white"
-                value={takeTargetUser}
-                onChange={(e) => setTakeTargetUser(e.target.value)}
-              >
-                <option value="">-- Choisir un médecin --</option>
-                {users?.filter(u => u.trigram !== 'ADMIN').sort((a, b) => a.trigram.localeCompare(b.trigram)).map(u => (
-                  <option key={`take-${u.trigram}`} value={u.trigram}>{u.trigram} {u.role === 'SUBSTITUTE' ? '(Remplaçant)' : ''}</option>
-                ))}
-              </select>
-
+              <div className="space-y-4">
+                  <div className="text-sm font-bold text-slate-700">Motif du retrait :</div>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="removeModeEx" checked={removeMode === 'ERROR'} onChange={() => setRemoveMode('ERROR')} className="mt-1" />
+                      <div>
+                          <div className="text-sm font-bold text-slate-900">Correction d'erreur</div>
+                          <div className="text-xs text-slate-500">Ne compte pas comme un abandon. Aucune pénalité, la garde est juste retirée.</div>
+                      </div>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="removeModeEx" checked={removeMode === 'ABANDON'} onChange={() => setRemoveMode('ABANDON')} className="mt-1" />
+                      <div>
+                          <div className="text-sm font-bold text-slate-900">Abandon de garde</div>
+                          <div className="text-xs text-slate-500">Comptabilise l'abandon et applique une pénalité financière.</div>
+                      </div>
+                  </label>
+                  
+                  {removeMode === 'ABANDON' && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-widest">Détails de la pénalité</div>
+                          
+                          <div className="text-xs text-slate-600 mb-3">
+                              Catégorie de délai : <span className="font-bold">
+                                  {removeDelayCategory === 'MORE_THAN_48H' ? '> 48h' : removeDelayCategory === 'BETWEEN_6H_AND_48H' ? 'Entre 6h et 48h' : '< 6h'}
+                              </span>
+                          </div>
+                          
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Montant à appliquer (€)</label>
+                          <div className="flex items-center gap-2">
+                              <input 
+                                  type="number" 
+                                  min="0"
+                                  value={removePenaltyAmount}
+                                  onChange={e => setRemovePenaltyAmount(parseFloat(e.target.value) || 0)}
+                                  className="w-24 p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900"
+                              />
+                              <span className="text-sm text-slate-500 font-bold">€</span>
+                          </div>
+                          
+                          <div className="mt-3 text-[10px] text-slate-500">
+                              Suggéré selon les règles :<br/>
+                              {abandonPenaltiesRules.map(r => (
+                                  <div key={r.id}>- {r.delay_category === 'MORE_THAN_48H' ? '> 48h' : r.delay_category === 'BETWEEN_6H_AND_48H' ? '48h - 6h' : '< 6h'} : {r.penalty_amount}€</div>
+                              ))}
+                          </div>
+                          
+                          <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-xs font-medium border border-yellow-200 flex items-start gap-2">
+                              <span className="text-base leading-none">💡</span>
+                              <span>Pour conserver l'équilibre du planning, n'oubliez pas d'assigner une nouvelle garde de remplacement au médecin, ou demandez-lui d'en prendre une via la bourse d'échanges.</span>
+                          </div>
+                      </div>
+                  )}
+              </div>
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
               <button 
@@ -2511,49 +2629,77 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
             <div className="bg-slate-900 p-6 flex items-center justify-between">
               <h3 className="text-white text-lg font-black uppercase tracking-tight">Confirmer l'échange</h3>
             </div>
-            <div className="p-6 space-y-4 text-center">
-              <p className="text-sm font-medium text-slate-600">
-                Vous êtes sur le point de déplacer/échanger ce médecin :
+            
+            <div className="p-6 space-y-6">
+              <p className="text-sm font-medium text-slate-700">
+                Vous êtes sur le point de retirer la garde suivante du Dr <span className="font-bold text-slate-900">{confirmAbandonChoice.userTrigram || confirmAbandonChoice.user_trigram}</span> :
               </p>
-              
-              <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 inline-block text-left w-full space-y-2">
-                 <div className="flex justify-between">
-                  <span className="text-[10px] uppercase font-black text-orange-400">Origine</span>
-                  <span className="text-sm font-black text-slate-800">{exchangeSourceChoice.userTrigram || exchangeSourceChoice.user_trigram}</span>
-                </div>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left space-y-2">
                 <div className="flex justify-between">
                   <span className="text-xs uppercase font-bold text-slate-400">Date</span>
-                  <span className="text-sm font-bold text-slate-800">{String(exchangeSourceChoice.row).padStart(2, '0')}/{String(exchangeSourceChoice.month + 1).padStart(2, '0')}/{exchangeSourceChoice.year}</span>
+                  <span className="text-sm font-bold text-slate-800">{String(confirmAbandonChoice.row).padStart(2, '0')}/{String(confirmAbandonChoice.month + 1).padStart(2, '0')}/{confirmAbandonChoice.year}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
                   <span className="text-sm font-bold text-slate-800 text-right">
-                    Col {exchangeSourceChoice.col} - {columnConfigs?.find((c: any) => c.column_id === exchangeSourceChoice.col)?.custom_label || COLUMNS.find(c => c.id === exchangeSourceChoice.col)?.label}
+                    Col {confirmAbandonChoice.col}
                   </span>
                 </div>
               </div>
 
-              <div className="text-slate-300">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mx-auto transform rotate-90"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+              <div className="space-y-4">
+                  <div className="text-sm font-bold text-slate-700">Motif du retrait :</div>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="removeModeEx" checked={removeMode === 'ERROR'} onChange={() => setRemoveMode('ERROR')} className="mt-1" />
+                      <div>
+                          <div className="text-sm font-bold text-slate-900">Correction d'erreur</div>
+                          <div className="text-xs text-slate-500">Ne compte pas comme un abandon. Aucune pénalité, la garde est juste retirée.</div>
+                      </div>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="radio" name="removeModeEx" checked={removeMode === 'ABANDON'} onChange={() => setRemoveMode('ABANDON')} className="mt-1" />
+                      <div>
+                          <div className="text-sm font-bold text-slate-900">Abandon de garde</div>
+                          <div className="text-xs text-slate-500">Comptabilise l'abandon et applique une pénalité financière.</div>
+                      </div>
+                  </label>
+                  
+                  {removeMode === 'ABANDON' && (
+                      <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                          <div className="text-xs font-bold text-slate-700 mb-2 uppercase tracking-widest">Détails de la pénalité</div>
+                          
+                          <div className="text-xs text-slate-600 mb-3">
+                              Catégorie de délai : <span className="font-bold">
+                                  {removeDelayCategory === 'MORE_THAN_48H' ? '> 48h' : removeDelayCategory === 'BETWEEN_6H_AND_48H' ? 'Entre 6h et 48h' : '< 6h'}
+                              </span>
+                          </div>
+                          
+                          <label className="block text-xs font-bold text-slate-700 mb-1">Montant à appliquer (€)</label>
+                          <div className="flex items-center gap-2">
+                              <input 
+                                  type="number" 
+                                  min="0"
+                                  value={removePenaltyAmount}
+                                  onChange={e => setRemovePenaltyAmount(parseFloat(e.target.value) || 0)}
+                                  className="w-24 p-2 border border-slate-300 rounded-lg text-sm font-bold text-slate-900"
+                              />
+                              <span className="text-sm text-slate-500 font-bold">€</span>
+                          </div>
+                          
+                          <div className="mt-3 text-[10px] text-slate-500">
+                              Suggéré selon les règles :<br/>
+                              {abandonPenaltiesRules.map(r => (
+                                  <div key={r.id}>- {r.delay_category === 'MORE_THAN_48H' ? '> 48h' : r.delay_category === 'BETWEEN_6H_AND_48H' ? '48h - 6h' : '< 6h'} : {r.penalty_amount}€</div>
+                              ))}
+                          </div>
+                          
+                          <div className="mt-4 p-3 bg-yellow-50 text-yellow-800 rounded-lg text-xs font-medium border border-yellow-200 flex items-start gap-2">
+                              <span className="text-base leading-none">💡</span>
+                              <span>Pour conserver l'équilibre du planning, n'oubliez pas d'assigner une nouvelle garde de remplacement au médecin, ou demandez-lui d'en prendre une via la bourse d'échanges.</span>
+                          </div>
+                      </div>
+                  )}
               </div>
-
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 inline-block text-left w-full space-y-2">
-                 <div className="flex justify-between">
-                  <span className="text-[10px] uppercase font-black text-blue-400">Destination</span>
-                  <span className="text-sm font-black text-slate-800">{exchangeTargetCell.assigned?.userTrigram || exchangeTargetCell.assigned?.user_trigram || 'Case Vide'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs uppercase font-bold text-slate-400">Date</span>
-                  <span className="text-sm font-bold text-slate-800">{String(exchangeTargetCell.row).padStart(2, '0')}/{String(exchangeTargetCell.month + 1).padStart(2, '0')}/{exchangeTargetCell.year}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xs uppercase font-bold text-slate-400">Colonne</span>
-                  <span className="text-sm font-bold text-slate-800 text-right">
-                    Col {exchangeTargetCell.col} - {columnConfigs?.find((c: any) => c.column_id === exchangeTargetCell.col)?.custom_label || COLUMNS.find(c => c.id === exchangeTargetCell.col)?.label}
-                  </span>
-                </div>
-              </div>
-
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
               <button 
