@@ -3518,7 +3518,53 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                             </button>
                             <button 
                                 onClick={handleRemoveAssignment}
-                                className="flex-1 py-3 bg-red-500 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-600 transition-colors shadow-sm"
+                                className={`flex-1 py-3 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-colors shadow-sm ${removeMode === 'ABANDON' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-500 hover:bg-red-600'}`}
+                            >
+                                {removeMode === 'ABANDON' ? 'Choisir la garde à reprendre' : 'Confirmer'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+                {finalAbandonConfirm && (
+            <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                    <div className="bg-slate-900 p-6">
+                        <h3 className="text-white text-lg font-black uppercase tracking-tight">Confirmer l'abandon et la reprise</h3>
+                    </div>
+                    <div className="p-6 space-y-6">
+                        <div className="text-sm font-medium text-slate-700">
+                            Vous êtes sur le point de valider l'abandon et la reprise de garde pour le Dr <span className="font-bold text-slate-900">{finalAbandonConfirm.abandonedChoice.userTrigram}</span>.
+                        </div>
+                        
+                        <div className="space-y-3">
+                            <div className="bg-rose-50 p-3 rounded-xl border border-rose-100">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-rose-500 mb-1">Garde abandonnée</div>
+                                <div className="text-sm font-bold text-slate-900">
+                                    {finalAbandonConfirm.abandonedChoice.row}/{finalAbandonConfirm.abandonedChoice.month + 1}/{finalAbandonConfirm.abandonedChoice.year} • Colonne {finalAbandonConfirm.abandonedChoice.col}
+                                </div>
+                                <div className="text-xs text-slate-500 mt-1">Pénalité : {finalAbandonConfirm.penaltyAmount}€</div>
+                            </div>
+                            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-1">Garde reprise</div>
+                                <div className="text-sm font-bold text-slate-900">
+                                    {finalAbandonConfirm.replacementCell.row}/{finalAbandonConfirm.replacementCell.month + 1}/{finalAbandonConfirm.replacementCell.year} • Colonne {finalAbandonConfirm.replacementCell.col}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button 
+                                onClick={() => setFinalAbandonConfirm(null)}
+                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                            >
+                                Annuler
+                            </button>
+                            <button 
+                                onClick={handleFinalAbandonConfirm}
+                                className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-colors shadow-sm"
                             >
                                 Confirmer
                             </button>
@@ -3527,8 +3573,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                 </div>
             </div>
         )}
-
-        {editingCell && (
+{editingCell && (
             <div className="fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
                     <div className="bg-slate-900 p-6">
@@ -3791,6 +3836,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                 const isQuotaDoctorReached = checkQuotaReached(col.id, date, 'DOCTOR', choices, quotas);
                                                 const isQuotaSubReached = checkQuotaReached(col.id, date, 'SUBSTITUTE', choices, quotas);
                                                 const isQuotaReachedAdmin = isQuotaDoctorReached || isQuotaSubReached;
+                                                const isPendingTarget = pendingReplacementAction && !assigned && !isClosed;
                                                 
                                                 let bgColor = col.customColor || '#FFFFFF';
                                                 
@@ -3799,7 +3845,9 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                 const isWeekendGuard = isWeekendTime && (col.type === 'Consultation' || col.type === 'Téléconsultation') && col.label !== 'PFG' && col.label !== 'TcN';
                                                 
                                                 if (isClosed) bgColor = '#fee2e2'; // red-100
-                                                else if (assigned) {
+                                                else if (isPendingTarget) {
+                                                    bgColor = '#22c55e'; // green-500
+                                                } else if (assigned) {
                                                     if (highlightedTrigram && assigned.userTrigram === highlightedTrigram) {
                                                         bgColor = '#fef08a'; // yellow-300
                                                     } else {
@@ -3827,7 +3875,7 @@ export const PlanningPanel = ({ choices, setChoices, users, activeRound, columnC
                                                         onMouseEnter={() => setHoveredCell({ day, month, year, colId: col.id, colLabel: col.label, colType: col.type, colSite: col.site, colTimeRange: col.timeRange })}
                                                         onMouseLeave={() => setHoveredCell(null)}
                                                         onClick={() => handleCellClick(day, col.id, month, year)}
-                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] cursor-pointer transition-opacity align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
+                                                        className={`border-r border-b border-slate-200 text-center relative min-w-[75px] w-[75px] md:min-w-[36px] md:w-[36px] cursor-pointer transition-all align-middle overflow-hidden ${isEditClosuresMode ? 'hover:bg-red-200' : 'hover:opacity-80'} ${isCrosshair ? 'after:absolute after:inset-0 after:bg-blue-500/10 after:pointer-events-none' : ''} ${isPendingTarget ? 'ring-2 ring-emerald-500 ring-inset z-20 shadow-[inset_0_0_0_2px_#22c55e] animate-[pulse_1.5s_ease-in-out_infinite] scale-[1.05]' : ''} ${isHighlightedCell ? 'ring-4 ring-yellow-400 ring-inset z-20 bg-yellow-300 shadow-[0_0_15px_6px_rgba(250,204,21,0.6)] animate-[pulse_1s_ease-in-out_infinite]' : ''} ${isQuotaReachedAdmin && !assigned ? "bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZjhmYWZjIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wLDggTDgsMCBaIiBzdHJva2U9IiNjYmQ1ZTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]" : ""}`} 
                                                         style={style}
                                                     >
                                                         {isClosed && (
