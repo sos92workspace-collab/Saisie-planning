@@ -954,7 +954,7 @@ if (year === undefined) {
 if (month === undefined) month = new Date().getMonth() + 1;
 if (row === undefined) row = new Date().getDate();
 
-let shiftDate = new Date(year, month - (month > 11 ? 1 : 0), row || 1, hour, 0, 0);
+let shiftDate = new Date(year, month - 1, row || 1, hour, 0, 0);
             if (isNaN(shiftDate.getTime())) {
                 console.warn("Invalid shift date for abandon request", req.id, snap);
                 shiftDate = new Date(); // fallback to avoid crash

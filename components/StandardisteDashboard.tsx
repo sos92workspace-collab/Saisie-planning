@@ -6,11 +6,53 @@ import { Settings, CheckSquare, Users, FileText, Download, Upload, Shield, LogOu
 export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTrigram, activeRound, columnConfigs, globalClosures }: any) => {
   const [choices, setChoices] = useState<any[]>([]);
   const [headerConfigs, setHeaderConfigs] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'ECHANGES' | 'ARCHIVES'>('ECHANGES');
+  const [activeTab, setActiveTab] = useState<'PLANNING' | 'ECHANGES' | 'ARCHIVES'>('PLANNING');
   
+    
+const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: any) => any = (q) => q) => {
+  let allData: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    let query = supabaseClient.from(table).select('*');
+    query = queryModifier(query);
+    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error) {
+      console.error(error);
+      break;
+    }
+    if (data && data.length > 0) {
+      allData = [...allData, ...data];
+      if (data.length < pageSize) break;
+      page++;
+    } else {
+      break;
+    }
+  }
+  return allData;
+};
+
+
+  const logAction = async (action: string, details: any = {}) => {
+    try {
+      await supabase.from('logs').insert([{ action, details: { ...details, user: currentUserTrigram } }]);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const refreshData = async () => {
-    const { data: choicesData } = await supabase.from('choices').select('*');
-    if (choicesData) setChoices(choicesData);
+    const choicesData = await fetchAll(supabase, 'choices');
+    if (choicesData) {
+        setChoices(choicesData.map((db: any) => ({
+            id: db.id, row: db.row, col: db.col, month: db.month - 1, year: db.year,
+            groupIndex: db.group_index, subRank: db.sub_rank, category: db.category,
+            userTrigram: db.user_trigram, 
+            userRole: db.user_role || 'DOCTOR',
+            status: db.status, submittedAt: db.submitted_at, roundId: db.round_id,
+            colLabel: db.col_label, colType: db.col_type, colTimeRange: db.col_time_range
+        })));
+    }
     
     const { data: headersData } = await supabase.from('header_configs').select('*');
     if (headersData) setHeaderConfigs(headersData);
@@ -21,6 +63,7 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
   }, []);
 
   const navItems = [
+    { id: 'PLANNING', label: 'Planning Actuel', icon: Calendar },
     { id: 'ECHANGES', label: 'Règles et Échanges', icon: Calendar },
     { id: 'ARCHIVES', label: 'Planning Archivé', icon: Database },
   ];
@@ -69,6 +112,22 @@ export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTr
       {/* Main Content */}
       <main className="flex-1 overflow-auto flex flex-col min-h-0 relative z-10 bg-slate-100 p-6 md:p-8">
         <div className="max-w-7xl mx-auto w-full h-full flex flex-col">
+          {activeTab === 'PLANNING' && (
+            <PlanningPanel
+                currentUserTrigram={currentUserTrigram}
+                choices={choices}
+                setChoices={setChoices}
+                users={users}
+                activeRound={activeRound}
+                columnConfigs={columnConfigs}
+                quotas={[]}
+                headerConfigs={headerConfigs}
+                supabase={supabase}
+                globalClosures={globalClosures}
+                setGlobalClosures={() => {}}
+                logAction={logAction}
+            />
+          )}
           {activeTab === 'ECHANGES' && (
             <ExchangeRules 
                supabase={supabase} 

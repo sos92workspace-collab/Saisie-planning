@@ -474,9 +474,34 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const [assignedChoicesState, setAssignedChoicesState] = useState<any[]>([]);
   const assignedChoices = choices ? choices.filter(c => c.status === 'ASSIGNED' && c.userTrigram) : assignedChoicesState;
 
+  
+const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: any) => any = (q) => q) => {
+  let allData: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    let query = supabaseClient.from(table).select('*');
+    query = queryModifier(query);
+    const { data, error } = await query.range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error) {
+      console.error(error);
+      break;
+    }
+    if (data && data.length > 0) {
+      allData = [...allData, ...data];
+      if (data.length < pageSize) break;
+      page++;
+    } else {
+      break;
+    }
+  }
+  return allData;
+};
+
+
   const fetchAssignedChoices = async () => {
     try {
-      const { data } = await supabase.from('choices').select('*').eq('status', 'ASSIGNED').not('user_trigram', 'is', null);
+      const data = await fetchAll(supabase, 'choices', q => q.eq('status', 'ASSIGNED').not('user_trigram', 'is', null));
       if (data) setAssignedChoicesState(data);
     } catch (e) {
       console.error(e);
