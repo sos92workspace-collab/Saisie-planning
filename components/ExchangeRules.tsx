@@ -451,15 +451,15 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const users = propsUsers || usersState;
 
   const [counterResetDate, setCounterResetDate] = useState<Date>(new Date(0));
-  const [isCounterExpanded, setIsCounterExpanded] = useState(false);
+  const [isCounterExpanded, setIsCounterExpanded] = useState(true);
   const [expandedUserTrigram, setExpandedUserTrigram] = useState<string | null>(null);
 
   const [counterResetDateRequests, setCounterResetDateRequests] = useState<Date>(new Date(0));
-  const [isCounterExpandedRequests, setIsCounterExpandedRequests] = useState(false);
+  const [isCounterExpandedRequests, setIsCounterExpandedRequests] = useState(true);
   const [expandedUserTrigramRequests, setExpandedUserTrigramRequests] = useState<string | null>(null);
 
   const [counterResetDateTakes, setCounterResetDateTakes] = useState<Date>(new Date(0));
-  const [isCounterExpandedTakes, setIsCounterExpandedTakes] = useState(false);
+  const [isCounterExpandedTakes, setIsCounterExpandedTakes] = useState(true);
   const [expandedUserTrigramTakes, setExpandedUserTrigramTakes] = useState<string | null>(null);
 
   const [confirmAbandonChoice, setConfirmAbandonChoice] = useState<any>(null);
