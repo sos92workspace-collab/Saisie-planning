@@ -1165,7 +1165,7 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
       </div>
 
       {activeTab === 'REQUESTS' && (
-        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           {renderTabFiltersUI()}
           
           {/* Compteur Medecin (Exchanges) */}
@@ -1400,7 +1400,7 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
       )}
       
       {activeTab === 'ABANDONS' && (
-        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           {renderTabFiltersUI()}
           
           {/* Compteur Medecin */}
@@ -1824,7 +1824,7 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
       )}
 
       {activeTab === 'TAKES' && (
-        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           {renderTabFiltersUI()}
           
           {/* Compteur Medecin (Takes) */}
@@ -2044,7 +2044,7 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
       )}
 
       {activeTab === 'HISTORIQUE' && (
-        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 flex flex-col gap-8">
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
             <div className="p-6">
               <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider mb-6">Historique des mouvements</h3>
