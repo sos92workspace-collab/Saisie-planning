@@ -447,6 +447,32 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
     }
   };
 
+  const handleDeleteHistory = async (type: 'EXCHANGE' | 'ABANDON' | 'TAKE') => {
+    const adminUser = users.find(u => u.role === 'ADMIN');
+    if (!adminUser) return alert("Utilisateur admin non trouvé.");
+    
+    const pwd = window.prompt(`Pour supprimer l'historique des ${type === 'EXCHANGE' ? 'échanges' : type === 'ABANDON' ? 'abandons' : 'ajouts'}, veuillez saisir le mot de passe administrateur :`);
+    if (pwd === null) return;
+    if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
+
+    try {
+      const table = type === 'EXCHANGE' ? 'exchange_requests' : type === 'ABANDON' ? 'abandon_requests' : 'take_requests';
+      const { error } = await supabase.from(table).delete().neq('status', 'PENDING');
+      if (error) throw error;
+      
+      await supabase.from('logs').insert([{ action: `CLEAR_HISTORY_${type}`, details: { user: currentUserTrigram } }]);
+      fetchUsersAndLogs();
+      if (refreshData) refreshData();
+      alert("Historique supprimé avec succès.");
+      if (type === 'EXCHANGE') fetchArchivedChoices().then((archives) => { fetchRequests(archives); });
+      else if (type === 'ABANDON') fetchArchivedChoices().then((archives) => { fetchAbandons(archives); });
+      else if (type === 'TAKE') fetchTakes();
+    } catch (err) {
+      console.error(err);
+      alert("Erreur lors de la suppression de l'historique.");
+    }
+  };
+
   const [usersState, setUsersState] = useState<any[]>([]);
   const users = propsUsers || usersState;
 
@@ -1363,7 +1389,15 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
 
 
           <div className="mt-8 border-t border-slate-100 pt-8">
-            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des échanges (Pour rappel)</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black uppercase text-slate-900">Historique des échanges (Pour rappel)</h3>
+              <button 
+                onClick={() => handleDeleteHistory('EXCHANGE')}
+                className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm flex items-center gap-2"
+              >
+                Vider l'historique
+              </button>
+            </div>
             {applyTabFilters(requests, 'REQUESTS').filter(r => r.status !== 'PENDING').length === 0 ? (
               <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
             ) : (
@@ -1778,7 +1812,15 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
 
 
           <div className="mt-8 border-t border-slate-100 pt-8">
-            <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Historique des abandons (Pour rappel)</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black uppercase text-slate-900">Historique des abandons (Pour rappel)</h3>
+              <button 
+                onClick={() => handleDeleteHistory('ABANDON')}
+                className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm flex items-center gap-2"
+              >
+                Vider l'historique
+              </button>
+            </div>
             {applyTabFilters(abandons, 'ABANDONS').filter(a => a.status !== 'PENDING').length === 0 ? (
               <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
             ) : (
@@ -2037,6 +2079,58 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-8 border-t border-slate-100 pt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black uppercase text-slate-900">Historique des ajouts (Pour rappel)</h3>
+              <button 
+                onClick={() => handleDeleteHistory('TAKE')}
+                className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm flex items-center gap-2"
+              >
+                Vider l'historique
+              </button>
+            </div>
+            {applyTabFilters(takes, 'TAKES').filter(t => t.status !== 'PENDING').length === 0 ? (
+              <div className="text-center text-slate-500 font-bold py-8 bg-slate-50 rounded-xl border border-slate-100">Aucun historique correspondant.</div>
+            ) : (
+              <div className="space-y-3">
+                {applyTabFilters(takes, 'TAKES').filter(t => t.status !== 'PENDING').sort((a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()).map(tk => {
+                  const createdDate = new Date(tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  const updatedDate = new Date(tk.updated_at || tk.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <div key={`log-${tk.id}`} className="flex flex-col gap-2 p-4 rounded-xl border border-slate-100 bg-slate-50 text-sm">
+                      <div className="flex items-start gap-4">
+                        <span className="text-slate-400 font-mono text-xs mt-1 min-w-[120px]">{createdDate}</span>
+                        <div className="flex flex-col gap-1 w-full">
+                          <span className="font-bold text-slate-700">Ajout initié par {tk.requester_trigram}</span>
+                          <span className="text-slate-500 text-xs">
+                            Garde : {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 pt-2 border-t border-slate-200">
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                          tk.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
+                          tk.status === 'REJECTED' ? 'bg-red-100 text-red-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {tk.status === 'APPROVED' ? `VALIDÉ${tk.processed_by ? ` PAR ${tk.processed_by}` : ''}` :
+                           tk.status === 'REJECTED' ? `REFUSÉ${tk.processed_by ? ` PAR ${tk.processed_by}` : ''}` :
+                           'EN ATTENTE'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">Mis à jour le {updatedDate}</span>
+                        {tk.reason && (
+                          <span className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 ml-auto max-w-[50%] truncate" title={tk.reason}>
+                            Motif : {tk.reason}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
