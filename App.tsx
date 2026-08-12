@@ -1664,8 +1664,7 @@ const App: React.FC = () => {
             <input type="password" placeholder="Code secret" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black text-center text-2xl outline-none focus:ring-4 focus:ring-slate-900/10 focus:border-slate-300 transition-all" />
           </div>
                               <div className="flex flex-col gap-5 items-center mt-6">
-            <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm outline-none focus:ring-4 focus:ring-slate-900/20">Saisie via Planning</button>
-            <button type="button" onClick={(e) => handleLogin(e, ViewMode.LIST_INPUT)} className="text-[11px] font-bold text-slate-400 hover:text-slate-700 underline transition-colors uppercase tracking-widest outline-none focus:text-slate-700">Saisie via Liste (Téléphone)</button>
+            <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm outline-none focus:ring-4 focus:ring-slate-900/20">Connexion</button>
             <button type="button" onClick={() => setIsTermsModalOpen(true)} className="text-[10px] font-medium text-slate-400 hover:text-slate-700 underline transition-colors">Conditions Générales d'Utilisation (CGU)</button>
             <button type="button" onClick={() => setIsLegalModalOpen(true)} className="text-[10px] font-medium text-slate-400 hover:text-slate-700 underline transition-colors">Mentions légales</button>
           </div>
@@ -1918,8 +1917,8 @@ const App: React.FC = () => {
                             <span className="md:hidden">{exchangeMode !== 'INACTIVE' ? 'Annuler' : 'Échanger'}</span>
                         </button>
                         {exchangeMode === 'INACTIVE' && (
-                           <button 
-                               onClick={() => setIsExchangeSidebarOpen(true)}
+                           <button
+                                onClick={() => setIsExchangeSidebarOpen(true)}
                                className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingExchanges.length > 0 ? 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                            >
                                <span className="hidden md:inline">Mes Échanges ({myPendingExchanges.length})</span>
@@ -1928,7 +1927,6 @@ const App: React.FC = () => {
                         )}
                         </>
                     )}
-
                     {activeRound?.allow_takes && isConsultationMode && exchangeMode === 'INACTIVE' && (
                         <>
                         <button 
@@ -1946,8 +1944,8 @@ const App: React.FC = () => {
                             <span className="md:hidden">{takeMode !== 'INACTIVE' ? 'Arrêter' : 'Prendre'}</span>
                         </button>
                         {takeMode === 'INACTIVE' && (
-                           <button 
-                               onClick={() => setIsTakeSidebarOpen(true)}
+                           <button
+                                onClick={() => setIsTakeSidebarOpen(true)}
                                className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${myPendingTakes.length > 0 ? 'bg-teal-100 text-teal-700 border-teal-200 hover:bg-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                            >
                                <span className="hidden md:inline">Mes Prises ({myPendingTakes.length})</span>
@@ -1956,75 +1954,25 @@ const App: React.FC = () => {
                         )}
                         </>
                     )}
-
-                    {activeRound?.allow_exchanges && isConsultationMode && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
-                        <>
-                           <button 
-                               onClick={() => setIsAbandonSidebarOpen(true)}
-                               className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${displayedAbandons.length > 0 ? 'bg-pink-100 text-pink-700 border-pink-200 hover:bg-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                           >
-                               <span className="hidden md:inline">Mes Abandons ({displayedAbandons.length})</span>
-                               <span className="md:hidden">Abandons ({displayedAbandons.length})</span>
-                           </button>
-                        </>
-                    )}
-
-                    {!isConsultationMode && !(viewMode === ViewMode.APP) && (
-                        <button 
-                            onClick={() => setViewMode(viewMode === ViewMode.APP ? ViewMode.LIST_INPUT : ViewMode.APP)}
-                            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-200 transition-all shadow-sm whitespace-nowrap"
-                        >
-                            <span className="hidden md:inline">{viewMode === ViewMode.APP ? 'Saisie via Liste' : 'Saisie via Planning'}</span>
-                            <span className="md:hidden">{viewMode === ViewMode.APP ? 'Liste' : 'Planning'}</span>
-                        </button>
-                    )}
-
                     {(viewMode === ViewMode.APP || isConsultationMode) && exchangeMode === 'INACTIVE' && takeMode === 'INACTIVE' && (
-                        <>
-                            <button 
-                                onClick={() => setShowHistoryModal(true)}
-                                className="flex items-center justify-center w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] border rounded-xl text-slate-500 bg-white border-slate-200 hover:bg-slate-50 transition-all shadow-sm shrink-0"
-                                title="Historique"
-                            >
-                                <Book className="w-4 h-4" />
+                        <div className="hidden md:flex items-center gap-2 border-l border-slate-200 pl-4">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Affichage</span>
+                            <button onClick={() => setShowMyChoicesOnly(false)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors ${!showMyChoicesOnly ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                <span className="hidden xl:inline">Toutes les gardes</span>
+                                <span className="xl:hidden">Toutes</span>
                             </button>
-                            <button 
-                                onClick={() => {
-                                    setIsConsultationMode(!isConsultationMode);
-                                }}
-                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${isConsultationMode ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-800' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white'}`}
-                        >
-                            <span className="hidden md:inline">{isConsultationMode ? 'Retour à la saisie' : 'Consulter le planning'}</span>
-                            <span className="md:hidden">Planning</span>
-                        </button>
-                        </>
-                    )}
-
-                    {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && (
-                        <button 
-                            onClick={() => setShowUnavailabilityModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-xl text-[10px] font-black uppercase hover:bg-red-500 hover:text-white transition-all shadow-sm whitespace-nowrap"
-                        >
-                            <span className="hidden md:inline">Gérer mes indisponibilités</span>
-                            <span className="md:hidden">Indispo</span>
-                        </button>
-                    )}
-
-                    {!isConsultationMode && currentStep !== AppStep.RECAP_ORDERING && viewMode === ViewMode.APP && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                title="Affiche une croix rouge sur les cases avec une demande en attente par d'autres"
-                                onClick={() => setShowOccupiedMask(!showOccupiedMask)}
-                                className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-black uppercase transition-all shadow-sm whitespace-nowrap ${showOccupiedMask ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                            >
-                                <span className="hidden md:inline">Cases non demandées</span>
+                            <button onClick={() => setShowMyChoicesOnly(true)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors ${showMyChoicesOnly ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                <span className="hidden xl:inline">Mes gardes uniquement</span>
+                                <span className="xl:hidden">Mes gardes</span>
+                            </button>
+                            <button onClick={() => setShowUnassignedOnly(!showUnassignedOnly)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors ${showUnassignedOnly ? 'bg-red-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                                <span className="hidden md:inline">Non demandées</span>
                                 <span className="md:hidden">Non demandées</span>
                             </button>
                         </div>
                     )}
                 </div>
             )}
-
           {exchangeMode === 'INACTIVE' && (
               <div className="flex items-center gap-1">
                   <button onClick={() => setIsTermsModalOpen(true)} className="p-2 text-slate-300 hover:text-blue-500 md:hidden flex items-center gap-2 ml-2" title="Conditions Générales d'Utilisation">
@@ -2046,65 +1994,26 @@ const App: React.FC = () => {
               {takeMode === 'SELECT_TARGET' && (
                   <div className="font-bold flex items-center gap-3 text-sm">
                       <span className="w-3 h-3 rounded-full bg-teal-400 animate-pulse shadow-[0_0_10px_rgba(45,212,191,0.5)]"></span>
-                      Sélectionnez une garde vide et ouverte sur le planning pour la prendre
+                      Mode PRISE DE GARDE
                   </div>
               )}
           </div>
       )}
 
-      {/* Exchange Banner */}
       {exchangeMode !== 'INACTIVE' && (
           <div className="bg-slate-900 text-white p-4 flex flex-col md:flex-row items-center justify-center gap-4 shadow-lg z-40 shrink-0">
               {exchangeMode === 'SELECT_OWN' && (
                   <div className="font-bold flex items-center gap-3 text-sm">
-                      <span className="w-3 h-3 rounded-full bg-yellow-400 animate-pulse shadow-[0_0_10px_rgba(250,204,21,0.5)]"></span>
-                      Sélectionnez l'une de vos gardes (en jaune) à échanger
+                      <span className="w-3 h-3 rounded-full bg-orange-500 animate-pulse shadow-[0_0_10px_rgba(249,115,22,0.5)]"></span>
+                      Sélectionnez l'une de vos gardes à échanger (en orange)
                   </div>
               )}
-              {exchangeMode === 'SELECT_TARGET' && selectedOwnChoice && (
+              {exchangeMode === 'SELECT_TARGET' && (
                   <>
-                      <div className="flex items-center gap-3 bg-slate-800 px-4 py-2 rounded-xl border border-slate-700">
-                          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center font-black shadow-inner text-white">
-                              {selectedOwnChoice.row}
-                          </div>
-                          <div className="pr-2">
-                              <div className="text-[10px] text-slate-400 font-black uppercase">Vous cédez</div>
-                              <div className="font-bold text-sm text-white">
-                                  {formatRequestDate(selectedOwnChoice.row, selectedOwnChoice.month, selectedOwnChoice.year, selectedOwnChoice.col, selectedOwnChoice.colLabel, false, columnConfigs)}
-                              </div>
-                          </div>
+                      <div className="font-bold flex items-center gap-3 text-sm">
+                          <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.5)]"></span>
+                          Sélectionnez la garde que vous souhaitez récupérer en échange
                       </div>
-                      
-                      <div className="text-slate-500 hidden md:block">
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                      </div>
-                      
-                      <div className="flex items-center gap-3 bg-blue-500/10 px-4 py-2 rounded-xl border border-blue-500/30 border-dashed">
-                          {selectedTargetChoice ? (
-                              <>
-                                  <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center font-black shadow-inner text-white">
-                                      {selectedTargetChoice.row}
-                                  </div>
-                                  <div className="pr-2">
-                                      <div className="text-[10px] text-blue-400 font-black uppercase">Vous récupérez</div>
-                                      <div className="font-bold text-sm text-blue-300">
-                                          {formatRequestDate(selectedTargetChoice.row, selectedTargetChoice.month, selectedTargetChoice.year, selectedTargetChoice.col, selectedTargetChoice.colLabel, false, columnConfigs)}
-                                      </div>
-                                  </div>
-                              </>
-                          ) : (
-                              <>
-                                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                                  </div>
-                                  <div className="pr-2">
-                                      <div className="text-[10px] text-blue-400 font-black uppercase">Vous récupérez</div>
-                                      <div className="font-bold text-sm text-blue-300">Sélectionnez une garde bleue</div>
-                                  </div>
-                              </>
-                          )}
-                      </div>
-                      
                       <button 
                           onClick={() => {
                               setExchangeMode('SELECT_OWN');
@@ -2119,7 +2028,7 @@ const App: React.FC = () => {
               )}
           </div>
       )}
-
+      
       {/* Mobile Bottom Navigation */}
       {!isConsultationMode && viewMode !== ViewMode.LOGIN && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex justify-between items-center z-[90] shadow-[0_-4px_15px_-3px_rgba(0,0,0,0.1)]">
@@ -2142,64 +2051,28 @@ const App: React.FC = () => {
                 <div className="flex gap-1.5 pb-2 md:pb-0">
                     {Array.from({ length: 50 }, (_, i) => i + 1).map(num => (
                         <button 
-                            key={num} 
-                            onClick={() => setActivePriority(num)}
-                            className={`w-7 h-7 rounded-full text-[10px] font-black transition-all border-2 shrink-0 ${activePriority === num ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-110' : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'}`}
+                            key={num}
+                            onClick={() => setSelectedPriorityIndex(num)}
+                            className={`w-7 h-7 shrink-0 rounded-lg text-[10px] font-black transition-all flex items-center justify-center ${selectedPriorityIndex === num ? 'bg-slate-900 text-white shadow-md scale-110' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
                         >
                             {num}
                         </button>
                     ))}
                 </div>
             </div>
-            
-            <div className="flex items-center gap-4">
-                {showOccupiedMask && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-100 rounded-lg text-red-600 text-[10px] font-bold uppercase transition-all shadow-sm">
-                        <span className="font-extrabold text-xs">✕</span>
-                        <span className="hidden lg:inline">Demande en attente</span>
-                    </div>
-                )}
-                {activeRound?.allow_choice_reproduction && currentStep > AppStep.NORMAL_SELECTION && (
-                    <button onClick={() => setShowReproductionModal(true)} className="px-4 py-2 bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-[10px] font-black uppercase hover:bg-purple-200 shadow-sm transition-all whitespace-nowrap">
-                        Reproduire mes choix
-                    </button>
-                )}
-                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border shadow-sm w-full md:w-auto justify-center">
-                    <div className={`w-2 h-2 rounded-full animate-pulse`} style={{ backgroundColor: getChoiceColor(category) }}></div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-600">
-                        Mode : {category === 'normal' ? 'Étape 1' : category === 'good_bonus' ? 'Étape 2' : 'Étape 3 - Garde au choix'}
-                    </span>
-                </div>
+            <div className="flex items-center gap-2">
+                 <button onClick={() => setChoices([])} className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-[9px] font-black uppercase hover:bg-red-200 transition-colors shadow-sm whitespace-nowrap hidden md:block">Effacer tout</button>
+                 <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap hidden lg:block">Sélectionnez la case pour y affecter l'indice</div>
             </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden flex flex-col bg-slate-100">
-        {currentStep === AppStep.RECAP_ORDERING ? (
-          <div className="flex-1 overflow-hidden flex flex-col pb-24 md:pb-0">
-            <RecapView choices={choices.filter(c => c.userTrigram === trigram.toUpperCase())} columns={dynamicColumns} onReorder={setChoices} activeRound={activeRound} />
-          </div>
-        ) : viewMode === ViewMode.LIST_INPUT ? (
-          <div className="flex-1 overflow-auto custom-scrollbar p-4 pb-32">
-              <ListView 
-                  monthsToDisplay={monthsToDisplay}
-                  dynamicColumns={dynamicColumns}
-                  choices={choices}
-                  currentStep={currentStep}
-                  category={category}
-                  trigram={trigram}
-                  globalClosures={globalClosures}
-                  unavailabilities={unavailabilities}
-                  handleCellClick={handleCellClick}
-                  isColOpen={isColOpen}
-                  isBlockedByUnavailability={isBlockedByUnavailability}
-                  columnConfigs={columnConfigs}
-                  activePriority={activePriority}
-              />
-          </div>
-        ) : (
-          <div className="flex-1 overflow-auto custom-scrollbar p-4 space-y-12 pb-32">
-            {monthsToDisplay.map(({ month, year, label }) => {
+      <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth relative" ref={tableContainerRef}>
+        <div className="min-w-max pb-32 md:pb-12 bg-white">
+          {activeRound.months.map((m) => {
+              const { year, month } = m;
+              const label = new Date(year, month, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+              
               const daysInMonth = new Date(year, month + 1, 0).getDate();
               
               // Compute which columns are entirely closed for this step
@@ -2644,7 +2517,6 @@ const App: React.FC = () => {
               );
             })}
           </div>
-        )}
       </div>
 
       {hoveredCell && (
