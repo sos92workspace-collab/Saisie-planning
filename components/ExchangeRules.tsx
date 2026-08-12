@@ -66,7 +66,7 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState<boolean>(true);
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS' | 'TAKES' | 'HISTORIQUE'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'RULES' | 'REQUESTS' | 'ABANDONS' | 'TAKES' | 'HISTORIQUE' | 'COMPTEURS'>('REQUESTS');
 
   
   const [tabFilterTrigram, setTabFilterTrigram] = useState<string>('');
@@ -473,6 +473,8 @@ export const ExchangeRules: React.FC<ExchangeRulesProps> = ({ supabase, choices,
     }
   };
 
+    const [counterStartDate, setCounterStartDate] = useState<string>('');
+  const [counterEndDate, setCounterEndDate] = useState<string>('');
   const [usersState, setUsersState] = useState<any[]>([]);
   const users = propsUsers || usersState;
 
@@ -1174,12 +1176,20 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
             Historique
           </button>
           {!isStandardist && (
-          <button 
-            onClick={() => setActiveTab('RULES')}
-            className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-none whitespace-nowrap ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            Règles d'équivalence
-          </button>
+            <>
+              <button 
+                onClick={() => setActiveTab('COMPTEURS')}
+                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-none whitespace-nowrap ${activeTab === 'COMPTEURS' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Compteurs
+              </button>
+              <button 
+                onClick={() => setActiveTab('RULES')}
+                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all border-none whitespace-nowrap ${activeTab === 'RULES' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                Règles d'équivalence
+              </button>
+            </>
           )}
         </div>
         {error && (
@@ -1194,147 +1204,6 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           {renderTabFiltersUI()}
           
-          {/* Compteur Medecin (Exchanges) */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <button 
-              onClick={() => setIsCounterExpandedRequests(!isCounterExpandedRequests)}
-              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
-            >
-              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Échanges)</h3>
-              <div className="flex items-center gap-4">
-                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDateRequests.getFullYear() === 1970 ? 'début' : counterResetDateRequests.toLocaleDateString('fr-FR')}</span>
-                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpandedRequests ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </button>
-            {isCounterExpandedRequests && (
-              <div className="p-6 border-t border-slate-200 bg-white">
-                <div className="flex justify-end mb-6">
-                  <button 
-                    onClick={async () => {
-                      const adminUser = users.find(u => u.role === 'ADMIN');
-                      if (!adminUser) return alert("Utilisateur admin non trouvé.");
-                      
-                      const pwd = window.prompt("Pour réinitialiser le compteur d'échanges, veuillez saisir le mot de passe administrateur :");
-                      if (pwd === null) return;
-                      if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
-                      
-                      try {
-                        const { error } = await supabase.from('logs').insert([{ action: 'RESET_EXCHANGE_COUNTER', details: {} }]);
-                        if (error) throw error;
-                        fetchUsersAndLogs();
-                        alert("Compteur réinitialisé avec succès.");
-                      } catch (err) {
-                        console.error(err);
-                        alert("Erreur lors de la réinitialisation.");
-                      }
-                    }}
-                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm"
-                  >
-                    Réinitialiser le compteur
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Titulaires */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
-                           const matchedRequests = requests.filter(r => {
-                             if (r.requester_trigram !== user.trigram || r.status !== 'APPROVED') return false;
-                             const actionDate = new Date(r.updated_at || r.created_at);
-                             return actionDate > counterResetDateRequests;
-                           });
-                           return { user, count: matchedRequests.length, matchedRequests };
-                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucun échange comptabilisé.</div>;
-                         }
-
-                         return userCounts.map(({ user, count, matchedRequests }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigramRequests(expandedUserTrigramRequests === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramRequests === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{count}</span>
-                             </div>
-                             {expandedUserTrigramRequests === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedRequests.map((req, idx) => (
-                                   <div key={req.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Cède : {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)} ➔ Récupère : {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Échange validé le {new Date(req.updated_at || req.created_at).toLocaleDateString('fr-FR')}</div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-
-                  {/* Remplaçants */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
-                           const matchedRequests = requests.filter(r => {
-                             if (r.requester_trigram !== user.trigram || r.status !== 'APPROVED') return false;
-                             const actionDate = new Date(r.updated_at || r.created_at);
-                             return actionDate > counterResetDateRequests;
-                           });
-                           return { user, count: matchedRequests.length, matchedRequests };
-                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucun échange comptabilisé.</div>;
-                         }
-
-                         return userCounts.map(({ user, count, matchedRequests }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigramRequests(expandedUserTrigramRequests === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramRequests === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{count}</span>
-                             </div>
-                             {expandedUserTrigramRequests === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedRequests.map((req, idx) => (
-                                   <div key={req.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Cède : {formatRequestDate(req.requester_choice?.row, req.requester_choice?.month, req.requester_choice?.year, req.requester_choice?.col, req.requester_choice?.colLabel, true, columnConfigs)} ➔ Récupère : {formatRequestDate(req.target_row, req.target_month, req.target_year, req.target_col, req.target_col_label, false, columnConfigs)}
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Échange validé le {new Date(req.updated_at || req.created_at).toLocaleDateString('fr-FR')}</div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes en attente</h3>
@@ -1437,319 +1306,6 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           {renderTabFiltersUI()}
           
-          {/* Compteur Medecin */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <button 
-              onClick={() => setIsCounterExpanded(!isCounterExpanded)}
-              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
-            >
-              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Abandons)</h3>
-              <div className="flex items-center gap-4">
-                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDate.getFullYear() === 1970 ? 'début' : counterResetDate.toLocaleDateString('fr-FR')}</span>
-                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </button>
-            {isCounterExpanded && (
-              <div className="p-6 border-t border-slate-200 bg-white">
-                <div className="flex justify-end mb-6">
-                  <button 
-                    onClick={async () => {
-                      const adminUser = users.find(u => u.role === 'ADMIN');
-                      if (!adminUser) return alert("Utilisateur admin non trouvé.");
-                      
-                      const pwd = window.prompt("Pour réinitialiser le compteur, veuillez saisir le mot de passe administrateur :");
-                      if (pwd === null) return;
-                      if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
-                      
-                      try {
-                        const { error } = await supabase.from('logs').insert([{ action: 'RESET_ABANDON_COUNTER', details: {} }]);
-                        if (error) throw error;
-                        fetchUsersAndLogs();
-                        alert("Compteur réinitialisé avec succès.");
-                      } catch (err) {
-                        console.error(err);
-                        alert("Erreur lors de la réinitialisation.");
-                      }
-                    }}
-                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm"
-                  >
-                    Réinitialiser le compteur
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Titulaires */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
-                           const matchedAbandons = abandons.filter(a => {
-                             if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
-                             const actionDate = new Date(a.updated_at || a.created_at);
-                             return actionDate > counterResetDate;
-                           });
-                           const matchedExchanges = requests.filter(r => {
-                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
-                             const actionDate = new Date(r.updated_at || r.created_at);
-                             return actionDate > counterResetDate;
-                           });
-                           return { user, count: matchedAbandons.length + matchedExchanges.length, matchedAbandons, matchedExchanges };
-                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucun abandon comptabilisé.</div>;
-                         }
-
-                         return userCounts.map(({ user, count, matchedAbandons, matchedExchanges }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigram(expandedUserTrigram === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigram === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{count}</span>
-                             </div>
-                             {expandedUserTrigram === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedAbandons.map((ab, idx) => (
-                                   <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
-                                       {ab.shift_snapshot?.linked_take && (
-                                           <>
-                                             {' → '}
-                                             <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
-                                           </>
-                                       )}
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')} {ab?.processed_by ? 'par ' + ab.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
-                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Échange (Abandon) : {ex.requester_trigram === user.trigram ? 
-                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée') :
-                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)
-                                       }
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-
-                  {/* Remplaçants */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
-                           const matchedAbandons = abandons.filter(a => {
-                             if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
-                             const actionDate = new Date(a.updated_at || a.created_at);
-                             return actionDate > counterResetDate;
-                           });
-                           const matchedExchanges = requests.filter(r => {
-                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
-                             const actionDate = new Date(r.updated_at || r.created_at);
-                             return actionDate > counterResetDate;
-                           });
-                           return { user, count: matchedAbandons.length + matchedExchanges.length, matchedAbandons, matchedExchanges };
-                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucun abandon comptabilisé.</div>;
-                         }
-
-                         return userCounts.map(({ user, count, matchedAbandons, matchedExchanges }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigram(expandedUserTrigram === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigram === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{count}</span>
-                             </div>
-                             {expandedUserTrigram === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedAbandons.map((ab, idx) => (
-                                   <div key={ab.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}
-                                       {ab.shift_snapshot?.linked_take && (
-                                           <>
-                                             {' → '}
-                                             <span className="font-bold text-teal-600">Reprise [{formatRequestDate(ab.shift_snapshot.linked_take.row, ab.shift_snapshot.linked_take.month, ab.shift_snapshot.linked_take.year, ab.shift_snapshot.linked_take.col, ab.shift_snapshot.linked_take.colLabel, false, columnConfigs)}]</span>
-                                           </>
-                                       )}
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ab.updated_at || ab.created_at).toLocaleDateString('fr-FR')} {ab?.processed_by ? 'par ' + ab.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
-                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Échange (Abandon) : {ex.requester_trigram === user.trigram ? 
-                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée') :
-                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs)
-                                       }
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-          </div>
-
-          {/* Compteur Medecin (Pénalités) */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm mt-8 mb-8">
-            <button 
-              onClick={() => setIsCounterExpandedPenalties(!isCounterExpandedPenalties)}
-              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
-            >
-              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Pénalités)</h3>
-              <div className="flex items-center gap-4">
-                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDate.getFullYear() === 1970 ? 'début' : counterResetDate.toLocaleDateString('fr-FR')}</span>
-                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpandedPenalties ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </button>
-            {isCounterExpandedPenalties && (
-              <div className="p-6 border-t border-slate-200 bg-white">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
-                  {/* Titulaires */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
-                           const matchedAbandons = abandons.filter(a => {
-                             if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
-                             if (!a.penalty_amount || a.penalty_amount <= 0) return false;
-                             const actionDate = new Date(a.updated_at || a.created_at);
-                             return actionDate > counterResetDate;
-                           });
-                           const totalPenalty = matchedAbandons.reduce((sum, a) => sum + (a.penalty_amount || 0), 0);
-                           return { user, totalPenalty, matchedAbandons };
-                         }).filter(item => item.totalPenalty > 0).sort((a, b) => b.totalPenalty - a.totalPenalty);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucune pénalité comptabilisée.</div>;
-                         }
-
-                         return userCounts.map(({ user, totalPenalty, matchedAbandons }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigramPenalties(expandedUserTrigramPenalties === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramPenalties === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-red-100 text-red-700">{totalPenalty} €</span>
-                             </div>
-                             {expandedUserTrigramPenalties === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedAbandons.map((ab, idx) => (
-                                   <div key={ab.id || idx} className="flex flex-col text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800 flex justify-between items-start">
-                                       <span>Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}</span>
-                                       <span className="text-red-600 ml-2 whitespace-nowrap">+{ab.penalty_amount} €</span>
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
-                                        <span>Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}</span>
-                                        <span className="font-medium bg-slate-100 px-1 py-0.5 rounded text-slate-600">Délai : {ab.delay_category || 'N/A'}</span>
-                                     </div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-
-                  {/* Remplaçants */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
-                           const matchedAbandons = abandons.filter(a => {
-                             if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
-                             if (!a.penalty_amount || a.penalty_amount <= 0) return false;
-                             const actionDate = new Date(a.updated_at || a.created_at);
-                             return actionDate > counterResetDate;
-                           });
-                           const totalPenalty = matchedAbandons.reduce((sum, a) => sum + (a.penalty_amount || 0), 0);
-                           return { user, totalPenalty, matchedAbandons };
-                         }).filter(item => item.totalPenalty > 0).sort((a, b) => b.totalPenalty - a.totalPenalty);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucune pénalité comptabilisée.</div>;
-                         }
-
-                         return userCounts.map(({ user, totalPenalty, matchedAbandons }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigramPenalties(expandedUserTrigramPenalties === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramPenalties === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-red-100 text-red-700">{totalPenalty} €</span>
-                             </div>
-                             {expandedUserTrigramPenalties === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedAbandons.map((ab, idx) => (
-                                   <div key={ab.id || idx} className="flex flex-col text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800 flex justify-between items-start">
-                                       <span>Garde : {ab.requester_choice ? formatRequestDate(ab.requester_choice.row, ab.requester_choice.month, ab.requester_choice.year, ab.requester_choice.col, ab.requester_choice.colLabel, true, columnConfigs) : (ab.shift_snapshot ? formatRequestDate(ab.shift_snapshot.row, ab.shift_snapshot.month, ab.shift_snapshot.year, ab.shift_snapshot.col, ab.shift_snapshot.colLabel, true, columnConfigs) : 'Garde supprimée')}</span>
-                                       <span className="text-red-600 ml-2 whitespace-nowrap">+{ab.penalty_amount} €</span>
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
-                                        <span>Demandé le {new Date(ab.created_at).toLocaleDateString('fr-FR')}</span>
-                                        <span className="font-medium bg-slate-100 px-1 py-0.5 rounded text-slate-600">Délai : {ab.delay_category || 'N/A'}</span>
-                                     </div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'abandon en attente</h3>
@@ -1869,179 +1425,6 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
         <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
           {renderTabFiltersUI()}
           
-          {/* Compteur Medecin (Takes) */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-            <button 
-              onClick={() => setIsCounterExpandedTakes(!isCounterExpandedTakes)}
-              className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none hover:bg-slate-100 transition-colors"
-            >
-              <h3 className="text-sm font-black uppercase text-slate-800 tracking-wider">Compteur médecin (Ajouts)</h3>
-              <div className="flex items-center gap-4">
-                 <span className="text-xs font-bold text-slate-500">Depuis le {counterResetDateTakes.getFullYear() === 1970 ? 'début' : counterResetDateTakes.toLocaleDateString('fr-FR')}</span>
-                 <svg className={`w-5 h-5 text-slate-500 transform transition-transform ${isCounterExpandedTakes ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </button>
-            {isCounterExpandedTakes && (
-              <div className="p-6 border-t border-slate-200 bg-white">
-                <div className="flex justify-end mb-6">
-                  <button 
-                    onClick={async () => {
-                      const adminUser = users.find(u => u.role === 'ADMIN');
-                      if (!adminUser) return alert("Utilisateur admin non trouvé.");
-                      
-                      const pwd = window.prompt("Pour réinitialiser le compteur d'ajouts, veuillez saisir le mot de passe administrateur :");
-                      if (pwd === null) return;
-                      if (pwd !== adminUser.password) return alert("Mot de passe incorrect.");
-                      
-                      try {
-                        const { error } = await supabase.from('logs').insert([{ action: 'RESET_TAKE_COUNTER', details: {} }]);
-                        if (error) throw error;
-                        fetchUsersAndLogs();
-                        alert("Compteur réinitialisé avec succès.");
-                      } catch (err) {
-                        console.error(err);
-                        alert("Erreur lors de la réinitialisation.");
-                      }
-                    }}
-                    className="px-4 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-black uppercase transition-colors shadow-sm"
-                  >
-                    Réinitialiser le compteur
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Titulaires */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Titulaires</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
-                           const matchedTakes = takes.filter(t => {
-                             if (t.requester_trigram !== user.trigram || t.status !== 'APPROVED') return false;
-                             const actionDate = new Date(t.updated_at || t.created_at);
-                             return actionDate > counterResetDateTakes;
-                           });
-                           const matchedExchanges = requests.filter(r => {
-                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
-                             const actionDate = new Date(r.updated_at || r.created_at);
-                             return actionDate > counterResetDateTakes;
-                           });
-                           return { user, count: matchedTakes.length + matchedExchanges.length, matchedTakes, matchedExchanges };
-                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucun ajout comptabilisé.</div>;
-                         }
-
-                         return userCounts.map(({ user, count, matchedTakes, matchedExchanges }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigramTakes(expandedUserTrigramTakes === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramTakes === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">{count}</span>
-                             </div>
-                             {expandedUserTrigramTakes === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedTakes.map((tk, idx) => (
-                                   <div key={tk.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Garde : {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(tk.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')} {tk?.processed_by ? 'par ' + tk.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
-                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Échange (Reprise) : {ex.requester_trigram === user.trigram ? 
-                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs) :
-                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée')
-                                       }
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-
-                  {/* Remplaçants */}
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-slate-400 border-b border-slate-100 pb-2 mb-3">Remplaçants</h4>
-                    <div className="flex flex-col gap-2">
-                       {(() => {
-                         const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
-                           const matchedTakes = takes.filter(t => {
-                             if (t.requester_trigram !== user.trigram || t.status !== 'APPROVED') return false;
-                             const actionDate = new Date(t.updated_at || t.created_at);
-                             return actionDate > counterResetDateTakes;
-                           });
-                           const matchedExchanges = requests.filter(r => {
-                             if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
-                             const actionDate = new Date(r.updated_at || r.created_at);
-                             return actionDate > counterResetDateTakes;
-                           });
-                           return { user, count: matchedTakes.length + matchedExchanges.length, matchedTakes, matchedExchanges };
-                         }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
-
-                         if (userCounts.length === 0) {
-                           return <div className="text-xs text-slate-500 italic py-1">Aucun ajout comptabilisé.</div>;
-                         }
-
-                         return userCounts.map(({ user, count, matchedTakes, matchedExchanges }) => (
-                           <div key={user.trigram} className="flex flex-col border-b border-slate-100 last:border-0 pb-2 mb-2 last:mb-0 last:pb-0">
-                             <div 
-                               className="flex items-center justify-between py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
-                               onClick={() => setExpandedUserTrigramTakes(expandedUserTrigramTakes === user.trigram ? null : user.trigram)}
-                             >
-                               <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                 {user.trigram}
-                                 <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandedUserTrigramTakes === user.trigram ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-                               </span>
-                               <span className="text-xs font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">{count}</span>
-                             </div>
-                             {expandedUserTrigramTakes === user.trigram && (
-                               <div className="flex flex-col gap-1.5 mt-2 pl-2 border-l-2 border-slate-200">
-                                 {matchedTakes.map((tk, idx) => (
-                                   <div key={tk.id || idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Garde : {formatRequestDate(tk.target_row, tk.target_month, tk.target_year, tk.target_col, tk.target_col_label, false, columnConfigs)}
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(tk.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(tk.updated_at || tk.created_at).toLocaleDateString('fr-FR')} {tk?.processed_by ? 'par ' + tk.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                                 {matchedExchanges && matchedExchanges.map((ex, idx) => (
-                                   <div key={'ex'+idx} className="text-xs text-slate-600 bg-white p-2 rounded border border-slate-100">
-                                     <div className="font-bold text-slate-800">
-                                       Échange (Reprise) : {ex.requester_trigram === user.trigram ? 
-                                         formatRequestDate(ex.target_row, ex.target_month, ex.target_year, ex.target_col, ex.target_col_label, false, columnConfigs) :
-                                         (ex.requester_choice ? formatRequestDate(ex.requester_choice.row, ex.requester_choice.month, ex.requester_choice.year, ex.requester_choice.col, ex.requester_choice.colLabel, true, columnConfigs) : 'Garde supprimée')
-                                       }
-                                     </div>
-                                     <div className="text-[10px] text-slate-400 mt-1">Demandé le {new Date(ex.created_at).toLocaleDateString('fr-FR')}, traité le {new Date(ex.updated_at || ex.created_at).toLocaleDateString('fr-FR')} {ex?.processed_by ? 'par ' + ex.processed_by : ''}</div>
-                                   </div>
-                                 ))}
-                               </div>
-                             )}
-                           </div>
-                         ));
-                       })()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            )}
-          </div>
           {/* Pending Requests */}
           <div>
             <h3 className="text-lg font-black uppercase text-slate-900 mb-4">Demandes d'ajout en attente</h3>
@@ -2204,6 +1587,315 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
         </div>
       )}
 
+            {activeTab === 'COMPTEURS' && (
+        <div className="flex-1 overflow-auto bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2 border-b border-slate-100 pb-6">
+            <div>
+              <h3 className="text-xl font-black uppercase text-slate-900 tracking-tight">Compteurs & Pénalités</h3>
+              <p className="text-sm text-slate-500 mt-1">Gérez et consultez les statistiques des médecins filtrées par date.</p>
+            </div>
+            <div className="flex flex-wrap items-end gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="flex flex-col">
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1">Date de début</label>
+                <input 
+                  type="date" 
+                  value={counterStartDate} 
+                  onChange={(e) => setCounterStartDate(e.target.value)} 
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1">Date de fin</label>
+                <input 
+                  type="date" 
+                  value={counterEndDate} 
+                  onChange={(e) => setCounterEndDate(e.target.value)} 
+                  className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+              {(counterStartDate || counterEndDate) && (
+                <button 
+                  onClick={() => { setCounterStartDate(''); setCounterEndDate(''); }}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 underline pb-2"
+                >
+                  Réinitialiser
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+            {/* ECHANGES */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-slate-200 bg-white">
+                <h4 className="font-black uppercase text-slate-800">Échanges</h4>
+              </div>
+              <div className="p-4 space-y-6">
+                {/* Titulaires */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Titulaires</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                       const matchedRequests = requests.filter(r => {
+                         if (r.requester_trigram !== user.trigram || r.status !== 'APPROVED') return false;
+                         const actionDate = new Date(r.updated_at || r.created_at);
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       });
+                       return { user, count: matchedRequests.length, matchedRequests };
+                     }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucun échange.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, count }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{count}</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+                {/* Remplaçants */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Remplaçants</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                       const matchedRequests = requests.filter(r => {
+                         if (r.requester_trigram !== user.trigram || r.status !== 'APPROVED') return false;
+                         const actionDate = new Date(r.updated_at || r.created_at);
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       });
+                       return { user, count: matchedRequests.length, matchedRequests };
+                     }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucun échange.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, count }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{count}</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {/* ABANDONS */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-slate-200 bg-white">
+                <h4 className="font-black uppercase text-slate-800">Abandons</h4>
+              </div>
+              <div className="p-4 space-y-6">
+                {/* Titulaires */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Titulaires</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                       const filterAction = (actionDate: Date) => {
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       };
+                       const matchedAbandons = abandons.filter(a => {
+                         if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                         return filterAction(new Date(a.updated_at || a.created_at));
+                       });
+                       const matchedExchanges = requests.filter(r => {
+                         if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                         return filterAction(new Date(r.updated_at || r.created_at));
+                       });
+                       return { user, count: matchedAbandons.length + matchedExchanges.length };
+                     }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucun abandon.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, count }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{count}</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+                {/* Remplaçants */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Remplaçants</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                       const filterAction = (actionDate: Date) => {
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       };
+                       const matchedAbandons = abandons.filter(a => {
+                         if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                         return filterAction(new Date(a.updated_at || a.created_at));
+                       });
+                       const matchedExchanges = requests.filter(r => {
+                         if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                         return filterAction(new Date(r.updated_at || r.created_at));
+                       });
+                       return { user, count: matchedAbandons.length + matchedExchanges.length };
+                     }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucun abandon.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, count }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-orange-100 text-orange-700">{count}</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {/* TAKES (AJOUTS) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-slate-200 bg-white">
+                <h4 className="font-black uppercase text-slate-800">Reprises de garde (Ajouts)</h4>
+              </div>
+              <div className="p-4 space-y-6">
+                {/* Titulaires */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Titulaires</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                       const filterAction = (actionDate: Date) => {
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       };
+                       const matchedTakes = takes.filter(t => {
+                         if (t.requester_trigram !== user.trigram || t.status !== 'APPROVED') return false;
+                         return filterAction(new Date(t.updated_at || t.created_at));
+                       });
+                       const matchedExchanges = requests.filter(r => {
+                         if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                         return filterAction(new Date(r.updated_at || r.created_at));
+                       });
+                       return { user, count: matchedTakes.length + matchedExchanges.length };
+                     }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucune reprise.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, count }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">{count}</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+                {/* Remplaçants */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Remplaçants</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                       const filterAction = (actionDate: Date) => {
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       };
+                       const matchedTakes = takes.filter(t => {
+                         if (t.requester_trigram !== user.trigram || t.status !== 'APPROVED') return false;
+                         return filterAction(new Date(t.updated_at || t.created_at));
+                       });
+                       const matchedExchanges = requests.filter(r => {
+                         if ((r.requester_trigram !== user.trigram && r.target_trigram !== user.trigram) || r.status !== 'APPROVED') return false;
+                         return filterAction(new Date(r.updated_at || r.created_at));
+                       });
+                       return { user, count: matchedTakes.length + matchedExchanges.length };
+                     }).filter(item => item.count > 0).sort((a, b) => b.count - a.count);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucune reprise.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, count }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">{count}</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {/* PENALITES */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-slate-200 bg-white">
+                <h4 className="font-black uppercase text-slate-800">Pénalités</h4>
+              </div>
+              <div className="p-4 space-y-6">
+                {/* Titulaires */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Titulaires</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'DOCTOR').map(user => {
+                       const filterAction = (actionDate: Date) => {
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       };
+                       const matchedAbandons = abandons.filter(a => {
+                         if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                         if (!a.penalty_amount || a.penalty_amount <= 0) return false;
+                         return filterAction(new Date(a.updated_at || a.created_at));
+                       });
+                       const totalPenalty = matchedAbandons.reduce((sum, a) => sum + (a.penalty_amount || 0), 0);
+                       return { user, count: matchedAbandons.length, penalty: totalPenalty };
+                     }).filter(item => item.penalty > 0).sort((a, b) => b.penalty - a.penalty);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucune pénalité.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, penalty }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-red-100 text-red-700">{penalty}€</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+                {/* Remplaçants */}
+                <div>
+                  <h5 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-1 mb-3">Remplaçants</h5>
+                  {(() => {
+                     const userCounts = users.filter(u => u.role === 'SUBSTITUTE').map(user => {
+                       const filterAction = (actionDate: Date) => {
+                         if (counterStartDate && actionDate < new Date(counterStartDate)) return false;
+                         if (counterEndDate) { const endD = new Date(counterEndDate); endD.setHours(23, 59, 59, 999); if (actionDate > endD) return false; }
+                         return true;
+                       };
+                       const matchedAbandons = abandons.filter(a => {
+                         if (a.requester_trigram !== user.trigram || a.status !== 'APPROVED') return false;
+                         if (!a.penalty_amount || a.penalty_amount <= 0) return false;
+                         return filterAction(new Date(a.updated_at || a.created_at));
+                       });
+                       const totalPenalty = matchedAbandons.reduce((sum, a) => sum + (a.penalty_amount || 0), 0);
+                       return { user, count: matchedAbandons.length, penalty: totalPenalty };
+                     }).filter(item => item.penalty > 0).sort((a, b) => b.penalty - a.penalty);
+                     if (userCounts.length === 0) return <div className="text-xs text-slate-500 italic">Aucune pénalité.</div>;
+                     return <div className="space-y-2">
+                       {userCounts.map(({ user, penalty }) => (
+                         <div key={user.trigram} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                           <span className="text-sm font-bold text-slate-700">{user.trigram}</span>
+                           <span className="text-xs font-black px-2 py-0.5 rounded-full bg-red-100 text-red-700">{penalty}€</span>
+                         </div>
+                       ))}
+                     </div>
+                  })()}
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
       {/* Modals for validation would go here. We reuse existing modals or standard alerts. */}
       {/* For simplicity we will assume standard modals from original file if they existed, but since they might have been cut off, I will add them. */}
     </div>

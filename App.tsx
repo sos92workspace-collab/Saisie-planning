@@ -32,6 +32,8 @@ import { ListView } from './components/ListView';
 import { ChatAssistant } from './components/ChatAssistant';
 import { DoctorProfileWizard } from './components/DoctorProfileWizard';
 import { HistoryModal } from './components/HistoryModal';
+import { TermsModal } from './components/TermsModal';
+import { LegalModal } from './components/LegalModal';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -369,6 +371,8 @@ const App: React.FC = () => {
   const [isConsultationMode, setIsConsultationMode] = useState(false);
   const [showOccupiedMask, setShowOccupiedMask] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [doctorProfile, setDoctorProfile] = useState<any>(() => {
      try {
         return JSON.parse(localStorage.getItem('doctor_profile_TES') || 'null');
@@ -1642,11 +1646,11 @@ const App: React.FC = () => {
   }
 
   if (viewMode === ViewMode.ADMIN) {
-    return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} />;
+    return <AdminDashboard users={users} setUsers={setUsers} rounds={rounds} setRounds={setRounds} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} onOpenTerms={() => setIsTermsModalOpen(true)} onOpenLegal={() => setIsLegalModalOpen(true)} />;
   }
 
   if (viewMode === ViewMode.STANDARDISTE) {
-    return <StandardisteDashboard users={users} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} activeRound={activeRound} columnConfigs={columnConfigs} globalClosures={globalClosures} />;
+    return <StandardisteDashboard users={users} supabase={supabase} onLogout={handleLogout} currentUserTrigram={trigram} activeRound={activeRound} columnConfigs={columnConfigs} globalClosures={globalClosures} onOpenTerms={() => setIsTermsModalOpen(true)} onOpenLegal={() => setIsLegalModalOpen(true)} />;
   }
 
   if (viewMode === ViewMode.LOGIN) {
@@ -1659,9 +1663,11 @@ const App: React.FC = () => {
             <input type="text" placeholder="Trigramme" value={trigram} onChange={e => setTrigram(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black uppercase text-center text-2xl outline-none focus:ring-4 focus:ring-slate-900/10 focus:border-slate-300 transition-all" maxLength={3} />
             <input type="password" placeholder="Code secret" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-5 bg-slate-50 border rounded-3xl font-black text-center text-2xl outline-none focus:ring-4 focus:ring-slate-900/10 focus:border-slate-300 transition-all" />
           </div>
-          <div className="flex flex-col gap-5 items-center mt-6">
+                              <div className="flex flex-col gap-5 items-center mt-6">
             <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm outline-none focus:ring-4 focus:ring-slate-900/20">Saisie via Planning</button>
             <button type="button" onClick={(e) => handleLogin(e, ViewMode.LIST_INPUT)} className="text-[11px] font-bold text-slate-400 hover:text-slate-700 underline transition-colors uppercase tracking-widest outline-none focus:text-slate-700">Saisie via Liste (Téléphone)</button>
+            <button type="button" onClick={() => setIsTermsModalOpen(true)} className="text-[10px] font-medium text-slate-400 hover:text-slate-700 underline transition-colors">Conditions Générales d'Utilisation (CGU)</button>
+            <button type="button" onClick={() => setIsLegalModalOpen(true)} className="text-[10px] font-medium text-slate-400 hover:text-slate-700 underline transition-colors">Mentions légales</button>
           </div>
         </form>
 
@@ -1859,6 +1865,13 @@ const App: React.FC = () => {
                   ))}
                   
                   <div className="w-px h-6 bg-slate-200 mx-2"></div>
+
+                  <button onClick={() => setIsTermsModalOpen(true)} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-2" title="Conditions Générales d'Utilisation">
+                      <span className="text-[10px] font-black uppercase">CGU</span>
+                  </button>
+                  <button onClick={() => setIsLegalModalOpen(true)} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-2" title="Mentions légales">
+                      <span className="text-[10px] font-black uppercase">Légal</span>
+                  </button>
                   
                   <button onClick={handleLogout} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-2" title="Déconnexion">
                       <span className="text-[10px] font-black uppercase">Quitter</span>
@@ -2013,9 +2026,17 @@ const App: React.FC = () => {
             )}
 
           {exchangeMode === 'INACTIVE' && (
-              <>
-                  <button onClick={handleLogout} className="p-2 text-slate-300 hover:text-red-500 md:hidden flex items-center gap-2 ml-2"><svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg></button>
-              </>
+              <div className="flex items-center gap-1">
+                  <button onClick={() => setIsTermsModalOpen(true)} className="p-2 text-slate-300 hover:text-blue-500 md:hidden flex items-center gap-2 ml-2" title="Conditions Générales d'Utilisation">
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  </button>
+                  <button onClick={() => setIsLegalModalOpen(true)} className="p-2 text-slate-300 hover:text-blue-500 md:hidden flex items-center gap-2" title="Mentions légales">
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                  </button>
+                  <button onClick={handleLogout} className="p-2 text-slate-300 hover:text-red-500 md:hidden flex items-center gap-2" title="Déconnexion">
+                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2 2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5"/></svg>
+                  </button>
+              </div>
           )}
         </div>
       </header>
