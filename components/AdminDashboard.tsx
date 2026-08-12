@@ -724,14 +724,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                 <span className={isSidebarCollapsed ? '' : 'lg:hidden'}>⚠️</span>
                 {!isSidebarCollapsed && <span className="hidden lg:inline">⚠️ Vider la base</span>}
             </button>
-            <button onClick={onOpenTerms} className={`w-full p-3 lg:py-3 bg-slate-800 text-slate-400 hover:text-blue-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:block'}`} title="CGU">
-                <span className={isSidebarCollapsed ? '' : 'lg:hidden'}>📄</span>
-                {!isSidebarCollapsed && <span className="hidden lg:inline">CGU</span>}
-            </button>
-            <button onClick={onOpenLegal} className={`w-full p-3 lg:py-3 bg-slate-800 text-slate-400 hover:text-blue-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:block'}`} title="Mentions légales">
-                <span className={isSidebarCollapsed ? '' : 'lg:hidden'}>⚖️</span>
-                {!isSidebarCollapsed && <span className="hidden lg:inline">Légal</span>}
-            </button>
+
             <button onClick={onLogout} className={`w-full p-3 lg:py-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center ${isSidebarCollapsed ? 'lg:justify-center' : 'lg:block'}`} title="Déconnexion">
                 <span className={isSidebarCollapsed ? '' : 'lg:hidden'}>🚪</span>
                 {!isSidebarCollapsed && <span className="hidden lg:inline">Déconnexion</span>}
@@ -786,12 +779,7 @@ export const AdminDashboard: React.FC<Props> = ({ users, setUsers, rounds, setRo
                   <button onClick={() => { setShowDeleteModal(true); setIsMobileMenuOpen(false); }} disabled={isDeletingAll} className="w-full p-3 bg-slate-700 text-slate-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex justify-center items-center gap-2">
                       <span>⚠️ Vider la base</span>
                   </button>
-                  <button onClick={() => { onOpenTerms?.(); setIsMobileMenuOpen(false); }} className="w-full p-3 bg-slate-800 text-slate-400 hover:text-blue-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center items-center gap-2">
-                      <span>📄 CGU</span>
-                  </button>
-                  <button onClick={() => { onOpenLegal?.(); setIsMobileMenuOpen(false); }} className="w-full p-3 bg-slate-800 text-slate-400 hover:text-blue-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center items-center gap-2">
-                      <span>⚖️ Mentions légales</span>
-                  </button>
+
                   <button onClick={onLogout} className="w-full p-3 bg-slate-800 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest flex justify-center items-center gap-2">
                       <span>🚪 Déconnexion</span>
                   </button>
