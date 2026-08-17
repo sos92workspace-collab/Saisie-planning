@@ -2067,6 +2067,14 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {currentStep === AppStep.RECAP_ORDERING && !isConsultationMode ? (
+        <RecapView 
+            choices={choices} 
+            onReorder={setChoices}
+            columns={dynamicColumns}
+            activeRound={activeRound}
+        />
+      ) : (
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth relative" ref={tableContainerRef}>
         <div className="min-w-max pb-32 md:pb-12 bg-white">
           {monthsToDisplay.map((m: any) => {
@@ -2519,6 +2527,7 @@ const App: React.FC = () => {
           </div>
       </div>
 
+      )}
       {hoveredCell && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-sm text-white px-6 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-3 text-xs md:text-sm font-bold pointer-events-none border border-slate-700/50 animate-in fade-in slide-in-from-bottom-4">
             <span className="text-blue-400 whitespace-nowrap">
