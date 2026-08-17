@@ -372,7 +372,7 @@ const App: React.FC = () => {
 
   const [showUnavailabilityModal, setShowUnavailabilityModal] = useState(false);
   const [showReproductionModal, setShowReproductionModal] = useState(false);
-  const [reproductionStep, setReproductionStep] = useState<AppStep | 'PREVIOUS_ROUND' | null>(null);
+  const [reproductionStep, setReproductionStep] = useState<AppStep | null>(null);
   const [isPortrait, setIsPortrait] = useState(false);
   const [isConsultationMode, setIsConsultationMode] = useState(false);
   const [showOccupiedMask, setShowOccupiedMask] = useState(false);
@@ -875,43 +875,14 @@ const App: React.FC = () => {
     const targetCategory = currentStep === AppStep.NORMAL_SELECTION ? 'normal' : 
                            currentStep === AppStep.GOOD_BONUS_SELECTION ? 'good_bonus' : 'bad_bonus';
 
-    let sourceChoices: Choice[] = [];
-    if (reproductionStep === 'PREVIOUS_ROUND') {
-        // Find previous round's assigned/validated choices for this user and this category
-        const previousFromChoices = choices.filter(c => 
-            c.userTrigram === trigram.toUpperCase() && 
-            c.category === targetCategory && 
-            (c.status === 'ASSIGNED' || c.status === 'VALIDATED')
-        );
-        const previousFromArchived = archivedChoices.filter(c => 
-            c.user_trigram === trigram.toUpperCase() && 
-            c.category === targetCategory && 
-            (c.status === 'ASSIGNED' || c.status === 'VALIDATED' || c.status === 'ARCHIVED')
-        ).map(c => ({
-            id: c.id,
-            row: c.row,
-            col: c.col,
-            month: c.month - 1,
-            year: c.year,
-            groupIndex: c.group_index,
-            subRank: c.sub_rank,
-            category: c.category as ChoiceCategory,
-            userTrigram: c.user_trigram,
-            userRole: c.user_role as UserRole,
-            status: c.status,
-            submittedAt: c.submitted_at,
-            roundId: c.round_id
-        }));
-        sourceChoices = [...previousFromChoices, ...previousFromArchived];
-    } else {
-        const sourceCategory = reproductionStep === AppStep.NORMAL_SELECTION ? 'normal' : 
-                               reproductionStep === AppStep.GOOD_BONUS_SELECTION ? 'good_bonus' : 'bad_bonus';
-        sourceChoices = choices.filter(c => 
-            c.userTrigram === trigram.toUpperCase() && 
-            c.category === sourceCategory && 
-            c.status === 'PENDING'
-        );
-    }
+    const sourceCategory = reproductionStep === AppStep.NORMAL_SELECTION ? 'normal' : 
+                           reproductionStep === AppStep.GOOD_BONUS_SELECTION ? 'good_bonus' : 'bad_bonus';
+    
+    let sourceChoices = choices.filter(c => 
+        c.userTrigram === trigram.toUpperCase() && 
+        c.category === sourceCategory && 
+        c.status === 'PENDING'
+    );
     
     const currentCategoryChoices = choices.filter(c => c.userTrigram === trigram.toUpperCase() && c.category === targetCategory && c.status === 'PENDING');
     let maxGroupIndex = currentCategoryChoices.length > 0 ? Math.max(...currentCategoryChoices.map(c => c.groupIndex)) : 0;
@@ -1851,13 +1822,6 @@ const App: React.FC = () => {
                             <div className="text-xs text-slate-500 font-medium">Bonne garde</div>
                         </button>
                     )}
-                    <button 
-                        onClick={() => setReproductionStep('PREVIOUS_ROUND')}
-                        className={`w-full p-4 rounded-2xl border-2 text-left transition-all ${reproductionStep === 'PREVIOUS_ROUND' ? 'border-purple-600 bg-purple-50' : 'border-slate-200 hover:border-purple-300'}`}
-                    >
-                        <div className="font-black text-slate-900 uppercase">Tour précédent</div>
-                        <div className="text-xs text-slate-500 font-medium">Reprendre vos choix validés/assignés du tour précédent pour cette étape</div>
-                    </button>
                 </div>
                 <div className="p-6 border-t bg-slate-50 flex justify-end gap-3">
                     <button 
