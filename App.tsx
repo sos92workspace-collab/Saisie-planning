@@ -364,6 +364,12 @@ const App: React.FC = () => {
   const [systemSettings, setSystemSettings] = useState<any>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isDataSyncing, setIsDataSyncing] = useState(false);
+
+  const [showMyChoicesOnly, setShowMyChoicesOnly] = useState(false);
+  const [showUnassignedOnly, setShowUnassignedOnly] = useState(false);
+  const [selectedPriorityIndex, setSelectedPriorityIndex] = useState(1);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
   const [showUnavailabilityModal, setShowUnavailabilityModal] = useState(false);
   const [showReproductionModal, setShowReproductionModal] = useState(false);
   const [reproductionStep, setReproductionStep] = useState<AppStep | null>(null);
@@ -2069,7 +2075,7 @@ const App: React.FC = () => {
 
       <div className="flex-1 overflow-y-auto no-scrollbar scroll-smooth relative" ref={tableContainerRef}>
         <div className="min-w-max pb-32 md:pb-12 bg-white">
-          {activeRound.months.map((m) => {
+          {monthsToDisplay.map((m: any) => {
               const { year, month } = m;
               const label = new Date(year, month, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
               

@@ -3,7 +3,7 @@ import { ExchangeRules } from './ExchangeRules';
 import { PlanningPanel, ArchivePanel } from './AdminDashboard';
 import { Settings, CheckSquare, Users, FileText, Download, Upload, Shield, LogOut, Clock, Calendar, Box, Database, Save, RotateCcw, Activity, ShieldAlert, X } from 'lucide-react';
 
-export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTrigram, activeRound, columnConfigs, globalClosures }: any) => {
+export const StandardisteDashboard = ({ users, supabase, onLogout, currentUserTrigram, activeRound, columnConfigs, globalClosures, onOpenTerms, onOpenLegal }: any) => {
   const [choices, setChoices] = useState<any[]>([]);
   const [headerConfigs, setHeaderConfigs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'PLANNING' | 'ECHANGES' | 'ARCHIVES'>('PLANNING');
