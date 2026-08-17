@@ -27,9 +27,10 @@ interface Props {
   columns: ColumnDefinition[];
   onReorder: (newChoices: Choice[]) => void;
   activeRound?: Round;
+  currentUserTrigram: string;
 }
 
-export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, activeRound }) => {
+export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, activeRound, currentUserTrigram }) => {
   // --- LOGIC: Cleanup Group Indices ---
   // Ensures group indices are strictly sequential (1, 2, 3...) without gaps or decimals
   const cleanupGroupIndices = (currentChoices: Choice[]) => {
@@ -37,11 +38,11 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
     let finalChoices = [...currentChoices];
     
     categories.forEach(category => {
-        const catChoices = finalChoices.filter(c => c.status === 'PENDING' && c.category === category);
+        const catChoices = finalChoices.filter(c => c.status === 'PENDING' && c.category === category && c.userTrigram === currentUserTrigram);
         const uniqueGroups = Array.from(new Set(catChoices.map(c => c.groupIndex))).sort((a, b) => a - b);
         
         finalChoices = finalChoices.map(c => {
-            if (c.status !== 'PENDING' || c.category !== category) return c;
+            if (c.status !== 'PENDING' || c.category !== category || c.userTrigram !== currentUserTrigram) return c;
             const newGroupIndex = uniqueGroups.indexOf(c.groupIndex) + 1;
             return { ...c, groupIndex: newGroupIndex };
         });
@@ -52,7 +53,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
   // --- LOGIC: Promote / Demote ---
   const handleMakeMain = (item: Choice) => {
     const newChoices = choices.map(c => {
-        if (c.status !== 'PENDING' || c.category !== item.category) return c;
+        if (c.status !== 'PENDING' || c.category !== item.category || c.userTrigram !== currentUserTrigram) return c;
         // Move to a new group immediately following its current group
         if (c.id === item.id) return { ...c, groupIndex: item.groupIndex + 0.5, subRank: 1 };
         // Shift remaining alternatives up
@@ -66,11 +67,11 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
     const targetGroupIndex = item.groupIndex - 1;
     if (targetGroupIndex < 1) return;
 
-    const targetGroupItems = choices.filter(c => c.status === 'PENDING' && c.category === item.category && c.groupIndex === targetGroupIndex);
+    const targetGroupItems = choices.filter(c => c.status === 'PENDING' && c.category === item.category && c.groupIndex === targetGroupIndex && c.userTrigram === currentUserTrigram);
     const maxSubRank = targetGroupItems.length > 0 ? Math.max(...targetGroupItems.map(c => c.subRank)) : 0;
 
     const newChoices = choices.map(c => {
-        if (c.status !== 'PENDING' || c.category !== item.category) return c;
+        if (c.status !== 'PENDING' || c.category !== item.category || c.userTrigram !== currentUserTrigram) return c;
         // Move this item to the end of the previous group
         if (c.id === item.id) return { ...c, groupIndex: targetGroupIndex, subRank: maxSubRank + 1 };
         // Promote its former alternatives to main choices
@@ -82,13 +83,13 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
 
   // --- LOGIC: Remove Item ---
   const handleRemoveChoice = (row: number, col: number) => {
-    const itemToRemove = choices.find(c => c.row === row && c.col === col);
+    const itemToRemove = choices.find(c => c.row === row && c.col === col && c.userTrigram === currentUserTrigram);
     if (!itemToRemove) return;
 
     const remaining = choices.filter(c => !(c.row === row && c.col === col));
     
     const newChoices = remaining.map(c => {
-        if (c.status === 'PENDING' && c.category === itemToRemove.category && c.groupIndex === itemToRemove.groupIndex && c.subRank > itemToRemove.subRank) {
+        if (c.status === 'PENDING' && c.category === itemToRemove.category && c.userTrigram === currentUserTrigram && c.groupIndex === itemToRemove.groupIndex && c.subRank > itemToRemove.subRank) {
             return { ...c, subRank: c.subRank - 1 };
         }
         return c;
@@ -195,7 +196,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
 
     const flatChoices = useMemo(() => {
       return choices
-        .filter(c => c.category === category && c.status === 'PENDING')
+        .filter(c => c.category === category && c.status === 'PENDING' && c.userTrigram === currentUserTrigram)
         .sort((a, b) => a.groupIndex !== b.groupIndex ? a.groupIndex - b.groupIndex : a.subRank - b.subRank);
     }, [choices, category]);
 
@@ -280,7 +281,7 @@ export const RecapView: React.FC<Props> = ({ choices, columns, onReorder, active
       });
 
       const finalChoices = choices.map(c => {
-        if (c.category === category && c.status === 'PENDING') {
+        if (c.category === category && c.status === 'PENDING' && c.userTrigram === currentUserTrigram) {
           return updatedCatChoices.find(uc => uc.id === c.id) || c;
         }
         return c;
