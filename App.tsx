@@ -1671,8 +1671,7 @@ const App: React.FC = () => {
           </div>
                               <div className="flex flex-col gap-5 items-center mt-6">
             <button type="submit" className="w-full bg-slate-900 text-white p-4 rounded-3xl font-black uppercase tracking-widest hover:bg-slate-800 transition-all text-sm outline-none focus:ring-4 focus:ring-slate-900/20">Connexion</button>
-            <button type="button" onClick={() => setIsTermsModalOpen(true)} className="text-[10px] font-medium text-slate-400 hover:text-slate-700 underline transition-colors">Conditions Générales d'Utilisation (CGU)</button>
-            <button type="button" onClick={() => setIsLegalModalOpen(true)} className="text-[10px] font-medium text-slate-400 hover:text-slate-700 underline transition-colors">Mentions légales</button>
+
           </div>
         </form>
 
@@ -1871,12 +1870,7 @@ const App: React.FC = () => {
                   
                   <div className="w-px h-6 bg-slate-200 mx-2"></div>
 
-                  <button onClick={() => setIsTermsModalOpen(true)} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-2" title="Conditions Générales d'Utilisation">
-                      <span className="text-[10px] font-black uppercase">CGU</span>
-                  </button>
-                  <button onClick={() => setIsLegalModalOpen(true)} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-2" title="Mentions légales">
-                      <span className="text-[10px] font-black uppercase">Légal</span>
-                  </button>
+
                   
                   <button onClick={handleLogout} className="p-2 border border-slate-200 rounded-xl bg-white text-slate-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors shadow-sm flex items-center gap-2" title="Déconnexion">
                       <span className="text-[10px] font-black uppercase">Quitter</span>

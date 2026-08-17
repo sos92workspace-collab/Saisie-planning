@@ -99,20 +99,7 @@ const fetchAll = async (supabaseClient: any, table: string, queryModifier: (q: a
              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Connecté en tant que</span>
              <span className="text-sm font-black text-white">{currentUserTrigram}</span>
           </div>
-          <button 
-            onClick={onOpenTerms}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-slate-300 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm mb-3"
-          >
-            <FileText className="w-4 h-4" strokeWidth={2.5} />
-            CGU
-          </button>
-          <button 
-            onClick={onOpenLegal}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-slate-300 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm mb-3"
-          >
-            <Shield className="w-4 h-4" strokeWidth={2.5} />
-            Légal
-          </button>
+
           <button 
             onClick={onLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 text-slate-300 hover:bg-rose-500 hover:text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm"
